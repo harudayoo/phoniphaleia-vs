@@ -18,14 +18,13 @@ interface RegisterFormData {
   confirmPassword: string;
 }
 
-interface ErrorResponse {
-  message?: string;
-  errors?: Record<string, string>;
-}
-
 interface College {
   college_id: number;
   name: string;
+}
+interface ErrorResponse {
+  message?: string;
+  errors?: Record<string, string>;
 }
 
 export default function Register() {
@@ -38,12 +37,17 @@ export default function Register() {
   const { register, handleSubmit, formState: { errors }, watch } = useForm<RegisterFormData>();
   const password = watch('password');
   
-  // Fetch colleges on component mount
   useEffect(() => {
     const fetchColleges = async () => {
       try {
         setIsLoadingColleges(true);
-        const response = await axios.get(`${API_URL}/colleges`);
+        const fullUrl = `${API_URL}/colleges`;
+        console.log('Attempting to fetch colleges from:', fullUrl);
+        
+        // Add a small delay to ensure the backend is ready
+        const response = await axios.get(fullUrl);
+        
+        console.log('Colleges response:', response.data);
         setColleges(response.data);
       } catch (err) {
         console.error('Failed to fetch colleges:', err);
@@ -54,7 +58,7 @@ export default function Register() {
     };
     
     fetchColleges();
-  }, []); // Empty dependency array means this runs once on mount
+  }, []);
   
   const onSubmit = async (data: RegisterFormData) => {
     try {

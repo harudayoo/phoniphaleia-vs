@@ -1,10 +1,7 @@
-from flask_sqlalchemy import SQLAlchemy
-
-db = SQLAlchemy()
+# models/__init__.py
+from app import db  # Import the db from the app package
 
 def init_app(app):
-    db.init_app(app)
-    
     # Import models after db is defined to avoid circular imports
     from .college import College
     from .organization import Organization
@@ -17,7 +14,7 @@ def init_app(app):
     from .vote import Vote
     from .audit_log import AuditLog
     from .election_result import ElectionResult
-    
+   
     # Create all tables
     with app.app_context():
         db.create_all()
