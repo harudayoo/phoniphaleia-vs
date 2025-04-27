@@ -1,4 +1,4 @@
-import SHA256 from 'crypto-js/sha256';
+import SHA256 from 'crypto-js';
 import { v4 as uuidv4 } from 'uuid';
 
 class ZKPService {
