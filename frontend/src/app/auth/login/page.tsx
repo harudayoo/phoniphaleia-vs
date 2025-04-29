@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
-import ZKPService from '@/services/zkpservice'; // Adjust the import path as necessary
+import { ZKPService } from '@/services/zkpservice';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -32,18 +32,27 @@ export default function Login() {
       setError('');
       setIsLoading(true);
       
-      // Use ZKPService to hash credentials
-      const passwordHash = ZKPService.hashCredentials(data.student_id, data.password);
+      // 1. Initiate login - get challenge
+      const challengeResponse = await axios.post(`${API_URL}/auth/login`, {
+        student_id: data.student_id
+      });
       
-      // Send login request with hashed password
-      const response = await axios.post(`${API_URL}/auth/login`, {
+      // 2. Generate ZKP proof (now only needs 2 arguments)
+      const proofResponse = ZKPService.generateLoginProof(
+        data.student_id,
+        challengeResponse.data.challenge
+      );
+      
+      // 3. Verify challenge
+      const authResponse = await axios.post(`${API_URL}/auth/verify_challenge`, {
         student_id: data.student_id,
-        password_hash: passwordHash // Send hash instead of plain password
+        challenge: challengeResponse.data.challenge,
+        proof: proofResponse.proof
       });
       
       // Store authentication token
-      localStorage.setItem('token', response.data.token);
-      localStorage.setItem('voter', JSON.stringify(response.data.voter));
+      localStorage.setItem('token', authResponse.data.token);
+      localStorage.setItem('voter', JSON.stringify(authResponse.data.voter));
       
       // Redirect to voting dashboard
       router.push('/dashboard');

@@ -1,45 +1,107 @@
-import SHA256 from 'crypto-js';
-import { v4 as uuidv4 } from 'uuid';
+// frontend/src/services/zkpservice.ts
+import { ec as EC } from 'elliptic';
+import crypto from 'crypto';
 
-class ZKPService {
-  /**
-   * Generate a secure hash of student ID and password
-   */
-  static hashCredentials(studentId: string, password: string): string {
-    // First hash password
-    const passwordHash = SHA256(password).toString();
-    
-    // Combine with student ID and hash again
-    const combinedHash = SHA256(studentId + passwordHash).toString();
-    
-    return combinedHash;
+const ec = new EC('secp256k1');
+
+interface ZKPProof {
+  R: string;
+  s: string;
+}
+
+interface ZKPLoginResponse {
+  studentId: string;
+  proof: ZKPProof;
+}
+
+export class ZKPService {
+  private static getKeyPair(studentId: string): EC.KeyPair {
+    const privateKeyHex = localStorage.getItem(`zkp:${studentId}`);
+    if (!privateKeyHex) {
+      throw new Error('No ZKP key found for this student ID');
+    }
+    return ec.keyFromPrivate(privateKeyHex, 'hex');
   }
 
-  /**
-   * Generate ZKP commitment for registration
-   * This creates a unique commitment that will be stored in the database
-   * and used for zero-knowledge proof verification
-   */
-  static generateCommitment(studentId: string, password: string): string {
-    // Generate a unique salt for this commitment
-    const salt = uuidv4();
+  static generateCredentials(studentId: string, password: string): {
+    commitment: string;
+    secret: string;
+  } {
+    // Generate key pair
+    const keyPair = ec.genKeyPair();
+    const privateKeyHex = keyPair.getPrivate().toString('hex');
     
-    // First hash password
-    const passwordHash = SHA256(password).toString();
+    // Store private key securely
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`zkp:${studentId}`, privateKeyHex);
+    }
     
-    // Create commitment with salt for added security
-    const commitment = SHA256(studentId + passwordHash + salt).toString();
+    // Generate commitment (public key)
+    const commitment = keyPair.getPublic().encode('hex', true);
     
-    return commitment;
+    // Generate secret (hash of credentials)
+    const secret = crypto
+      .createHash('sha256')
+      .update(`${studentId}:${password}`)
+      .digest('hex');
+    
+    return { commitment, secret };
   }
 
-  /**
-   * Validate student ID format
-   */
+  static generateLoginProof(
+    studentId: string,
+    challenge: string
+  ): ZKPLoginResponse {
+    const keyPair = this.getKeyPair(studentId);
+    const k = ec.genKeyPair().getPrivate();
+    const R = ec.g.mul(k);
+    
+    // Compute challenge hash
+    const eHex = crypto
+      .createHash('sha256')
+      .update(R.encode('hex', true) + challenge)
+      .digest('hex');
+    
+    // Convert hex to BN (Big Number)
+    const e = new EC('secp256k1').keyFromPrivate(eHex, 'hex').getPrivate();
+    
+    // Compute response
+    const s = k.add(keyPair.getPrivate().mul(e));
+    
+    return {
+      studentId,
+      proof: {
+        R: R.encode('hex', true),
+        s: s.toString(16)
+      }
+    };
+  }
+
   static validateStudentId(studentId: string): boolean {
     const pattern = /^[0-9]{4}-[0-9]{5}$/;
     return pattern.test(studentId);
   }
-}
 
-export default ZKPService;
+  // These are the methods that register.tsx expects
+  static hashCredentials(studentId: string, password: string): string {
+    return crypto
+      .createHash('sha256')
+      .update(`${studentId}:${password}`)
+      .digest('hex');
+  }
+
+  static generateCommitment(studentId: string, password: string): string {
+    const keyPair = ec.genKeyPair();
+    const privateKeyHex = keyPair.getPrivate().toString('hex');
+    
+    // Store both studentId and password in localStorage for later proof generation
+    if (typeof window !== 'undefined') {
+        localStorage.setItem(`zkp:${studentId}`, JSON.stringify({
+            privateKey: privateKeyHex,
+            password: password // Store password if needed for proof generation
+        }));
+    }
+    
+    return keyPair.getPublic().encode('hex', true);
+}
+}

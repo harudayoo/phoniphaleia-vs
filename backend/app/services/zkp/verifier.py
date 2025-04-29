@@ -1,62 +1,39 @@
-# backend/app/zkp/verifier.py
+# backend/app/services/zkp/verifier.py
+from hashlib import sha256
 import os
-import json
-import hashlib
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.backends import default_backend
+from ecpy.curves import Curve
 
 class ZKPVerifier:
-    def __init__(self, setup_dir='zkp_setup'):
-        self.setup_dir = os.path.join(os.path.dirname(__file__), setup_dir)
-        
-        # Load verification key
-        try:
-            with open(os.path.join(self.setup_dir, 'verification_key.json'), 'r') as f:
-                self.verification_key = json.load(f)
-                
-            # Load public key
-            self.public_key = serialization.load_pem_public_key(
-                self.verification_key['public_key'].encode('utf-8'),
-                backend=default_backend()
-            )
-        except Exception as e:
-            raise Exception(f"Failed to load verification key: {str(e)}")
+    def __init__(self):
+        self.cv = Curve.get_curve('secp256k1')
+        self.G = self.cv.generator
     
-    def verify_proof(self, proof, public_inputs):
-        """
-        Verify a zero-knowledge proof
-        
-        Args:
-            proof: The proof provided by the client
-            public_inputs: Public inputs for verification
-            
-        Returns:
-            bool: True if proof is valid, False otherwise
-        """
+    def verify_registration(self, commitment):
+        """Verify a registration commitment is valid"""
         try:
-            # In a real zk-SNARK implementation, this would use a proper verification algorithm
-            # This is a simplified version using RSA signature verification
+            point = self.cv.decode_point(commitment.encode('utf-8'))
+            return True
+        except:
+            return False
+    
+    def generate_challenge(self):
+        """Generate a random challenge for authentication"""
+        return sha256(os.urandom(32)).hexdigest()
+    
+    def verify_proof(self, proof, commitment, challenge):
+        """Verify a ZKP proof"""
+        try:
+            R = self.cv.decode_point(proof['R'].encode('utf-8'))
+            s = int(proof['s'])
             
-            # Check that hashes match (part of the proof verification)
-            expected_hash = public_inputs['expected_hash']
-            user_provided_hash = public_inputs['user_provided_hash']
+            # Reconstruct challenge
+            e = int(sha256((proof['R'] + challenge).encode('utf-8')).hexdigest(), 16)
             
-            # Verify signature
-            try:
-                self.public_key.verify(
-                    bytes.fromhex(proof['signature']),
-                    bytes.fromhex(proof['message']),
-                    padding.PSS(
-                        mgf=padding.MGF1(hashes.SHA256()),
-                        salt_length=padding.PSS.MAX_LENGTH
-                    ),
-                    hashes.SHA256()
-                )
-                # Additional verification: check that the commitment matches
-                return user_provided_hash == expected_hash
-            except Exception:
-                return False
-        except Exception as e:
-            print(f"Error verifying proof: {str(e)}")
+            # Reconstruct expected point
+            C = self.cv.decode_point(commitment.encode('utf-8'))
+            left_side = self.G * s
+            right_side = R + C * e
+            
+            return left_side == right_side
+        except:
             return False

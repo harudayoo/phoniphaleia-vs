@@ -2,9 +2,11 @@
 import os
 import json
 import hashlib
+
+from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
+
 
 class ZKPProver:
     def __init__(self, setup_dir='zkp_setup'):

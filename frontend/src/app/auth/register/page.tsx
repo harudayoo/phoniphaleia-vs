@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
 import Link from 'next/link';
-import ZKPService from '@/services/zkpservice';
+import { ZKPService } from '@/services/zkpservice';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -16,7 +16,7 @@ interface RegisterFormData {
   middleName?: string;
   gender: string;
   dateOfBirth: string;
-  address: string;
+  address_field: string;
   
   // Academic Details
   student_id: string;
@@ -41,16 +41,65 @@ interface ErrorResponse {
   errors?: Record<string, string>;
 }
 
+interface PhotoMetadata {
+  name: string;
+  type: string;
+  size: number;
+  lastModified: number;
+  lastModifiedDate: string;
+}
+
 export default function Register() {
-  const router = useRouter();
-  const [error, setError] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [colleges, setColleges] = useState<College[]>([]);
-  const [isLoadingColleges, setIsLoadingColleges] = useState<boolean>(true);
-  const [currentStep, setCurrentStep] = useState<number>(1);
+    const router = useRouter();
+    const [error, setError] = useState<string>('');
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [colleges, setColleges] = useState<College[]>([]);
+    const [isLoadingColleges, setIsLoadingColleges] = useState<boolean>(true);
+    const [currentStep, setCurrentStep] = useState<number>(1);
+    const [idPicture, setIdPicture] = useState<File | null>(null);
+    const [photoMetadata, setPhotoMetadata] = useState<PhotoMetadata | null>(null);
   
-  const { register, handleSubmit, formState: { errors }, watch, getValues } = useForm<RegisterFormData>();
-  const password = watch('password');
+    // Form configuration with proper state management
+    const { 
+      register, 
+      handleSubmit, 
+      formState: { errors }, 
+      watch, 
+      getValues,
+      trigger,
+      setValue,
+    } = useForm<RegisterFormData>({
+      mode: 'onChange',
+      shouldUnregister: false,
+      defaultValues: {
+        firstName: '',
+        lastName: '',
+        middleName: '',
+        gender: '',
+        dateOfBirth: '',
+        address_field: '',
+        student_id: '',
+        student_email: '',
+        status: '',
+        college_id: '',
+        program: '',
+        major: '',
+        password: '',
+        confirmPassword: ''
+      }
+    });
+  
+    // Field watchers
+    const password = watch('password');
+  
+    useEffect(() => {
+        return () => {
+          const currentValues = getValues();
+          setValue('address_field', currentValues.address_field);
+          setValue('program', currentValues.program);
+        };
+      }, [currentStep, getValues, setValue]);
+  
   
   useEffect(() => {
     const fetchColleges = async () => {
@@ -59,7 +108,7 @@ export default function Register() {
         const fullUrl = `${API_URL}/colleges`;
         console.log('Attempting to fetch colleges from:', fullUrl);
         
-        const response = await axios.get(fullUrl);
+        const response = await axios.get<College[]>(fullUrl);
         
         console.log('Colleges response:', response.data);
         setColleges(response.data);
@@ -76,6 +125,7 @@ export default function Register() {
   
   const onSubmit = async (data: RegisterFormData) => {
     try {
+      console.log('Form data being submitted:', data);
       setError('');
       setIsLoading(true);
       
@@ -83,7 +133,7 @@ export default function Register() {
       const passwordHash = ZKPService.hashCredentials(data.student_id, data.password);
       const zkpCommitment = ZKPService.generateCommitment(data.student_id, data.password);
       
-      // Send registration request
+      // Send registration request with proper headers
       await axios.post(`${API_URL}/auth/register`, {
         student_id: data.student_id,
         student_email: data.student_email,
@@ -92,29 +142,34 @@ export default function Register() {
         middleName: data.middleName,
         gender: data.gender,
         dateOfBirth: data.dateOfBirth,
-        address: data.address,
+        address_field: data.address_field,
         status: data.status,
         college_id: Number(data.college_id),
         program: data.program,
         major: data.major,
         password_hash: passwordHash,
-        zkp_commitment: zkpCommitment
+        zkp_commitment: zkpCommitment,
+        photoMetadata: photoMetadata
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
       
-      // Registration success - redirect to login
       router.push('/auth/login?registered=true');
       
-    } catch (err: unknown) {
+    } catch (err) {
       console.error('Registration error:', err);
       if (axios.isAxiosError(err)) {
         const axiosError = err as AxiosError<ErrorResponse>;
         if (axiosError.response?.data?.errors) {
-          // Handle validation errors
           const validationErrors = Object.values(axiosError.response.data.errors).join(', ');
           setError(validationErrors);
         } else {
           setError(axiosError.response?.data?.message || axiosError.message || 'Registration failed');
         }
+      } else if (err instanceof Error) {
+        setError(err.message);
       } else {
         setError('Registration failed');
       }
@@ -123,12 +178,56 @@ export default function Register() {
     }
   };
 
-  const nextStep = () => {
+   // Navigation functions with proper validation
+   const nextStep = async () => {
+    const fieldsToValidate = currentStep === 1
+      ? ['firstName', 'lastName', 'gender', 'dateOfBirth', 'address_field']
+      : ['student_id', 'student_email', 'status', 'college_id', 'program', 'major'];
+
+    const isValid = await trigger(fieldsToValidate as Array<keyof RegisterFormData>);
+
+    if (!isValid) {
+      setError('Input required fields before proceeding');
+      return;
+    }
+
+    if (currentStep === 2 && !idPicture) {
+      setError('Please upload your ID photo before proceeding');
+      return;
+    }
+
+    setError('');
     setCurrentStep(currentStep + 1);
   };
 
   const prevStep = () => {
     setCurrentStep(currentStep - 1);
+  };
+
+  // Field registration functions
+  const registerAddressField = register('address_field', { 
+    required: 'Address is required' 
+  });
+
+  const registerProgramField = register('program', { 
+    required: 'Program is required' 
+  });
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setIdPicture(file);
+      
+      // Extract metadata
+      const metadata: PhotoMetadata = {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: file.lastModified,
+        lastModifiedDate: new Date(file.lastModified).toISOString(),
+      };
+      setPhotoMetadata(metadata);
+    }
   };
 
   const renderStepIndicator = () => {
@@ -158,20 +257,19 @@ export default function Register() {
     );
   };
 
-  const generalDetailsContent = () => {
-    return (
+  const renderGeneralDetails = () => (
       <>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label htmlFor="firstName" className="block text-sm font-medium text-gray-500">
-              First name*
+              First name <span className="text-red-500">*</span>
             </label>
             <div className="mt-1">
               <input
                 id="firstName"
                 type="text"
                 {...register('firstName', { required: 'First name is required' })}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+                className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
               />
               {errors.firstName && (
                 <p className="mt-2 text-sm text-red-600">{errors.firstName.message}</p>
@@ -188,7 +286,7 @@ export default function Register() {
                 id="middleName"
                 type="text"
                 {...register('middleName')}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+                className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
               />
             </div>
           </div>
@@ -196,14 +294,14 @@ export default function Register() {
 
         <div>
           <label htmlFor="lastName" className="block text-sm font-medium text-gray-500">
-            Last name*
+            Last name <span className="text-red-500">*</span>
           </label>
           <div className="mt-1">
             <input
               id="lastName"
               type="text"
               {...register('lastName', { required: 'Last name is required' })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+              className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
             />
             {errors.lastName && (
               <p className="mt-2 text-sm text-red-600">{errors.lastName.message}</p>
@@ -213,13 +311,13 @@ export default function Register() {
 
         <div>
           <label htmlFor="gender" className="block text-sm font-medium text-gray-500">
-            Gender*
+            Gender <span className="text-red-500">*</span>
           </label>
           <div className="mt-1">
             <select
               id="gender"
               {...register('gender', { required: 'Gender is required' })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+              className="block w-full rounded-md p-1 text-gray-700 border-gray-500 shadow-sm focus:border-red-800 focus:ring-red-800"
             >
               <option value="">Select Gender</option>
               <option value="male">Male</option>
@@ -234,57 +332,46 @@ export default function Register() {
 
         <div>
           <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-500">
-            Date of Birth*
+            Date of Birth <span className="text-red-500">*</span>
           </label>
           <div className="mt-1">
             <input
               id="dateOfBirth"
               type="date"
               {...register('dateOfBirth', { required: 'Date of birth is required' })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+              className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
             />
             {errors.dateOfBirth && (
               <p className="mt-2 text-sm text-red-600">{errors.dateOfBirth.message}</p>
             )}
-          </div>
+          </div> 
         </div>
 
         <div>
-          <label htmlFor="address" className="block text-sm font-medium text-gray-500">
-            Address*
-          </label>
-          <div className="mt-1">
-            <input
-              id="address"
-              type="text"
-              {...register('address', { required: 'Address is required' })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
-            />
-            {errors.address && (
-              <p className="mt-2 text-sm text-red-600">{errors.address.message}</p>
-            )}
-          </div>
+        <label htmlFor="address_field" className="block text-sm font-medium text-gray-500">
+          Address <span className="text-red-500">*</span>
+        </label>
+        <div className="mt-1">
+          <input
+            id="address_field"
+            type="text"
+            {...registerAddressField}
+            className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+          />
+          {errors.address_field && (
+            <p className="mt-2 text-sm text-red-600">{errors.address_field.message}</p>
+          )}
         </div>
+      </div>
 
-        <div className="mt-8 flex justify-end">
-          <button
-            type="button"
-            onClick={nextStep}
-            className="flex justify-center rounded-md border border-transparent bg-red-800 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-          >
-            Next
-          </button>
-        </div>
       </>
     );
-  };
 
-  const academicDetailsContent = () => {
-    return (
+  const renderAcademicDetails = () => (
       <>
         <div>
           <label htmlFor="student_id" className="block text-sm font-medium text-gray-500">
-            Student ID Number*
+            Student ID Number <span className="text-red-500">*</span>
           </label>
           <div className="mt-1">
             <input
@@ -299,7 +386,7 @@ export default function Register() {
                   message: 'Please enter a valid student ID format (e.g. 2023-12345)'
                 }
               })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+              className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
             />
             {errors.student_id && (
               <p className="mt-2 text-sm text-red-600">{errors.student_id.message}</p>
@@ -310,7 +397,7 @@ export default function Register() {
         <div className="flex space-x-4">
           <div className="flex-1">
             <label htmlFor="student_email" className="block text-sm font-medium text-gray-500">
-              Email Address*
+              Email Address <span className="text-red-500">*</span>
             </label>
             <div className="mt-1 flex">
               <input
@@ -323,9 +410,9 @@ export default function Register() {
                     message: 'Invalid email username'
                   }
                 })}
-                className="block w-full rounded-l-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+                className="block w-full rounded-l-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
               />
-              <span className="inline-flex items-center px-3 py-2 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500">
+              <span className="inline-flex items-center p-1 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500">
                 @usep.edu.ph
               </span>
             </div>
@@ -337,13 +424,13 @@ export default function Register() {
 
         <div>
           <label htmlFor="status" className="block text-sm font-medium text-gray-500">
-            Status*
+            Status <span className="text-red-500">*</span>
           </label>
           <div className="mt-1">
             <select
               id="status"
               {...register('status', { required: 'Status is required' })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+              className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
             >
               <option value="">Select Status</option>
               <option value="regular">Regular</option>
@@ -357,59 +444,58 @@ export default function Register() {
         </div>
         
         <div>
-          <label htmlFor="college_id" className="block text-sm font-medium text-gray-500">
-            College*
-          </label>
-          <div className="mt-1">
-            <select
-              id="college_id"
-              {...register('college_id', { required: 'College is required' })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
-              disabled={isLoadingColleges}
-            >
-              <option value="">Select College</option>
-              {colleges.map(college => (
-                <option key={college.college_id} value={college.college_id}>
-                  {college.name}
-                </option>
-              ))}
-            </select>
-            {errors.college_id && (
-              <p className="mt-2 text-sm text-red-600">{errors.college_id.message}</p>
-            )}
-            {isLoadingColleges && (
-              <p className="mt-2 text-sm text-gray-500">Loading colleges...</p>
-            )}
-          </div>
+        <label htmlFor="college_id" className="block text-sm font-medium text-gray-500">
+          College <span className="text-red-500">*</span>
+        </label>
+        <div className="mt-1">
+          <select
+            id="college_id"
+            {...register('college_id', { 
+              required: 'College is required'
+            })}
+            className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+            disabled={isLoadingColleges}
+          >
+            <option value="">Select College</option>
+            {colleges.map(college => (
+              <option key={college.college_id} value={college.college_id}>
+                {college.name}
+              </option>
+            ))}
+          </select>
+          {errors.college_id && (
+            <p className="mt-2 text-sm text-red-600">{errors.college_id.message}</p>
+          )}
         </div>
+      </div>
 
-        <div>
-          <label htmlFor="program" className="block text-sm font-medium text-gray-500">
-            Program*
-          </label>
-          <div className="mt-1">
-            <input
-              id="program"
-              type="text"
-              {...register('program', { required: 'Program is required' })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
-            />
-            {errors.program && (
-              <p className="mt-2 text-sm text-red-600">{errors.program.message}</p>
-            )}
-          </div>
+      <div>
+        <label htmlFor="program" className="block text-sm font-medium text-gray-500">
+          Program <span className="text-red-500">*</span>
+        </label>
+        <div className="mt-1">
+          <input
+            id="program"
+            type="text"
+            {...registerProgramField}
+            className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+          />
+          {errors.program && (
+            <p className="mt-2 text-sm text-red-600">{errors.program.message}</p>
+          )}
         </div>
+      </div>
 
         <div>
           <label htmlFor="major" className="block text-sm font-medium text-gray-500">
-            Major*
+            Major <span className="text-red-500">*</span>
           </label>
           <div className="mt-1">
             <input
               id="major"
               type="text"
               {...register('major', { required: 'Major is required' })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+              className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
             />
             {errors.major && (
               <p className="mt-2 text-sm text-red-600">{errors.major.message}</p>
@@ -417,27 +503,45 @@ export default function Register() {
           </div>
         </div>
 
-        <div className="mt-8 flex justify-between">
-          <button
-            type="button"
-            onClick={prevStep}
-            className="flex justify-center rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-500 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-          >
-            Back
-          </button>
-          <button
-            type="button"
-            onClick={nextStep}
-            className="flex justify-center rounded-md border border-transparent bg-red-800 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-          >
-            Next
-          </button>
+        <div>
+          <label htmlFor="idPhoto" className="block text-sm font-medium text-gray-500">
+            ID Photo <span className="text-red-500">*</span>
+          </label>
+          <div className="mt-1">
+            <input
+              id="idPhoto"
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              className="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-md file:border-0
+                file:text-sm file:font-medium
+                file:bg-red-50 file:text-red-700
+                hover:file:bg-red-100"
+              required
+            />
+            {idPicture && (
+              <p className="mt-2 text-sm text-green-600">
+                Photo selected: {idPicture.name}
+              </p>
+            )}
+            {!idPicture && (
+              <p className="mt-2 text-sm text-gray-500">
+                Please upload a clear photo of your ID
+              </p>
+            )}
+          </div>
         </div>
-      </>
-    );
-  };
 
-  const confirmDetailsContent = () => {
+        </>
+    );
+  
+
+     
+
+  const renderConfirmDetails = () => {
+    // Get all current form values
     const formValues = getValues();
     
     return (
@@ -449,20 +553,21 @@ export default function Register() {
               <p><strong>Name:</strong> {formValues.firstName} {formValues.middleName ? formValues.middleName + ' ' : ''}{formValues.lastName}</p>
               <p><strong>Gender:</strong> {formValues.gender}</p>
               <p><strong>Date of Birth:</strong> {formValues.dateOfBirth}</p>
-              <p><strong>Address:</strong> {formValues.address}</p>
+              <p><strong>Address:</strong> {formValues.address_field}</p>
               <p><strong>Student ID:</strong> {formValues.student_id}</p>
               <p><strong>Email:</strong> {formValues.student_email}@usep.edu.ph</p>
               <p><strong>Status:</strong> {formValues.status}</p>
               <p><strong>College:</strong> {colleges.find(c => c.college_id.toString() === formValues.college_id)?.name || formValues.college_id}</p>
               <p><strong>Program:</strong> {formValues.program}</p>
               <p><strong>Major:</strong> {formValues.major}</p>
+              <p><strong>ID Photo:</strong> {idPicture ? 'Photo uploaded' : 'No photo uploaded'}</p>
             </div>
           </div>
         </div>
 
         <div>
           <label htmlFor="password" className="block text-sm font-medium text-gray-500">
-            Password*
+            Password <span className="text-red-500">*</span>
           </label>
           <div className="mt-1 relative">
             <input
@@ -475,7 +580,7 @@ export default function Register() {
                   message: 'Password must be at least 8 characters'
                 }
               })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+              className="block w-full rounded-md text-gray-800 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
             />
             <div className="absolute inset-y-0 right-0 flex items-center pr-3">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
@@ -491,7 +596,7 @@ export default function Register() {
         
         <div>
           <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-500">
-            Confirm Password*
+            Confirm Password <span className="text-red-500">*</span>
           </label>
           <div className="mt-1">
             <input
@@ -501,67 +606,46 @@ export default function Register() {
                 required: 'Please confirm your password',
                 validate: value => value === password || 'Passwords do not match'
               })}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+              className="block w-full rounded-md text-gray-800 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
             />
             {errors.confirmPassword && (
               <p className="mt-2 text-sm text-red-600">{errors.confirmPassword.message}</p>
             )}
           </div>
         </div>
-
-        <div className="mt-8 flex justify-between">
-          <button
-            type="button"
-            onClick={prevStep}
-            className="flex justify-center rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-500 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-          >
-            Back
-          </button>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="flex justify-center rounded-md border border-transparent bg-red-800 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-75"
-          >
-            {isLoading ? 'Submitting...' : 'Submit'}
-          </button>
-        </div>
       </>
     );
-  };
-
-  const renderFormContent = () => {
-    switch(currentStep) {
-      case 1:
-        return generalDetailsContent();
-      case 2:
-        return academicDetailsContent();
-      case 3:
-        return confirmDetailsContent();
-      default:
-        return generalDetailsContent();
-    }
   };
   
   return (
     <div className="flex min-h-screen flex-col bg-gray-50">
       {/* Header */}
-      <header className="bg-red-800 text-white py-4 px-6 border-b">
+      <header className="bg-red-800 text-white p-4">
         <div className="container mx-auto flex justify-between items-center">
-          <div className="flex items-center space-x-4">
-            <div className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center">
-              X
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 relative">
+              {/* Logo placeholder */}
+              <div className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center">
+                <div className="text-white text-xs">X</div>
+              </div>
             </div>
-            <div>
-              <div className="font-bold">One Data. One USeP.</div>
-              <div className="text-sm">Phoniphaleia Online Voting System</div>
+            <div className="flex flex-col">
+              <h1 className="font-bold text-sm md:text-lg">One Data. One USeP.</h1>
+              <p className="text-xs md:text-sm">Phonipháleia Online Voting System</p>
             </div>
           </div>
-          <div className="text-right">
-            <div className="font-bold">USeP Obrero</div>
-            <div className="text-sm">Student COMELEC</div>
-          </div>
-          <div className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center">
-            X
+          
+          <div className="flex items-center space-x-3">
+            <div className="hidden md:flex flex-col items-end">
+              <h2 className="font-bold text-sm md:text-lg">USeP Obrero</h2>
+              <p className="text-xs md:text-sm">Student COMELEC</p>
+            </div>
+            <div className="w-10 h-10 relative">
+              {/* Logo placeholder */}
+              <div className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center">
+                <div className="text-white text-xs">X</div>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -592,38 +676,65 @@ export default function Register() {
             {renderStepIndicator()}
             
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              {renderFormContent()}
+              {currentStep === 1 && renderGeneralDetails()}
+              {currentStep === 2 && renderAcademicDetails()}
+              {currentStep === 3 && renderConfirmDetails()}
+
+              <div className="mt-8 flex justify-between">
+                {currentStep > 1 && (
+                  <button
+                    type="button"
+                    onClick={prevStep}
+                    className="flex justify-center rounded-md border border-gray-300 bg-white py-2 px-4 text-sm font-medium text-gray-500 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  >
+                    Back
+                  </button>
+                )}
+                {currentStep < 3 ? (
+                  <button
+                    type="button"
+                    onClick={nextStep}
+                    className="flex justify-center rounded-md border border-transparent bg-red-800 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="flex justify-center rounded-md border border-transparent bg-red-800 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-75"
+                  >
+                    {isLoading ? 'Submitting...' : 'Submit'}
+                  </button>
+                )}
+              </div>
             </form>
           </div>
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="bg-red-800 text-white py-4 px-6">
+        {/* Footer */}
+        <footer className="bg-red-800 text-white p-4">
         <div className="container mx-auto">
-          <div className="flex justify-center space-x-8">
-            <div className="w-8 h-8 border border-white rounded flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
-                <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
-              </svg>
+          <div className="flex flex-col items-center justify-center">
+            <div className="flex space-x-4 mb-2">
+              {/* Social icons */}
+              <div className="w-6 h-6 border border-white rounded flex items-center justify-center">
+                <span className="text-xs">X</span>
+              </div>
+              <div className="w-6 h-6 border border-white rounded flex items-center justify-center">
+                <span className="text-xs">X</span>
+              </div>
+              <div className="w-6 h-6 border border-white rounded flex items-center justify-center">
+                <span className="text-xs">X</span>
+              </div>
             </div>
-            <div className="w-8 h-8 border border-white rounded flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2h-1V9a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="w-8 h-8 border border-white rounded flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
-              </svg>
-            </div>
-          </div>
-          <div className="text-center text-sm mt-4">
-            © 202X University of Southeastern Philippines. All Rights Reserved.
+            <p className="text-sm text-center">
+              © 2025 University of Southeastern Philippines. All Rights Reserved.
+            </p>
           </div>
         </div>
       </footer>
-    </div>
-  );
-}
+        </div>
+    );
+    }
