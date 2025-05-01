@@ -1,12 +1,12 @@
 'use client';
-
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
-import { ZKPService } from '@/services/zkpservice';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -24,44 +24,42 @@ export default function Login() {
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
-  
+ 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>();
-  
+ 
   const onSubmit = async (data: LoginFormData) => {
     try {
       setError('');
       setIsLoading(true);
       
-      // 1. Initiate login - get challenge
-      const challengeResponse = await axios.post(`${API_URL}/auth/login`, {
-        student_id: data.student_id
-      });
-      
-      // 2. Generate ZKP proof (now only needs 2 arguments)
-      const proofResponse = ZKPService.generateLoginProof(
-        data.student_id,
-        challengeResponse.data.challenge
-      );
-      
-      // 3. Verify challenge
-      const authResponse = await axios.post(`${API_URL}/auth/verify_challenge`, {
+      const response = await axios.post(`${API_URL}/auth/login`, {
         student_id: data.student_id,
-        challenge: challengeResponse.data.challenge,
-        proof: proofResponse.proof
+        password: data.password
       });
       
-      // Store authentication token
-      localStorage.setItem('token', authResponse.data.token);
-      localStorage.setItem('voter', JSON.stringify(authResponse.data.voter));
-      
-      // Redirect to voting dashboard
-      router.push('/dashboard');
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+        
+        // Store user info if available
+        if (response.data.voter) {
+          localStorage.setItem('user', JSON.stringify(response.data.voter));
+        }
+        
+        // Redirect to voting dashboard
+        router.push('/dashboard');
+      } else {
+        setError('Invalid response from server');
+      }
       
     } catch (err: unknown) {
       console.error('Login error:', err);
       if (axios.isAxiosError(err)) {
         const axiosError = err as AxiosError<ErrorResponse>;
-        setError(axiosError.response?.data?.message || axiosError.message || 'Login failed');
+        if (axiosError.code === 'ERR_NETWORK') {
+          setError('Network error: Please check your connection or server status');
+        } else {
+          setError(axiosError.response?.data?.message || axiosError.message || 'Login failed');
+        }
       } else {
         setError('Login failed');
       }
@@ -69,44 +67,15 @@ export default function Login() {
       setIsLoading(false);
     }
   };
-  
+
+  // Toggle password visibility
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
   
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-red-800 text-white p-4">
-        <div className="container mx-auto flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 relative">
-              {/* Logo placeholder */}
-              <div className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center">
-                <div className="text-white text-xs">X</div>
-              </div>
-            </div>
-            <div className="flex flex-col">
-              <h1 className="font-bold text-sm md:text-lg">One Data. One USeP.</h1>
-              <p className="text-xs md:text-sm">Phonipháleia Online Voting System</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center space-x-3">
-            <div className="hidden md:flex flex-col items-end">
-              <h2 className="font-bold text-sm md:text-lg">USeP Obrero</h2>
-              <p className="text-xs md:text-sm">Student COMELEC</p>
-            </div>
-            <div className="w-10 h-10 relative">
-              {/* Logo placeholder */}
-              <div className="w-10 h-10 rounded-full border-2 border-white flex items-center justify-center">
-                <div className="text-white text-xs">X</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
+      <Header />
       {/* Main content */}
       <main className="flex-grow flex items-center justify-center p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-6xl">
@@ -142,7 +111,7 @@ export default function Login() {
                       message: 'Please enter a valid student ID format (e.g. 2023-12345)'
                     }
                   })}
-                  className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-red-800 focus:ring-red-800"
+                  className="block w-full rounded-md border text-gray-700 border-gray-300 px-3 py-2 shadow-sm focus:border-red-800 focus:ring-red-800"
                 />
                 {errors.student_id && (
                   <p className="mt-1 text-sm text-red-600">{errors.student_id.message}</p>
@@ -159,7 +128,7 @@ export default function Login() {
                   placeholder="Password"
                   autoComplete="current-password"
                   {...register('password', { required: 'Password is required' })}
-                  className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-red-800 focus:ring-red-800 pr-10"
+                  className="block w-full rounded-md text-gray-700 border border-gray-300 px-3 py-2 shadow-sm focus:border-red-800 focus:ring-red-800 pr-10"
                 />
                 <button
                   type="button"
@@ -223,29 +192,7 @@ export default function Login() {
           </div>
         </div>
       </main>
-      
-      {/* Footer */}
-      <footer className="bg-red-800 text-white p-4">
-        <div className="container mx-auto">
-          <div className="flex flex-col items-center justify-center">
-            <div className="flex space-x-4 mb-2">
-              {/* Social icons */}
-              <div className="w-6 h-6 border border-white rounded flex items-center justify-center">
-                <span className="text-xs">X</span>
-              </div>
-              <div className="w-6 h-6 border border-white rounded flex items-center justify-center">
-                <span className="text-xs">X</span>
-              </div>
-              <div className="w-6 h-6 border border-white rounded flex items-center justify-center">
-                <span className="text-xs">X</span>
-              </div>
-            </div>
-            <p className="text-sm text-center">
-              © 2025 University of Southeastern Philippines. All Rights Reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

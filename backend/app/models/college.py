@@ -1,5 +1,5 @@
 # models/college.py
-from app import db  # Import the db from the app package
+from app import db
 from datetime import datetime
 from sqlalchemy.orm import relationship
 
@@ -11,6 +11,8 @@ class College(db.Model):
     college_desc = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    voters = db.relationship('Voter', back_populates='college')
    
     def __repr__(self):
         return f'<College {self.college_name}>'

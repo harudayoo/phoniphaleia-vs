@@ -42,31 +42,19 @@ class ZKPService:
             's': hex(s)
         }
     
-    def verify_proof(
-        self, 
-        proof: dict, 
-        commitment: str, 
-        challenge: str,
-        public_key: dict
-    ) -> bool:
-        """Verify a Schnorr proof"""
+    def verify_proof(self, proof: dict, commitment: str, challenge: str) -> bool:
         try:
-            # Decode points
             R = self.cv.decode_point(bytes.fromhex(proof['R']))
             s = int(proof['s'], 16)
+            C = self.cv.decode_point(bytes.fromhex(commitment))
             
-            # Reconstruct public key
-            C = Point(public_key['x'], public_key['y'], self.cv)
+            # Fix the missing import
+            e = int(hashlib.sha256((proof['R'] + challenge).encode()).hexdigest(), 16)
+            e %= self.cv.order
             
-            # Recompute challenge
-            e = int(hashlib.sha256(
-                (proof['R'] + challenge).encode()
-            ).hexdigest(), 16) % self.cv.order
-            
-            # Verify proof
-            left_side = self.G * s
-            right_side = R + C * e
-            
-            return left_side == right_side
-        except Exception:
+            left = self.G * s
+            right = R + C * e
+            return left == right
+        except Exception as e:
+            print(f"ZKP verification error: {str(e)}")
             return False
