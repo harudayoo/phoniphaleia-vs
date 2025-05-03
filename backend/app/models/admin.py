@@ -3,6 +3,8 @@ from app import db
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import validates
+from sqlalchemy import DateTime
+import random
 
 class Admin(db.Model):
     __tablename__ = 'admin'
@@ -14,9 +16,12 @@ class Admin(db.Model):
     firstname = db.Column(db.String(100), nullable=False)
     middlename = db.Column(db.String(100))
     username = db.Column(db.String(50), unique=True, nullable=False)
-    password = db.Column(db.String(255), nullable=False)  # <-- changed from password_hash
+    password = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now())
+    verified_at = db.Column(db.DateTime(timezone=True), nullable=True, comment="Timestamp when email was verified")
+    otp_code = db.Column(db.String(6), nullable=True)
+    otp_expires_at = db.Column(DateTime, nullable=True)
 
     @property
     def password_raw(self):
@@ -31,7 +36,7 @@ class Admin(db.Model):
     def verify_password(self, password):
         return bcrypt.checkpw(password.encode('utf-8'), self.password.encode('utf-8'))
     
-     # Validation for id_number format
+    # Validation for id_number format
     @validates('id_number')
     def validate_id_number(self, key, id_number):
         import re

@@ -4,7 +4,7 @@ import Link from "next/link";
 
 export default function Header() {
   return (
-    <header className="bg-red-800 text-white p-1 shadow-md">
+    <header className="bg-gradient-to-r from-red-700/95 to-red-900 text-white p-1 px-3 shadow-lg">
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center space-x-3">
           <Link
@@ -32,7 +32,7 @@ export default function Header() {
             <p className="text-xs md:text-sm">Student COMELEC</p>
           </div>
           <Link
-            href="/auth/admin_register"
+            href="/auth/admin_login"
             className="w-10 h-10 relative group"
             title="Go to Admin Register"
           >

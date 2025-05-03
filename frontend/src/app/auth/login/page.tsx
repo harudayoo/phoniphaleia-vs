@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import UsepStudents1 from '@/components/UsepStudents1';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -150,7 +151,9 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full rounded-md bg-red-800 px-4 py-2 text-white font-medium shadow-sm hover:bg-red-900 focus:outline-none focus:ring-2 focus:ring-red-800 disabled:opacity-75"
+                  className="w-full rounded-md bg-gradient-to-r from-red-700/95 to-red-800 px-4 py-2 text-white font-medium shadow-sm 
+                  bg-[length:200%_100%] bg-right transition-[background-position] duration-300
+                  hover:bg-left focus:outline-none focus:ring-2 focus:ring-red-800 disabled:opacity-75"
                 >
                   {isLoading ? 'Signing in...' : 'Sign In'}
                 </button>
@@ -182,14 +185,12 @@ export default function Login() {
           </div>
           
           {/* Image/Logo Section */}
-          <div className="hidden md:flex items-center justify-center">
-            <div className="w-full max-w-md aspect-square border border-gray-200 rounded-lg flex items-center justify-center bg-gray-50">
+            <div className="hidden md:flex items-center justify-center">
+            <div className="w-full max-w-md aspect-square rounded-lg flex items-center justify-center bg-gray-50">
               {/* This is where you could add your voting system logo or illustration */}
-              <div className="w-full h-full relative flex items-center justify-center">
-                <div className="text-6xl text-gray-300">USeP</div>
-              </div>
+              <UsepStudents1 style={{ width: '100%', height: 'auto' }} />
             </div>
-          </div>
+            </div>
         </div>
       </main>
       <Footer />

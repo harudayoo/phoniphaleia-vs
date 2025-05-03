@@ -1,15 +1,45 @@
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, render_template_string
 from werkzeug.exceptions import Unauthorized
 from app.models.voter import Voter
 from app.models.admin import Admin
 import jwt
 from datetime import datetime, timedelta
 import json
-from app import db
+from app import db, mail
+from flask_mail import Message
 
 import os
 from werkzeug.utils import secure_filename
 import uuid
+import random
+
+OTP_EMAIL_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Your OTP Code</title>
+    <style>
+      body { font-family: Arial, sans-serif; background: #f9f9f9; }
+      .container { background: #fff; padding: 32px; border-radius: 8px; max-width: 400px; margin: 40px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.07);}
+      .otp { font-size: 2em; letter-spacing: 8px; color: #2d7ff9; margin: 24px 0; }
+      .footer { font-size: 0.9em; color: #888; margin-top: 32px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Your One-Time Password (OTP)</h2>
+      <p>Use the code below to continue your authentication process:</p>
+      <div class="otp">{{ otp }}</div>
+      <p>This code will expire in 5 minutes.</p>
+      <div class="footer">
+        If you did not request this, please ignore this email.<br/>
+        &copy; {{ year }} Phoniphaleia
+      </div>
+    </div>
+  </body>
+</html>
+"""
 
 class AuthController:
     
@@ -249,6 +279,24 @@ class AuthController:
         return age
 
     @staticmethod
+    def send_otp_email(email, otp):
+        try:
+            html_body = render_template_string(
+                OTP_EMAIL_TEMPLATE,
+                otp=otp,
+                year=datetime.utcnow().year
+            )
+            msg = Message(
+                subject="Your Admin OTP Code",
+                recipients=[email],
+                body=f"Your OTP code is: {otp}\nThis code will expire in 5 minutes.",
+                html=html_body
+            )
+            mail.send(msg)
+        except Exception as e:
+            current_app.logger.error(f"Failed to send OTP email: {str(e)}")
+
+    @staticmethod
     def admin_register():
         try:
             data = request.get_json()
@@ -285,3 +333,100 @@ class AuthController:
         except Exception as e:
             current_app.logger.error(f"Admin registration error: {str(e)}")
             return jsonify({"message": "Registration failed. Please check your input."}), 500
+
+    @staticmethod
+    def admin_login():
+        """Admin login with id_number and password, then send OTP"""
+        try:
+            data = request.get_json()
+            id_number = data.get('id_number')
+            password = data.get('password')
+
+            if not id_number or not password:
+                return jsonify({'message': 'ID Number and password required'}), 400
+
+            admin = Admin.query.filter_by(id_number=id_number).first()
+            if admin and admin.verify_password(password):
+                # Generate OTP
+                otp = f"{random.randint(100000, 999999)}"
+                expires_at = datetime.utcnow() + timedelta(minutes=5)
+                admin.otp_code = otp
+                admin.otp_expires_at = expires_at
+                db.session.commit()
+
+                AuthController.send_otp_email(admin.email, otp)
+
+                return jsonify({
+                    "admin_id": admin.admin_id,
+                    "message": "OTP sent to your email"
+                }), 200
+            else:
+                return jsonify({"message": "Invalid credentials"}), 401
+
+        except Exception as e:
+            current_app.logger.error(f"Admin login error: {str(e)}")
+            return jsonify({'message': 'Login failed'}), 500
+
+    @staticmethod
+    def admin_verify_otp():
+        try:
+            data = request.get_json()
+            admin_id = data.get('admin_id')
+            otp = data.get('otp')
+
+            admin = Admin.query.filter_by(admin_id=admin_id).first()
+            if not admin or not admin.otp_code or not admin.otp_expires_at:
+                return jsonify({"message": "OTP not found"}), 400
+
+            if datetime.utcnow() > admin.otp_expires_at:
+                return jsonify({"message": "OTP expired"}), 400
+
+            if admin.otp_code != otp:
+                return jsonify({"message": "Invalid OTP"}), 400
+
+            # OTP is valid, clear it and issue JWT
+            admin.otp_code = None
+            admin.otp_expires_at = None
+            db.session.commit()
+
+            payload = {
+                "admin_id": admin.admin_id,
+                "role": "admin",
+                "exp": datetime.utcnow() + timedelta(hours=1)
+            }
+            jwt_secret = current_app.config['JWT_SECRET_KEY']
+            token = jwt.encode(payload, jwt_secret, algorithm="HS256")
+            if isinstance(token, bytes):
+                token = token.decode('utf-8')
+
+            return jsonify({
+                "verified": True,
+                "token": token
+            }), 200
+
+        except Exception as e:
+            current_app.logger.error(f"Admin OTP verification error: {str(e)}")
+            return jsonify({'message': 'OTP verification failed'}), 500
+
+    @staticmethod
+    def admin_resend_otp():
+        try:
+            data = request.get_json()
+            admin_id = data.get('admin_id')
+            admin = Admin.query.filter_by(admin_id=admin_id).first()
+            if not admin:
+                return jsonify({"message": "Admin not found"}), 404
+
+            otp = f"{random.randint(100000, 999999)}"
+            expires_at = datetime.utcnow() + timedelta(minutes=5)
+            admin.otp_code = otp
+            admin.otp_expires_at = expires_at
+            db.session.commit()
+
+            AuthController.send_otp_email(admin.email, otp)
+
+            return jsonify({"message": "OTP resent"}), 200
+
+        except Exception as e:
+            current_app.logger.error(f"Admin resend OTP error: {str(e)}")
+            return jsonify({'message': 'Failed to resend OTP'}), 500
