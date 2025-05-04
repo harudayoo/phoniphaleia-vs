@@ -1,9 +1,7 @@
 # \backend\app\models\position.py
-from flask_sqlalchemy import SQLAlchemy
+from app import db
 from datetime import datetime
 from sqlalchemy.orm import relationship
-
-db = SQLAlchemy()
 
 class Position(db.Model):
     __tablename__ = 'positions'

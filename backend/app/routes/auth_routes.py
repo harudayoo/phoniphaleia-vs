@@ -12,3 +12,4 @@ auth_bp.route('/admin_register', methods=['POST'])(AuthController.admin_register
 auth_bp.route('/admin/login', methods=['POST'])(AuthController.admin_login)
 auth_bp.route('/admin/verify_otp', methods=['POST'])(AuthController.admin_verify_otp)
 auth_bp.route('/admin/resend_otp', methods=['POST'])(AuthController.admin_resend_otp)
+auth_bp.route('/logout', methods=['POST'])(AuthController.logout)

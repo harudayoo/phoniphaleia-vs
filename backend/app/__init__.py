@@ -19,6 +19,14 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object("app.config.Config")
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'default_secret_key')
+    
+     # Session and cookie configuration
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'supersecretkey')  # Used for session signing
+    app.config['SESSION_COOKIE_NAME'] = os.getenv('SESSION_COOKIE_NAME', 'phoniphaleia_session')
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False') == 'True'
+    app.config['SESSION_COOKIE_SAMESITE'] = os.getenv('SESSION_COOKIE_SAMESITE', 'Lax')
+
 
     # Mail configuration
     app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER')
@@ -58,10 +66,11 @@ def create_app():
         db.create_all()
 
     # Register blueprints
-    from app.routes import main_bp
-    from app.routes.auth_routes import auth_bp
-    app.register_blueprint(main_bp, url_prefix='/api')
+    from app.routes import auth_bp, college_bp, admin_bp, election_bp
     app.register_blueprint(auth_bp)
+    app.register_blueprint(college_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(election_bp)
 
     # Simple test route
     @app.route('/direct-test')

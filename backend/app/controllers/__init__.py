@@ -1,9 +1,11 @@
-    # Import controllers
+# Import controllers
 from .auth_controller import AuthController
-    
+from .admin_controller import AdminController
+from .election_controller import ElectionController
 
-    # Export controllers
+# Export controllers
 __all__ = [
-        'AuthController',
-    
-    ]
+    'AuthController',
+    'AdminController',
+    'ElectionController',
+]

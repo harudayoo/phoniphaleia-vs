@@ -4,9 +4,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import dynamic from 'next/dynamic';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
+// Dynamically import LoadingPage to avoid SSR issues
+const LoadingPage = dynamic(() => import('@/screens/LoadingPage'), { ssr: false });
 
 interface ErrorResponse {
   message?: string;
@@ -18,6 +21,7 @@ export default function AdminOTPVerification() {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [showLoadingPage, setShowLoadingPage] = useState<boolean>(false);
 
   // Optionally, get admin id or email from query params if needed
   const adminId = searchParams.get('admin_id') || '';
@@ -47,7 +51,14 @@ export default function AdminOTPVerification() {
       });
 
       if (response.data.verified) {
-        router.push('/admin/dashboard');
+        // Store token for future requests
+        if (response.data.token) {
+          localStorage.setItem('admin_token', response.data.token);
+        }
+        setShowLoadingPage(true);
+        setTimeout(() => {
+          router.push('/admin/dashboard');
+        }, 2000);
       } else {
         setError('Invalid OTP. Please try again.');
       }
@@ -67,6 +78,10 @@ export default function AdminOTPVerification() {
       setIsLoading(false);
     }
   };
+
+  if (showLoadingPage) {
+    return <LoadingPage />;
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">

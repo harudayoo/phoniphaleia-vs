@@ -1,8 +1,6 @@
-from flask_sqlalchemy import SQLAlchemy
+from app import db
 from datetime import datetime
 from sqlalchemy.orm import relationship
-
-db = SQLAlchemy()
 
 class AuditLog(db.Model):
     __tablename__ = 'audit_logs'

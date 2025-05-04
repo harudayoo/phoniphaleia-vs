@@ -1,11 +1,10 @@
 import React, { useState, ReactNode } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, LogOut } from 'lucide-react';
 
 interface SidebarProps {
   children?: ReactNode;
 }
 
-// Make logo smaller
 const LOGO_SIZE = 62; // px, smaller logo
 
 const Sidebar: React.FC<SidebarProps> = ({ children }) => {
@@ -15,13 +14,38 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
   const collapsedWidth = LOGO_SIZE / 2 + 16;
 
   // Animation timing
-  const animationDuration = 1000; // ms, even smoother and a bit longer
+  const animationDuration = 800; // ms
+
+  // Theme colors (remove dark mode logic)
+  const sidebarBg = 'linear-gradient(to right, #faf9f7, #f9fafb)';
+  const logoBorderColor = '#f9fafb';
+  const logoBg = '#e5e7eb';
+
+  // Logout handler
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      // Remove all tokens and user info from localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('admin_token'); // Remove admin token as well
+   
+      // Redirect to login page
+      window.location.href = '/auth/login';
+    } catch {
+      alert('Logout failed');
+    }
+  };
 
   return (
     <aside
       className={`
         fixed top-0 left-0 h-full z-40
-        bg-[#faf9f7] shadow-lg
+        shadow-lg
         border-l-0
         transition-all
       `}
@@ -36,6 +60,7 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         minWidth: collapsed ? `${collapsedWidth}px` : '16rem',
         maxWidth: collapsed ? `${collapsedWidth}px` : '16rem',
         transition: `width ${animationDuration}ms cubic-bezier(0.4,0,0.2,1)`,
+        background: sidebarBg,
       }}
     >
       {/* Gradient border line */}
@@ -92,20 +117,44 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
             onClick={() => setCollapsed((prev) => !prev)}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
+            {/* Animated icon transition */}
             <span
-              className={`
-                transition-transform
-                ${collapsed ? 'rotate-0' : 'rotate-90'}
-              `}
+              className="relative flex items-center justify-center"
               style={{
-                transition: `transform ${animationDuration}ms cubic-bezier(0.4,0,0.2,1)`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 0,
+                width: '24px',
+                height: '24px',
               }}
             >
-              {collapsed ? <Menu size={18} strokeWidth={2.5} /> : <X size={18} strokeWidth={2.5} />}
+              {/* Hamburger Icon */}
+              <span
+                className={`
+                  absolute inset-0 flex items-center justify-center
+                  transition-transform transition-opacity
+                  duration-[${animationDuration}ms]
+                  ${collapsed ? 'opacity-100 scale-100 rotate-0' : 'opacity-0 scale-75 rotate-90'}
+                `}
+                style={{
+                  transition: `all ${animationDuration}ms cubic-bezier(0.4,0,0.2,1)`,
+                  pointerEvents: collapsed ? 'auto' : 'none',
+                }}
+              >
+                <Menu size={18} strokeWidth={2.5} />
+              </span>
+              {/* X Icon */}
+              <span
+                className={`
+                  absolute inset-0 flex items-center justify-center
+                  transition-transform transition-opacity
+                  duration-[${animationDuration}ms]
+                  ${collapsed ? 'opacity-0 scale-75 -rotate-90' : 'opacity-100 scale-100 rotate-0'}
+                `}
+                style={{
+                  transition: `all ${animationDuration}ms cubic-bezier(0.4,0,0.2,1)`,
+                  pointerEvents: collapsed ? 'none' : 'auto',
+                }}
+              >
+                <X size={18} strokeWidth={2.5} />
+              </span>
             </span>
           </button>
         </div>
@@ -114,13 +163,12 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
           className={`
             flex flex-col items-center
             transition-all
-            ${collapsed ? 'mt-1 mb-2' : 'mt-8 mb-6'}
+            ${collapsed ? 'mt-1 mb-2' : 'mt-2 mb-6'}
           `}
           style={{
             transition: `margin ${animationDuration}ms cubic-bezier(0.4,0,0.2,1)`,
             position: collapsed ? 'relative' : undefined,
             minHeight: `${LOGO_SIZE}px`,
-            
           }}
         >
           <div
@@ -132,23 +180,23 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
             style={{
               width: `${LOGO_SIZE}px`,
               height: `${LOGO_SIZE}px`,
-              background: '#e5e7eb',
+              background: logoBg,
               borderRadius: '9999px',
-              borderColor: '#faf9f7',
+              borderColor: logoBorderColor,
               borderStyle: 'solid',
               borderWidth: '4px',
               transition: `
-          border-color ${animationDuration}ms cubic-bezier(0.4,0,0.2,1),
-          border-width ${animationDuration}ms cubic-bezier(0.4,0,0.2,1),
-          transform ${animationDuration}ms cubic-bezier(0.4,0,0.2,1),
-          left ${animationDuration}ms cubic-bezier(0.4,0,0.2,1)
+                border-color ${animationDuration}ms cubic-bezier(0.4,0,0.2,1),
+                border-width ${animationDuration}ms cubic-bezier(0.4,0,0.2,1),
+                transform ${animationDuration}ms cubic-bezier(0.4,0,0.2,1),
+                left ${animationDuration}ms cubic-bezier(0.4,0,0.2,1)
               `,
               position: collapsed ? 'absolute' : 'static',
               left: collapsed ? 'calc(100% + 5px)' : undefined,
               top: collapsed ? 0 : undefined,
               transform: collapsed
-          ? `translateX(-50%) scale(1.08)`
-          : 'translateX(0) scale(1)',
+                ? `translateX(-50%) scale(1.08)`
+                : 'translateX(0) scale(1)',
               boxShadow: 'none',
               zIndex: 20,
             }}
@@ -156,8 +204,8 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
             <span
               className="text-gray-400 text-xl font-bold"
               style={{
-          transition: `opacity ${animationDuration}ms cubic-bezier(0.4,0,0.2,1)`,
-          opacity: collapsed ? 0.85 : 1,
+                transition: `opacity ${animationDuration}ms cubic-bezier(0.4,0,0.2,1)`,
+                opacity: collapsed ? 0.85 : 1,
               }}
             >
               Logo
@@ -174,8 +222,8 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
           >
             {!collapsed && (
               <>
-          <div className="text-xl font-bold text-gray-800 text-center">Phonipháleia</div>
-          <div className="text-xs text-gray-500 text-center">voting platform</div>
+                <div className="text-xl font-bold text-gray-800 text-center">Phonipháleia</div>
+                <div className="text-xs text-gray-500 text-center">voting platform</div>
               </>
             )}
           </div>
@@ -193,6 +241,22 @@ const Sidebar: React.FC<SidebarProps> = ({ children }) => {
         >
           {children}
         </nav>
+        {/* Remove Theme Button */}
+        <div className={`flex flex-col gap-2 mt-auto pb-2`}>
+          <button
+            className={`
+              flex items-center justify-center gap-2 w-full py-2 rounded-lg
+              text-sm font-medium
+              transition-colors
+              bg-red-100 text-red-700 hover:bg-red-200
+            `}
+            onClick={handleLogout}
+            aria-label="Logout"
+          >
+            <LogOut size={18} />
+            {collapsed ? '' : 'Logout'}
+          </button>
+        </div>
       </div>
     </aside>
   );

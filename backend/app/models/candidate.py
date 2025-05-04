@@ -1,8 +1,6 @@
-from flask_sqlalchemy import SQLAlchemy
+from app import db
 from datetime import datetime
 from sqlalchemy.orm import relationship
-
-db = SQLAlchemy()
 
 class Candidate(db.Model):
     __tablename__ = 'candidates'

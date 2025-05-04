@@ -1,4 +1,4 @@
-from flask import request, jsonify, current_app, render_template_string
+from flask import request, jsonify, current_app, render_template_string, session
 from werkzeug.exceptions import Unauthorized
 from app.models.voter import Voter
 from app.models.admin import Admin
@@ -149,14 +149,17 @@ class AuthController:
                 return jsonify({'message': 'Student ID and password required'}), 400
                 
             voter = Voter.query.filter_by(student_id=student_id).first()
-            if not voter:
+            if not voter or not voter.check_password(password):
                 return jsonify({'message': 'Invalid credentials'}), 401
-            
-            # Verify password
-            if not voter.check_password(password):
-                return jsonify({'message': 'Invalid credentials'}), 401
-                
-            # Generate JWT token
+
+            # Set session for user
+            session['user_type'] = 'voter'
+            session['student_id'] = voter.student_id
+            session['first_name'] = voter.first_name
+            session['last_name'] = voter.last_name
+            session['student_email'] = voter.student_email
+
+            # Generate JWT token (optional, for API use)
             token = jwt.encode(
                 {
                     'student_id': voter.student_id,
@@ -179,6 +182,14 @@ class AuthController:
         except Exception as e:
             current_app.logger.error(f"Login error: {str(e)}")
             return jsonify({'message': 'Login failed'}), 500
+
+    @staticmethod
+    def logout():
+        """Logout user/admin and clear session"""
+        session.clear()
+        # Optionally, clear cookies by setting them expired (if using cookies for JWT)
+        resp = jsonify({'message': 'Logged out'})
+        return resp
 
     @staticmethod
     def verify_challenge():
@@ -356,6 +367,9 @@ class AuthController:
 
                 AuthController.send_otp_email(admin.email, otp)
 
+                # Set session for admin (pending OTP verification)
+                session['pending_admin_id'] = admin.admin_id
+
                 return jsonify({
                     "admin_id": admin.admin_id,
                     "message": "OTP sent to your email"
@@ -401,7 +415,7 @@ class AuthController:
 
             return jsonify({
                 "verified": True,
-                "token": token
+                "token": token  # <-- JWT for frontend
             }), 200
 
         except Exception as e:

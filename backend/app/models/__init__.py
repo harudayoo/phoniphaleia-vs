@@ -8,6 +8,7 @@ from .crypto_config import CryptoConfig
 from .trusted_authority import TrustedAuthority
 from .key_share import KeyShare
 from .voter import Voter
+from .position import Position
 from .candidate import Candidate
 from .vote import Vote
 from .audit_log import AuditLog
@@ -22,6 +23,7 @@ __all__ = [
     'TrustedAuthority',
     'KeyShare',
     'Voter',
+    'Position'
     'Candidate',
     'Vote',
     'AuditLog',
