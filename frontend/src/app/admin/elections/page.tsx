@@ -23,7 +23,7 @@ export default function AdminElectionsPage() {
   const [sort, setSort] = useState('date_desc');
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/elections/')
+    fetch('http://localhost:5000/api/elections')
       .then(async res => {
         if (!res.ok) {
           const text = await res.text();
@@ -117,7 +117,9 @@ export default function AdminElectionsPage() {
         </div>
       <div className="flex justify-end">
         <button
-        className="w-fit bg-[#800000] hover:bg-[#a83232] text-white font-semibold px-4 py-2 rounded-full transition"
+        className="w-fit bg-gradient-to-r from-red-700/95 to-red-800 px-4 py-2 text-white font-medium shadow-sm 
+                  bg-[length:200%_100%] bg-right transition-[background-position] duration-300
+                  hover:bg-left focus:outline-none focus:ring-2 focus:ring-red-800 disabled:opacity-75 rounded-full"
         // TODO: Add navigation or modal logic for scheduling a new election
         >
         Schedule a New Election

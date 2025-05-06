@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, ReactNode } from 'react';
+import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
 import {
   LayoutDashboard,
@@ -9,107 +10,197 @@ import {
   HelpCircle,
   Settings2,
 } from 'lucide-react';
-
-interface AdminInfo {
-  full_name: string;
-  id_number: string;
-}
+import { motion, AnimatePresence } from 'framer-motion';
+import { useAdmin, AdminProvider } from '@/contexts/AdminContext';
+import { usePathname } from 'next/navigation';
 
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
-  const [admin, setAdmin] = useState<AdminInfo | null>(null);
+const SIDEBAR_EXPANDED = 256; // px
+const SIDEBAR_COLLAPSED = 47; // px (LOGO_SIZE / 2 + 16)
 
+// Create an inner layout component that uses the context
+function AdminLayoutInner({ children }: AdminLayoutProps) {
+  const { admin, loading } = useAdmin();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const pathname = usePathname();
+
+  // Handle window resize to detect mobile view
   useEffect(() => {
-    const adminToken = localStorage.getItem('admin_token');
-    if (!adminToken) {
-      window.location.href = '/auth/login';
-      return;
-    }
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-    fetch(`${API_URL}/admin/me`, {
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-      },
-    })
-      .then((res) => {
-        if (res.status === 401) {
-          window.location.href = '/auth/login';
-          return null;
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (data) {
-          setAdmin({
-            full_name: data.full_name,
-            id_number: data.id_number,
-          });
-        }
-      })
-      .catch(() => {
-        setAdmin(null);
-        window.location.href = '/auth/login';
-      });
+    // Check on mount
+    checkIsMobile();
+
+    // Add resize listener
+    window.addEventListener('resize', checkIsMobile);
+    
+    // Clean up
+    return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
+  // Pass collapsed state and setter to Sidebar for synchronization
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <Sidebar>
+      <Sidebar 
+        collapsed={sidebarCollapsed} 
+        setCollapsed={setSidebarCollapsed}
+        isMobileView={isMobile}
+      >
         <ul className="flex flex-col gap-2 mt-2">
           <li>
-            <a href="/admin/dashboard" className="flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium">
+            <Link 
+              href="/admin/dashboard"
+              className={`flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium ${
+                pathname === '/admin/dashboard' ? 'bg-gray-200' : ''
+              }`}
+            >
               <LayoutDashboard className="w-5 h-5" />
               <span>Dashboard</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="/admin/elections" className="flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium">
+            <Link 
+              href="/admin/elections" 
+              className={`flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium ${
+                pathname === '/admin/elections' ? 'bg-gray-200' : ''
+              }`}
+            >
               <CalendarCheck2 className="w-5 h-5" />
               <span>Election Management</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="#" className="flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium">
+            <Link 
+              href="/admin/security-keys" 
+              className={`flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium ${
+                pathname === '/admin/security-keys' ? 'bg-gray-200' : ''
+              }`}
+            >
               <KeyRound className="w-5 h-5" />
               <span>Security and Keys</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="#" className="flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium">
+            <Link 
+              href="/admin/results" 
+              className={`flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium ${
+                pathname === '/admin/results' ? 'bg-gray-200' : ''
+              }`}
+            >
               <BarChart2 className="w-5 h-5" />
               <span>Results</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="#" className="flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium">
+            <Link 
+              href="/admin/help-documentation" 
+              className={`flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium ${
+                pathname === '/admin/help-documentation' ? 'bg-gray-200' : ''
+              }`}
+            >
               <HelpCircle className="w-5 h-5" />
               <span>Help and Documentation</span>
-            </a>
+            </Link>
           </li>
           <li>
-            <a href="#" className="flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium">
+            <Link 
+              href="/admin/settings" 
+              className={`flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium ${
+                pathname === '/admin/settings' ? 'bg-gray-200' : ''
+              }`}
+            >
               <Settings2 className="w-5 h-5" />
               <span>System Settings</span>
-            </a>
+            </Link>
           </li>
         </ul>
       </Sidebar>
-      <main className="flex-1 ml-64 p-10">
-        {/* Admin info top-right */}
+      
+      {/* Animate the margin-left of the main content for smooth transition - only on desktop */}
+      <motion.main
+        initial={false}
+        animate={{
+          marginLeft: isMobile ? 0 : (sidebarCollapsed ? SIDEBAR_COLLAPSED : SIDEBAR_EXPANDED),
+        }}
+        transition={{
+          duration: 0.6,
+          type: 'spring',
+          stiffness: 120,
+          damping: 18,
+        }}
+        className="flex-1 p-10"
+        style={{ 
+          minWidth: 0,
+          paddingLeft: isMobile ? 'calc(1rem + 36px)' : undefined, // Add space for hamburger button on mobile
+        }}
+      >
+        {/* Admin info top-right - with animation */}
         <div className="flex justify-end items-center mb-8">
-          {admin && (
-            <div className="text-right">
-              <div className="text-lg font-semibold text-red-900 text-shadow-gray-600">Welcome, {admin.full_name}</div>
-              <div className="text-sm text-gray-600">ID Number: {admin.id_number}</div>
-            </div>
-          )}
+          <AnimatePresence mode="wait">
+            {loading ? (
+              <motion.div 
+                key="loading"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="text-right h-12 flex items-center"
+              >
+                <div className="w-32 h-5 bg-gray-200 rounded-md animate-pulse mb-2"></div>
+                <div className="w-24 h-3 bg-gray-200 rounded-md animate-pulse"></div>
+              </motion.div>
+            ) : admin ? (
+              <motion.div 
+                key="admin-info"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                className="text-right"
+              >
+                <motion.div 
+                  className="text-lg font-semibold text-red-900 text-shadow-gray-600"
+                  layoutId="admin-name"
+                >
+                  Welcome, {admin.full_name}
+                </motion.div>
+                <motion.div 
+                  className="text-sm text-gray-600"
+                  layoutId="admin-id"
+                >
+                  ID Number: {admin.id_number}
+                </motion.div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="no-admin"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-right"
+              >
+                <div className="text-lg font-semibold text-red-900">Session expired</div>
+                <div className="text-sm text-gray-600">Redirecting...</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
         {children}
-      </main>
+      </motion.main>
     </div>
+  );
+}
+
+// Wrapper component that provides the context
+export default function AdminLayout({ children }: AdminLayoutProps) {
+  return (
+    <AdminProvider>
+      <AdminLayoutInner>{children}</AdminLayoutInner>
+    </AdminProvider>
   );
 }
