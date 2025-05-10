@@ -9,10 +9,12 @@ import {
   BarChart2,
   HelpCircle,
   Settings2,
+  BetweenHorizontalStart,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAdmin, AdminProvider } from '@/contexts/AdminContext';
 import { usePathname } from 'next/navigation';
+import SystemLogo2 from '@/components/SystemLogo2';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -99,6 +101,17 @@ function AdminLayoutInner({ children }: AdminLayoutProps) {
           </li>
           <li>
             <Link 
+              href="/admin/entries" 
+              className={`flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium ${
+                pathname === '/admin/entries' ? 'bg-gray-200' : ''
+              }`}
+            >
+              <BetweenHorizontalStart className="w-5 h-5" />
+              <span>Organizations and Positions</span>
+            </Link>
+          </li>
+          <li>
+            <Link 
               href="/admin/help-documentation" 
               className={`flex items-center gap-3 px-2 py-2 rounded-md text-gray-800 hover:bg-gray-200 font-medium ${
                 pathname === '/admin/help-documentation' ? 'bg-gray-200' : ''
@@ -138,8 +151,22 @@ function AdminLayoutInner({ children }: AdminLayoutProps) {
         style={{ 
           minWidth: 0,
           paddingLeft: isMobile ? 'calc(1rem + 36px)' : undefined, // Add space for hamburger button on mobile
+          paddingTop: isMobile ? '60px' : undefined, // Add space for the fixed header on mobile
         }}
       >
+          {/* Mobile header that appears fixed at the top */}
+          {isMobile && (
+          <div className="fixed top-0 left-0 w-full z-20 py-3 px-4 bg-gray-50 shadow-sm flex items-center">
+            <div className="ml-10">
+              <SystemLogo2 
+                width={120} 
+                height={40} 
+                alt="Phoniphaleia" 
+              />
+            </div>
+          </div>
+        )}
+
         {/* Admin info top-right - with animation */}
         <div className="flex justify-end items-center mb-8">
           <AnimatePresence mode="wait">
@@ -161,7 +188,10 @@ function AdminLayoutInner({ children }: AdminLayoutProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="text-right"
+                className="text-right p-2 rounded-l-lg"
+                style={{
+                  background: 'linear-gradient(to left, rgba(253, 230, 138, 0.1), rgba(253, 230, 138, 0) 70%)'
+                }}
               >
                 <motion.div 
                   className="text-lg font-semibold text-red-900 text-shadow-gray-600"

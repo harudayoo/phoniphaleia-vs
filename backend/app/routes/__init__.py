@@ -9,6 +9,9 @@ from .auth_routes import auth_bp
 from .college_routes import college_bp
 from .admin_routes import admin_bp
 from .election_routes import election_bp
+from .user_routes import user_bp
+from .organization_routes import organization_bp
+from .position_routes import position_bp
 
 # Define __all__ for clarity
 __all__ = [
@@ -16,4 +19,7 @@ __all__ = [
     "college_bp",
     "admin_bp",
     "election_bp",
+    "user_bp",
+    "organization_bp",
+    "position_bp",
 ]

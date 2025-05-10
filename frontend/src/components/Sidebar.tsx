@@ -1,32 +1,33 @@
 import React, { ReactNode, useEffect, useState } from 'react';
 import { Menu, X, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import SystemLogo1 from './SystemLogo1'; // Import the logo component
 
 interface SidebarProps {
   children?: ReactNode;
   collapsed: boolean;
   setCollapsed: (collapsed: boolean) => void;
-  isMobileView?: boolean; // Add this to receive mobile state from parent
+  isMobileView?: boolean;
+  handleLogout?: () => void; // Add optional external logout handler
 }
 
-const LOGO_SIZE = 62; // px, smaller logo
+const LOGO_SIZE = 80; // px, smaller logo
 
 const Sidebar: React.FC<SidebarProps> = ({ 
   children, 
   collapsed, 
   setCollapsed,
-  isMobileView // Receive from parent
+  isMobileView,
+  handleLogout: externalHandleLogout // Rename to avoid naming collision
 }) => {
   // Collapsed width: half logo + 16px padding (less padding for closer spacing)
-  const collapsedWidth = LOGO_SIZE / 2 + 16;
+  const collapsedWidth = LOGO_SIZE / 2 + 10;
 
   // Animation timing
   const animationDuration = 0.6; // seconds for framer-motion
 
   // Theme colors
   const sidebarBg = 'linear-gradient(to right, #fefbf3, #fefdf7, #f9fafb)';
-  const logoBorderColor = '#f9fafb';
-  const logoBg = '#e5e7eb';
 
   // Use isMobileView from props if provided, otherwise detect internally
   const [isMobile, setIsMobile] = useState(isMobileView || false);
@@ -64,19 +65,30 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   }, [isMobile, mobileMenuOpen, setCollapsed]);
 
-  // Logout handler
+  // Logout handler that uses external handler if provided
   const handleLogout = async () => {
+    if (externalHandleLogout) {
+      externalHandleLogout();
+      return;
+    }
+
     try {
-      await fetch('/api/auth/logout', {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      await fetch(`${API_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' }
       });
-      localStorage.removeItem('token');
+      
+      // Clear all relevant storage with correct key names
+      localStorage.removeItem('voter_token');
       localStorage.removeItem('user');
       localStorage.removeItem('admin_token');
+      
+      // Redirect to login page
       window.location.href = '/auth/login';
-    } catch {
+    } catch (error) {
+      console.error('Error during logout:', error);
       alert('Logout failed');
     }
   };
@@ -108,7 +120,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       {isMobile && (
         <div className="z-50">
           <button 
-            className="fixed top-4 left-4 p-2 bg-white rounded-md shadow-md text-red-700 hover:bg-gray-100"
+            className="fixed top-1 left-4 p-2  text-red-700"
             onClick={toggleMobileMenu}
             aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           >
@@ -148,14 +160,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                       <X size={18} />
                     </button>
                     
-                    {/* App Title */}
+                    {/* App Logo - Larger with no background */}
                     <div className="flex items-center justify-center mb-6 mt-2">
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center border-4 border-white/90">
-                          <span className="text-gray-500 font-bold">Logo</span>
+                      <div className="flex-col items-center">
+                        <div className="w-24 h-24 flex items-center justify-center">
+                          <SystemLogo1 width={96} height={96} />
                         </div>
-                        <div className="text-xl font-bold text-gray-800 mt-2">Phonipháleia</div>
-                        <div className="text-xs text-gray-500">Voting Platform</div>
                       </div>
                     </div>
                     
@@ -329,17 +339,17 @@ const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </div>
 
-            {/* Logo */}
+            {/* Desktop Sidebar Logo - Removed circular background and enlarged */}
             <motion.div
               className={`
                 flex flex-col items-center
                 transition-all
-                ${collapsed ? 'mt-1 mb-2' : 'mt-2 mb-6'}
+                ${collapsed ? 'mt-1 mb-2' : 'mt-2 mb-2'}
               `}
               style={{
                 position: 'relative',
                 alignItems: collapsed ? 'flex-start' : 'center',
-                minHeight: `${LOGO_SIZE}px`,
+                minHeight: collapsed ? `${LOGO_SIZE}px` : `${LOGO_SIZE * 1.5}px`,
                 zIndex: 20,
                 pointerEvents: 'none',
                 transition: `left ${animationDuration}s cubic-bezier(0.4,0,0.2,1)`,
@@ -347,57 +357,28 @@ const Sidebar: React.FC<SidebarProps> = ({
               }}
               animate={{
                 marginTop: collapsed ? 4 : 8,
-                marginBottom: collapsed ? 8 : 24,
+                marginBottom: collapsed ? 4 : 8,
               }}
               transition={{ duration: animationDuration }}
             >
               <motion.div
-                className="flex items-center justify-center transition-all"
                 style={{
-                  width: `${LOGO_SIZE}px`,
-                  height: `${LOGO_SIZE}px`,
-                  background: logoBg,
-                  borderRadius: '9999px',
-                  borderColor: logoBorderColor,
-                  borderStyle: 'solid',
-                  borderWidth: '4px',
-                  boxShadow: 'none',
+                  width: collapsed ? `${LOGO_SIZE}px` : `${LOGO_SIZE * 2}px`,
+                  height: collapsed ? `${LOGO_SIZE}px` : `${LOGO_SIZE * 1.5}px`,
                   zIndex: 20,
                   marginLeft: collapsed ? 0 : 'auto',
                   marginRight: collapsed ? 'auto' : 'auto',
                 }}
                 animate={{
-                  x: 0,
-                  scale: collapsed ? 1.08 : 1,
+                  scale: collapsed ? 0.8 : 1,
                   opacity: collapsed ? 0.85 : 1,
                 }}
                 transition={{ duration: animationDuration }}
               >
-                <span
-                  className="text-gray-400 text-xl font-bold"
-                  style={{
-                    opacity: collapsed ? 0.85 : 1,
-                  }}
-                >
-                  Logo
-                </span>
-              </motion.div>
-              <motion.div
-                initial={false}
-                animate={{
-                  opacity: collapsed ? 0 : 1,
-                  height: collapsed ? 0 : 'auto',
-                  marginTop: collapsed ? 0 : 8,
-                }}
-                transition={{ duration: animationDuration / 1.5 }}
-                style={{
-                  overflow: 'hidden',
-                  width: '100%',
-                  pointerEvents: collapsed ? 'none' : 'auto',
-                }}
-              >
-                <div className="text-xl font-bold text-gray-800 text-center">Phonipháleia</div>
-                <div className="text-xs text-gray-500 text-center">Voting Platform</div>
+                <SystemLogo1 
+                  width={collapsed ? LOGO_SIZE : LOGO_SIZE * 2} 
+                  height={collapsed ? LOGO_SIZE : LOGO_SIZE * 1.5} 
+                />
               </motion.div>
             </motion.div>
             

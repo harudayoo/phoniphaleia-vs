@@ -1,12 +1,16 @@
 import React from 'react';
-import { DotLottieReact } from '@lottiefiles/dotlottie-react';
 
-type Loader1Props = {
+type LoaderProps = {
   size?: number | string;
   className?: string;
+  style?: React.CSSProperties;
 };
 
-const Loader1: React.FC<Loader1Props> = ({ size = 80, className = '' }) => (
+const Loader1: React.FC<LoaderProps> = ({ 
+  size = 80, 
+  className = '',
+  style = {}
+}) => (
   <div
     className={className}
     style={{
@@ -15,16 +19,24 @@ const Loader1: React.FC<Loader1Props> = ({ size = 80, className = '' }) => (
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
+      ...style
     }}
     data-testid="loader1"
+    aria-busy="true"
+    aria-label="Loading"
   >
-    <DotLottieReact
-      src="https://lottie.host/d81b0871-8e8b-4674-a58e-9d5a23e8925d/lbPxf71kZi.lottie"
+    <video
+      src="/Hand-Loader.webm"
+      autoPlay
       loop
-      autoplay
+      muted
+      playsInline
+      preload="auto"
       style={{
         width: '100%',
         height: '100%',
+        objectFit: 'contain',
+        pointerEvents: 'none'
       }}
     />
   </div>

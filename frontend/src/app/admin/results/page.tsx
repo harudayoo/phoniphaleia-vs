@@ -1,8 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
-import { FaThLarge, FaList } from 'react-icons/fa';
-import NothingIcon from '@/components/NothingIcon';
+import { FaPlus, FaDownload, FaEdit, FaEye, FaTrash, FaLock, FaLockOpen } from 'react-icons/fa';
+import { Filter, Calendar, ArrowUp } from 'lucide-react';
+import Link from 'next/link';
+
+// Import reusable components
+import PageHeader from '@/components/admin/PageHeader';
+import SearchFilterBar from '@/components/admin/SearchFilterBar';
+import FilterSelect from '@/components/admin/FilterSelect';
+import DataView from '@/components/admin/DataView';
 
 type Result = {
   result_id: number;
@@ -11,9 +18,32 @@ type Result = {
   status: string;
   published_at: string;
   description?: string;
+  participation_rate?: number;
+  voters_count?: number;
+  total_votes?: number;
+  candidates?: {
+    name: string;
+    votes: number;
+    percentage: number;
+    winner: boolean;
+  }[];
 };
 
-const statusOptions = ['ALL', 'Published', 'Pending', 'Archived'];
+const statusOptions = [
+  { value: 'ALL', label: 'All Statuses' },
+  { value: 'Published', label: 'Published' },
+  { value: 'Pending', label: 'Pending' },
+  { value: 'Archived', label: 'Archived' }
+];
+
+const sortOptions = [
+  { value: 'date_desc', label: 'Date (Newest)' },
+  { value: 'date_asc', label: 'Date (Oldest)' },
+  { value: 'name_asc', label: 'Election Name (A-Z)' },
+  { value: 'name_desc', label: 'Election Name (Z-A)' },
+  { value: 'participation_desc', label: 'Participation (Highest)' },
+  { value: 'participation_asc', label: 'Participation (Lowest)' }
+];
 
 export default function AdminResultsPage() {
   const [results, setResults] = useState<Result[]>([]);
@@ -21,22 +51,80 @@ export default function AdminResultsPage() {
   const [status, setStatus] = useState('ALL');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('date_desc');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/results/')
-      .then(async res => {
-        if (!res.ok) {
-          const text = await res.text();
-          console.error('API error:', text);
-          throw new Error('Failed to fetch results');
-        }
-        return res.json();
-      })
-      .then(data => setResults(data))
-      .catch(err => {
-        console.error('Fetch error:', err);
-        setResults([]);
-      });
+    const fetchResults = async () => {
+      try {
+        setLoading(true);
+        const mockData: Result[] = [
+          {
+            result_id: 1,
+            election_name: "Student Council Election 2025",
+            organization: { org_name: "Student Affairs Office" },
+            status: "Published",
+            published_at: "2025-04-05T14:30:00",
+            description: "Official results for the 2025 student council election",
+            participation_rate: 78.4,
+            voters_count: 1802,
+            total_votes: 1412,
+            candidates: [
+              { name: "Maria Rodriguez", votes: 642, percentage: 45.5, winner: true },
+              { name: "James Wilson", votes: 524, percentage: 37.1, winner: false },
+              { name: "Sarah Thompson", votes: 246, percentage: 17.4, winner: false }
+            ]
+          },
+          {
+            result_id: 2,
+            election_name: "CS Department Chair Selection",
+            organization: { org_name: "Computer Science Department" },
+            status: "Pending",
+            published_at: "2025-05-01T10:00:00",
+            description: "Results pending final verification",
+            participation_rate: 91.2,
+            voters_count: 245,
+            total_votes: 223
+          },
+          {
+            result_id: 3,
+            election_name: "Library Committee Representatives",
+            organization: { org_name: "University Library" },
+            status: "Published",
+            published_at: "2025-03-15T12:00:00",
+            description: "Final results for library committee election",
+            participation_rate: 63.7,
+            voters_count: 950,
+            total_votes: 605,
+            candidates: [
+              { name: "Michael Brown", votes: 230, percentage: 38.0, winner: true },
+              { name: "Jennifer Davis", votes: 187, percentage: 30.9, winner: true },
+              { name: "Robert Jones", votes: 188, percentage: 31.1, winner: false }
+            ]
+          },
+          {
+            result_id: 4,
+            election_name: "Campus Safety Committee",
+            organization: { org_name: "Campus Security" },
+            status: "Archived",
+            published_at: "2024-10-22T09:00:00",
+            description: "Archive of last term's safety committee election",
+            participation_rate: 52.8,
+            voters_count: 1240,
+            total_votes: 655
+          }
+        ];
+        
+        setTimeout(() => {
+          setResults(mockData);
+          setLoading(false);
+        }, 800);
+      } catch (error) {
+        console.error("Error fetching results:", error);
+        setLoading(false);
+      }
+    };
+
+    fetchResults();
   }, []);
 
   const filtered = results
@@ -51,112 +139,226 @@ export default function AdminResultsPage() {
       if (sort === 'date_desc') return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
       if (sort === 'name_asc') return a.election_name.localeCompare(b.election_name);
       if (sort === 'name_desc') return b.election_name.localeCompare(a.election_name);
+      if (sort === 'participation_asc') return (a.participation_rate || 0) - (b.participation_rate || 0);
+      if (sort === 'participation_desc') return (b.participation_rate || 0) - (a.participation_rate || 0);
       return 0;
     });
 
-  return (
-    <AdminLayout>
-      <div className="flex flex-col mb-8 gap-2">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
-          <h1 className="text-2xl font-bold text-gray-900">Results</h1>
-          <div className="flex gap-2 items-center px-0 py-0">
-            <input
-              type="text"
-              placeholder="Search results..."
-              className="border-1 border-[#800000] focus:border-[#a83232] rounded-full w-xs px-2 py-1 text-sm bg-white transition text-gray-900 placeholder-gray-500"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-            <select
-              className="border-1 border-[#800000] focus:border-[#a83232] rounded px-2 py-1 text-sm bg-white transition text-gray-900"
-              value={status}
-              onChange={e => setStatus(e.target.value)}
-            >
-              {statusOptions.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-            <select
-              className="border-1 border-[#800000] focus:border-[#a83232] rounded px-2 py-1 text-sm bg-white transition text-gray-900"
-              value={sort}
-              onChange={e => setSort(e.target.value)}
-            >
-              <option value="date_desc">Date (Newest)</option>
-              <option value="date_asc">Date (Oldest)</option>
-              <option value="name_asc">Name (A-Z)</option>
-              <option value="name_desc">Name (Z-A)</option>
-            </select>
-            <button
-              className={`p-1 rounded border-1 transition-all duration-200 ${
-                view === 'grid'
-                  ? 'bg-[#800000]/10 border-[#b51919] scale-110 shadow-md'
-                  : 'border-[#800000] bg-white'
-              }`}
-              onClick={() => setView('grid')}
-              aria-label="Grid view"
-            >
-              <FaThLarge className="text-[#800000]" />
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'Published':
+        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Published</span>;
+      case 'Pending':
+        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">Pending</span>;
+      case 'Archived':
+        return <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Archived</span>;
+      default:
+        return null;
+    }
+  };
+
+  // Create action button for header
+  const createButton = (
+    <button className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+      <FaPlus size={14} />
+      <span>Create New Result</span>
+    </button>
+  );
+
+  // Create empty state action
+  const emptyStateAction = (
+    <button className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+      <FaPlus size={14} />
+      <span>Create New Result</span>
+    </button>
+  );
+
+  const renderGridItem = (result: Result) => (
+    <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+      <div className="p-6">
+        <div className="flex justify-between items-start mb-2">
+          <span className="text-sm text-gray-600">{result.organization?.org_name}</span>
+          {getStatusBadge(result.status)}
+        </div>
+        
+        <h3 className="text-lg font-semibold text-gray-800 mb-3">{result.election_name}</h3>
+        
+        <div className="flex items-center mb-3 text-sm text-gray-600">
+          <Calendar className="h-4 w-4 mr-2" />
+          <span>Published: {new Date(result.published_at).toLocaleDateString()}</span>
+        </div>
+        
+        <p className="text-gray-600 text-sm mb-4 line-clamp-2">{result.description}</p>
+        
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-blue-50 rounded-md p-2">
+            <div className="text-xs text-blue-700 mb-1">Voters</div>
+            <div className="font-medium">{result.voters_count?.toLocaleString()}</div>
+          </div>
+          <div className="bg-green-50 rounded-md p-2">
+            <div className="text-xs text-green-700 mb-1">Participation</div>
+            <div className="font-medium">{result.participation_rate}%</div>
+          </div>
+        </div>
+        
+        {result.candidates && result.candidates.length > 0 && (
+          <div className="mb-4">
+            <div className="text-sm font-medium mb-2">Top Candidate</div>
+            <div className="text-gray-800">
+              {result.candidates.find(c => c.winner)?.name || result.candidates[0].name}
+            </div>
+          </div>
+        )}
+        
+        <div className="flex justify-between items-center pt-3 border-t border-gray-200">
+          <div className="flex space-x-2">
+            <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
+              <FaDownload size={16} />
             </button>
-            <button
-              className={`p-1 rounded border-1 transition-all duration-200 ${
-                view === 'list'
-                  ? 'bg-[#800000]/10 border-[#b51919] scale-110 shadow-md'
-                  : 'border-[#800000] bg-white'
-              }`}
-              onClick={() => setView('list')}
-              aria-label="List view"
-            >
-              <FaList className="text-[#800000]" />
+            <Link href={`/admin/results/${result.result_id}`}>
+              <button className="p-2 text-green-600 hover:bg-green-50 rounded">
+                <FaEye size={16} />
+              </button>
+            </Link>
+          </div>
+          <div className="flex space-x-2">
+            {result.status === 'Published' ? (
+              <button className="p-2 text-amber-600 hover:bg-amber-50 rounded">
+                <FaLock size={16} />
+              </button>
+            ) : (
+              <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
+                <FaLockOpen size={16} />
+              </button>
+            )}
+            <Link href={`/admin/results/${result.result_id}/edit`}>
+              <button className="p-2 text-amber-600 hover:bg-amber-50 rounded">
+                <FaEdit size={16} />
+              </button>
+            </Link>
+            <button className="p-2 text-red-600 hover:bg-red-50 rounded">
+              <FaTrash size={16} />
             </button>
           </div>
         </div>
       </div>
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center min-h-[50vh] text-gray-700">
-          <NothingIcon className="mb-4" width={64} height={64} />
-          <span className="text-lg font-semibold">No results found.</span>
-        </div>
-      ) : view === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {filtered.map(r => (
-            <div key={r.result_id} className="border rounded-xl p-5 bg-white shadow flex flex-col gap-2">
-              <span className="font-semibold">{r.organization?.org_name}</span>
-              <span className="font-bold">{r.election_name}</span>
-              <span className="text-sm text-gray-500">{new Date(r.published_at).toLocaleDateString()}</span>
-              <span className="text-xs text-gray-600">{r.description}</span>
-              <span className={`px-2 py-1 rounded text-xs border w-fit ${
-                r.status === 'Published' ? 'border-blue-400 text-blue-600' :
-                r.status === 'Pending' ? 'border-yellow-400 text-yellow-600' :
-                r.status === 'Archived' ? 'border-gray-400 text-gray-600' :
-                'border-gray-300 text-gray-500'
-              }`}>
-                {r.status}
-              </span>
-            </div>
+    </div>
+  );
+
+  const renderListTable = () => (
+    <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Election
+            </th>
+            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Organization
+            </th>
+            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Published
+            </th>
+            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Participation
+            </th>
+            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Status
+            </th>
+            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Actions
+            </th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {filtered.map((result) => (
+            <tr key={result.result_id} className="hover:bg-gray-50">
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="text-sm font-medium text-gray-900">{result.election_name}</div>
+                <div className="text-sm text-gray-500 truncate max-w-[200px]">{result.description}</div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="text-sm text-gray-900">{result.organization?.org_name}</div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="text-sm text-gray-900">{new Date(result.published_at).toLocaleDateString()}</div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="text-sm text-gray-900">{result.participation_rate}%</div>
+                <div className="text-xs text-gray-500">{result.total_votes} of {result.voters_count}</div>
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                {getStatusBadge(result.status)}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <div className="flex justify-end space-x-2">
+                  <Link href={`/admin/results/${result.result_id}`}>
+                    <button className="p-1 text-blue-600 hover:text-blue-900">
+                      <FaEye size={16} />
+                    </button>
+                  </Link>
+                  <Link href={`/admin/results/${result.result_id}/edit`}>
+                    <button className="p-1 text-amber-600 hover:text-amber-900">
+                      <FaEdit size={16} />
+                    </button>
+                  </Link>
+                  <button className="p-1 text-red-600 hover:text-red-900">
+                    <FaTrash size={16} />
+                  </button>
+                </div>
+              </td>
+            </tr>
           ))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {filtered.map(r => (
-            <div key={r.result_id} className="flex items-center justify-between border-b pb-4">
-              <div>
-                <span className="font-semibold">{r.organization?.org_name}</span>
-                <div className="font-bold">{r.election_name}</div>
-                <div className="text-sm text-gray-500">{new Date(r.published_at).toLocaleDateString()}</div>
-                <div className="text-xs text-gray-600">{r.description}</div>
-              </div>
-              <span className={`px-2 py-1 rounded text-xs border ${
-                r.status === 'Published' ? 'border-blue-400 text-blue-600' :
-                r.status === 'Pending' ? 'border-yellow-400 text-yellow-600' :
-                r.status === 'Archived' ? 'border-gray-400 text-gray-600' :
-                'border-gray-300 text-gray-500'
-              }`}>
-                {r.status}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <AdminLayout>
+      <PageHeader 
+        title="Election Results" 
+        action={createButton}
+      />
+
+      <SearchFilterBar 
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by election name, organization, or description..."
+        view={view}
+        onViewChange={setView}
+      >
+        <FilterSelect 
+          value={status}
+          onChange={setStatus}
+          options={statusOptions}
+          icon={Filter}
+        />
+        
+        <FilterSelect 
+          value={sort}
+          onChange={setSort}
+          options={sortOptions}
+          icon={ArrowUp}
+        />
+      </SearchFilterBar>
+
+      <DataView 
+        data={filtered}
+        isLoading={loading}
+        emptyTitle="No results found"
+        emptyDescription={
+          search || status !== 'ALL' 
+            ? 'Try adjusting your search or filters' 
+            : 'Create your first election result'
+        }
+        emptyAction={emptyStateAction}
+        view={view}
+        renderGridItem={renderGridItem}
+        renderListItem={() => <></>} // Not used when renderTable is provided
+        renderTable={renderListTable}
+        loadingType="card"
+      />
     </AdminLayout>
   );
 }

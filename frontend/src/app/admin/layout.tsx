@@ -16,7 +16,7 @@ export default function AdminRootLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     // Set initial children without animation
     setCurrentChildren(children);
-  }, []);
+  }, [children]);
 
   // Handle transitions between admin pages with improved timing
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function AdminRootLayout({ children }: { children: React.ReactNod
               className="fixed inset-0 bg-gray-50/90 backdrop-blur-sm z-50 flex items-center justify-center"
             >
               <div className="w-40 h-40">
-                <Loader2 width="100%" height="100%" />
+                <Loader2 className="w-full h-full" />
               </div>
             </motion.div>
           )}

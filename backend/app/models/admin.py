@@ -1,6 +1,6 @@
 import bcrypt
 from app import db
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import validates
 from sqlalchemy import DateTime
@@ -63,6 +63,34 @@ class Admin(db.Model):
         if self.middlename:
             return f"{self.firstname} {self.middlename} {self.lastname}"
         return f"{self.firstname} {self.lastname}"
+
+    def generate_otp(self, length: int = 6, expires_in: int = 300) -> str:
+        """Generate and set a new OTP code with expiration time"""
+        import random
+        import string
+        
+        # Generate random numeric OTP
+        self.otp_code = ''.join(random.choices(string.digits, k=length))
+        self.otp_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+        
+        # Ensure changes are added to session (commit will happen at controller level)
+        db.session.add(self)
+        
+        return self.otp_code
+    
+    def verify_otp(self, otp: str) -> bool:
+        """Verify the provided OTP code"""
+        if not self.otp_code or not self.otp_expires_at:
+            return False
+            
+        if datetime.utcnow() > self.otp_expires_at:
+            return False
+            
+        if self.otp_code != otp:
+            return False
+            
+        self.verified_at = datetime.utcnow()
+        return True
 
     def __repr__(self):
         return f'<Admin {self.username}>'

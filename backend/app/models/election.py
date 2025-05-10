@@ -18,4 +18,4 @@ class Election(db.Model):
     organization = relationship("Organization", backref="elections")
     
     def __repr__(self):
-        return f'<Election {self.election_name}>'
+        return f'<Election {self.election_name}>'   

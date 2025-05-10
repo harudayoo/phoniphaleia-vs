@@ -13,34 +13,6 @@ from werkzeug.utils import secure_filename
 import uuid
 import random
 
-OTP_EMAIL_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>Your OTP Code</title>
-    <style>
-      body { font-family: Arial, sans-serif; background: #f9f9f9; }
-      .container { background: #fff; padding: 32px; border-radius: 8px; max-width: 400px; margin: 40px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.07);}
-      .otp { font-size: 2em; letter-spacing: 8px; color: #2d7ff9; margin: 24px 0; }
-      .footer { font-size: 0.9em; color: #888; margin-top: 32px; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h2>Your One-Time Password (OTP)</h2>
-      <p>Use the code below to continue your authentication process:</p>
-      <div class="otp">{{ otp }}</div>
-      <p>This code will expire in 5 minutes.</p>
-      <div class="footer">
-        If you did not request this, please ignore this email.<br/>
-        &copy; {{ year }} Phoniphaleia
-      </div>
-    </div>
-  </body>
-</html>
-"""
-
 class AuthController:
     
     UPLOAD_FOLDER = 'uploads/photos'  # Define the folder for photo uploads
@@ -139,7 +111,7 @@ class AuthController:
         
     @staticmethod
     def login():
-        """Login with student ID and password"""
+        """Login with student ID and password, then send OTP"""
         try:
             data = request.get_json()
             student_id = data.get('student_id')
@@ -152,31 +124,20 @@ class AuthController:
             if not voter or not voter.check_password(password):
                 return jsonify({'message': 'Invalid credentials'}), 401
 
-            # Set session for user
-            session['user_type'] = 'voter'
-            session['student_id'] = voter.student_id
-            session['first_name'] = voter.first_name
-            session['last_name'] = voter.last_name
-            session['student_email'] = voter.student_email
+            # Use the generate_otp method instead of setting fields directly
+            otp = voter.generate_otp(6, 300)  # 6 digits, 5 minutes expiration
+            db.session.commit()
 
-            # Generate JWT token (optional, for API use)
-            token = jwt.encode(
-                {
-                    'student_id': voter.student_id,
-                    'exp': datetime.utcnow() + timedelta(hours=1)
-                },
-                current_app.config['JWT_SECRET_KEY'],
-                algorithm='HS256'
-            )
-            
+            # Send OTP email
+            AuthController.send_voter_otp_email(voter.student_email, otp)
+
+            # Set session for user (pending OTP verification)
+            session['pending_voter_id'] = voter.student_id
+            session.permanent = True  # Make session permanent to apply timeout
+
             return jsonify({
-                'token': token,
-                'voter': {
-                    'student_id': voter.student_id,
-                    'first_name': voter.first_name,
-                    'last_name': voter.last_name,
-                    'student_email': voter.student_email
-                }
+                "student_id": voter.student_id,
+                "message": "OTP sent to your email"
             }), 200
             
         except Exception as e:
@@ -187,52 +148,106 @@ class AuthController:
     def logout():
         """Logout user/admin and clear session"""
         session.clear()
-        # Optionally, clear cookies by setting them expired (if using cookies for JWT)
         resp = jsonify({'message': 'Logged out'})
         return resp
 
     @staticmethod
-    def verify_challenge():
-        """Verify the ZKP challenge response"""
+    def verify_otp():
+        """Verify the voter's OTP"""
         try:
             data = request.get_json()
             student_id = data.get('student_id')
-            challenge = data.get('challenge')
-            proof = data.get('proof')
-            
-            if not all([student_id, challenge, proof]):
+            otp = data.get('otp')
+
+            if not all([student_id, otp]):
                 return jsonify({'message': 'Missing required fields'}), 400
                 
             voter = Voter.query.filter_by(student_id=student_id).first()
-            if not voter:
-                return jsonify({'message': 'Invalid credentials'}), 401
-                
-            # Verify proof
-            if voter.verify_zkp_proof(proof, challenge):
-                # Generate JWT token
-                token = jwt.encode(
-                    {
-                        'student_id': voter.student_id,
-                        'exp': datetime.utcnow() + timedelta(hours=1)
-                    },
-                    current_app.config['JWT_SECRET_KEY'],
-                    algorithm='HS256'
-                )
-                return jsonify({
-                    'token': token,
-                    'voter': {
-                        'student_id': voter.student_id,
-                        'first_name': voter.first_name,
-                        'last_name': voter.last_name,
-                        'student_email': voter.student_email
-                    }
-                }), 200
-            else:
-                return jsonify({'message': 'Authentication failed'}), 401
+            if not voter or not voter.otp_code or not voter.otp_expires_at:
+                return jsonify({'message': 'OTP not found or invalid user'}), 400
+
+            # Use the model's verify_otp method
+            if not voter.verify_otp(otp):
+                # Check specific reason for failure
+                if datetime.utcnow() > voter.otp_expires_at:
+                    return jsonify({'message': 'OTP expired'}), 400
+                else:
+                    return jsonify({'message': 'Invalid OTP'}), 400
+
+            # OTP is now verified, store changes to database
+            voter.otp_code = None
+            voter.otp_expires_at = None
+            voter.verified_at = datetime.utcnow()  # This is redundant as verify_otp already sets it
+            db.session.commit()
+
+            # Generate JWT token
+            token = jwt.encode(
+                {
+                    'student_id': voter.student_id,
+                    'user_type': 'voter',
+                    'exp': datetime.utcnow() + timedelta(hours=24)  # Extend token lifetime
+                },
+                current_app.config['JWT_SECRET_KEY'],
+                algorithm='HS256'
+            )
+            
+            # Set session variables
+            session['user_type'] = 'voter'
+            session['student_id'] = voter.student_id
+            session['first_name'] = voter.firstname
+            session['last_name'] = voter.lastname
+            session['student_email'] = voter.student_email
+            
+            # Create response with token
+            response = jsonify({
+                'verified': True,
+                'token': token,
+                'voter': {
+                    'student_id': voter.student_id,
+                    'first_name': voter.firstname,
+                    'last_name': voter.lastname,
+                    'student_email': voter.student_email
+                }
+            })
+            
+            # Set a cookie with the token - this adds redundancy for authentication
+            response.set_cookie(
+                'user_token',
+                token,
+                httponly=True,
+                secure=current_app.config.get('SESSION_COOKIE_SECURE', False),
+                samesite=current_app.config.get('SESSION_COOKIE_SAMESITE', 'Lax'),
+                max_age=86400  # 24 hours in seconds
+            )
+            
+            return response, 200
                 
         except Exception as e:
-            current_app.logger.error(f"Challenge verification error: {str(e)}")
-            return jsonify({'message': 'Authentication failed'}), 401
+            current_app.logger.error(f"OTP verification error: {str(e)}")
+            return jsonify({'message': 'Verification failed'}), 500
+
+    @staticmethod
+    def resend_otp():
+        """Resend OTP to user's email"""
+        try:
+            data = request.get_json()
+            student_id = data.get('student_id')
+            
+            voter = Voter.query.filter_by(student_id=student_id).first()
+            if not voter:
+                return jsonify({"message": "Voter not found"}), 404
+
+            # Use the model's generate_otp method
+            otp = voter.generate_otp(6, 300)  # 6 digits, 5 minutes expiration
+            db.session.commit()
+
+            AuthController.send_voter_otp_email(voter.student_email, otp)
+
+            return jsonify({"message": "OTP resent"}), 200
+
+        except Exception as e:
+            current_app.logger.error(f"Resend OTP error: {str(e)}")
+            return jsonify({'message': 'Failed to resend OTP'}), 500
     
     @staticmethod
     def get_current_voter():
@@ -288,20 +303,74 @@ class AuthController:
         today = datetime.today()
         age = today.year - date_of_birth.year - ((today.month, today.day) < (date_of_birth.month, date_of_birth.day))
         return age
-
+  
     @staticmethod
-    def send_otp_email(email, otp):
+    def send_voter_otp_email(email, otp):
+        """Send OTP email to voters"""
         try:
+            # Read the OTP email template from the external file
+            template_path = os.path.join(current_app.root_path, '..', '..', 'frontend', 'src', 'templates', 'OtpEmail.tsx')
+            
+            with open(template_path, 'r') as template_file:
+                template_content = template_file.read()
+                
+            # Render the template with the variables
             html_body = render_template_string(
-                OTP_EMAIL_TEMPLATE,
+                template_content,
                 otp=otp,
                 year=datetime.utcnow().year
             )
+            
+            msg = Message(
+                subject="Your Verification Code",
+                recipients=[email],
+                body=f"Your verification code is: {otp}\nThis code will expire in 5 minutes.",
+                html=html_body
+            )
+            mail.send(msg)
+        except FileNotFoundError:
+            current_app.logger.error(f"OTP email template not found at: {template_path}")
+            # Fallback to plain text email if template is not found
+            msg = Message(
+                subject="Your Verification Code",
+                recipients=[email],
+                body=f"Your verification code is: {otp}\nThis code will expire in 5 minutes."
+            )
+            mail.send(msg)
+        except Exception as e:
+            current_app.logger.error(f"Failed to send voter OTP email: {str(e)}")
+
+    @staticmethod
+    def send_otp_email(email, otp):
+        """Send OTP email to admins"""
+        try:
+            # Read the OTP email template from the external file
+            template_path = os.path.join(current_app.root_path, '..', '..', 'frontend', 'src', 'templates', 'OtpEmail.tsx')    
+            
+            with open(template_path, 'r') as template_file:
+                template_content = template_file.read()
+                
+            # Render the template with the variables
+            html_body = render_template_string(
+                template_content,
+                otp=otp,
+                year=datetime.utcnow().year
+            )
+            
             msg = Message(
                 subject="Your Admin OTP Code",
                 recipients=[email],
                 body=f"Your OTP code is: {otp}\nThis code will expire in 5 minutes.",
                 html=html_body
+            )
+            mail.send(msg)
+        except FileNotFoundError:
+            current_app.logger.error(f"OTP email template not found at: {template_path}")
+            # Fallback to plain text email if template is not found
+            msg = Message(
+                subject="Your Admin OTP Code",
+                recipients=[email],
+                body=f"Your OTP code is: {otp}\nThis code will expire in 5 minutes."
             )
             mail.send(msg)
         except Exception as e:
@@ -352,67 +421,109 @@ class AuthController:
             data = request.get_json()
             id_number = data.get('id_number')
             password = data.get('password')
-
+            
             if not id_number or not password:
                 return jsonify({'message': 'ID Number and password required'}), 400
-
+    
             admin = Admin.query.filter_by(id_number=id_number).first()
-            if admin and admin.verify_password(password):
-                # Generate OTP
+            if not admin or not admin.verify_password(password):
+                return jsonify({"message": "Invalid credentials"}), 401
+                
+            # Generate OTP - use the model's generate_otp method if available
+            if hasattr(admin, 'generate_otp'):
+                otp = admin.generate_otp(6, 300)  # 6 digits, 5 minutes expiration
+            else:
+                # Fallback if generate_otp is not implemented
                 otp = f"{random.randint(100000, 999999)}"
                 expires_at = datetime.utcnow() + timedelta(minutes=5)
                 admin.otp_code = otp
                 admin.otp_expires_at = expires_at
                 db.session.commit()
+                
+            # Send OTP email
+            AuthController.send_otp_email(admin.email, otp)
 
-                AuthController.send_otp_email(admin.email, otp)
+            # Set session for admin (pending OTP verification)
+            session['pending_admin_id'] = admin.admin_id
+            session.permanent = True  # Make session permanent to apply timeout
 
-                # Set session for admin (pending OTP verification)
-                session['pending_admin_id'] = admin.admin_id
-
-                return jsonify({
-                    "admin_id": admin.admin_id,
-                    "message": "OTP sent to your email"
-                }), 200
-            else:
-                return jsonify({"message": "Invalid credentials"}), 401
-
+            return jsonify({
+                "admin_id": admin.admin_id,
+                "message": "OTP sent to your email"
+            }), 200
+            
         except Exception as e:
             current_app.logger.error(f"Admin login error: {str(e)}")
             return jsonify({'message': 'Login failed'}), 500
 
     @staticmethod
     def admin_verify_otp():
+        """Verify the admin's OTP"""
         try:
             data = request.get_json()
             admin_id = data.get('admin_id')
             otp = data.get('otp')
-
+            
+            # Add logging to debug the issue
+            current_app.logger.info(f"OTP verification attempt for admin_id: {admin_id}, otp: {otp}")
+            
+            if not all([admin_id, otp]):
+                current_app.logger.warning(f"Missing required fields: admin_id={admin_id}, otp={otp}")
+                return jsonify({'message': 'Missing required fields'}), 400
+            
+            # Convert admin_id to int if it's a string
+            try:
+                admin_id = int(admin_id)
+            except (ValueError, TypeError):
+                current_app.logger.warning(f"Invalid admin_id format: {admin_id}")
+                return jsonify({"message": "Invalid admin ID format"}), 400
+                
             admin = Admin.query.filter_by(admin_id=admin_id).first()
-            if not admin or not admin.otp_code or not admin.otp_expires_at:
-                return jsonify({"message": "OTP not found"}), 400
+            if not admin:
+                current_app.logger.warning(f"Admin not found: admin_id={admin_id}")
+                return jsonify({"message": "Admin not found"}), 400
+                
+            if not admin.otp_code or not admin.otp_expires_at:
+                current_app.logger.warning(f"OTP not set: admin_id={admin_id}, has_otp_code={bool(admin.otp_code)}, has_expiry={bool(admin.otp_expires_at)}")
+                return jsonify({"message": "OTP not found or invalid admin"}), 400
 
-            if datetime.utcnow() > admin.otp_expires_at:
-                return jsonify({"message": "OTP expired"}), 400
-
-            if admin.otp_code != otp:
-                return jsonify({"message": "Invalid OTP"}), 400
+            # Check if OTP is valid
+            if hasattr(admin, 'verify_otp'):
+                current_app.logger.info(f"Using verify_otp method for admin {admin_id}")
+                if not admin.verify_otp(otp):
+                    current_app.logger.warning(f"OTP verification failed for admin_id={admin_id}")
+                    if datetime.utcnow() > admin.otp_expires_at:
+                        return jsonify({"message": "OTP expired"}), 400
+                    else:
+                        return jsonify({"message": "Invalid OTP"}), 400
+            else:
+                # Rest of the function remains the same...
+                if datetime.utcnow() > admin.otp_expires_at:
+                    return jsonify({"message": "OTP expired"}), 400
+                    
+                if admin.otp_code != otp:
+                    return jsonify({"message": "Invalid OTP"}), 400
 
             # OTP is valid, clear it and issue JWT
             admin.otp_code = None
             admin.otp_expires_at = None
             db.session.commit()
-
+        
+            # Use the configured session timeout instead of hardcoded 1 hour
+            session_timeout = int(current_app.config.get('PERMANENT_SESSION_LIFETIME', 1800).total_seconds())
+            
             payload = {
                 "admin_id": admin.admin_id,
                 "role": "admin",
-                "exp": datetime.utcnow() + timedelta(hours=1)
+                "exp": datetime.utcnow() + timedelta(seconds=session_timeout)
             }
+            
             jwt_secret = current_app.config['JWT_SECRET_KEY']
             token = jwt.encode(payload, jwt_secret, algorithm="HS256")
+            
             if isinstance(token, bytes):
                 token = token.decode('utf-8')
-
+                
             return jsonify({
                 "verified": True,
                 "token": token  # <-- JWT for frontend
@@ -424,19 +535,30 @@ class AuthController:
 
     @staticmethod
     def admin_resend_otp():
+        """Resend OTP to admin's email"""
         try:
             data = request.get_json()
             admin_id = data.get('admin_id')
+            
+            if not admin_id:
+                return jsonify({'message': 'Admin ID required'}), 400
+                
             admin = Admin.query.filter_by(admin_id=admin_id).first()
             if not admin:
                 return jsonify({"message": "Admin not found"}), 404
 
-            otp = f"{random.randint(100000, 999999)}"
-            expires_at = datetime.utcnow() + timedelta(minutes=5)
-            admin.otp_code = otp
-            admin.otp_expires_at = expires_at
-            db.session.commit()
+            # Generate and save new OTP
+            if hasattr(admin, 'generate_otp'):
+                otp = admin.generate_otp(6, 300)  # 6 digits, 5 minutes expiration
+            else:
+                # Fallback if generate_otp is not implemented
+                otp = f"{random.randint(100000, 999999)}"
+                expires_at = datetime.utcnow() + timedelta(minutes=5)
+                admin.otp_code = otp
+                admin.otp_expires_at = expires_at
+                db.session.commit()
 
+            # Send OTP email
             AuthController.send_otp_email(admin.email, otp)
 
             return jsonify({"message": "OTP resent"}), 200
@@ -444,3 +566,64 @@ class AuthController:
         except Exception as e:
             current_app.logger.error(f"Admin resend OTP error: {str(e)}")
             return jsonify({'message': 'Failed to resend OTP'}), 500
+
+    @staticmethod
+    def refresh_session():
+        """Refresh the admin session and extend token validity"""
+        try:
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return jsonify({'message': 'Missing or invalid token'}), 401
+            
+            token = auth_header.split(' ')[1]
+            
+            try:
+                # Decode the current token without verifying expiration
+                payload = jwt.decode(
+                    token, 
+                    current_app.config['JWT_SECRET_KEY'], 
+                    algorithms=['HS256'],
+                    options={"verify_exp": False}
+                )
+                
+                # Verify that it's an admin token
+                if payload.get('role') != 'admin':
+                    return jsonify({'message': 'Invalid admin token'}), 401
+                
+                admin_id = payload.get('admin_id')
+                if not admin_id:
+                    return jsonify({'message': 'Invalid token payload'}), 401
+                
+                # Verify admin still exists
+                admin = Admin.query.get(admin_id)
+                if not admin:
+                    return jsonify({'message': 'Admin no longer exists'}), 401
+                
+                # Generate a new token with updated expiration
+                session_timeout = int(current_app.config.get('PERMANENT_SESSION_LIFETIME', 1800).total_seconds())
+                new_payload = {
+                    "admin_id": admin.admin_id,
+                    "role": "admin",
+                    "exp": datetime.utcnow() + timedelta(seconds=session_timeout)
+                }
+                
+                new_token = jwt.encode(
+                    new_payload, 
+                    current_app.config['JWT_SECRET_KEY'], 
+                    algorithm="HS256"
+                )
+                
+                if isinstance(new_token, bytes):
+                    new_token = new_token.decode('utf-8')
+                
+                return jsonify({
+                    "token": new_token,
+                    "expires_in": session_timeout
+                }), 200
+                
+            except jwt.InvalidTokenError:
+                return jsonify({'message': 'Invalid token'}), 401
+                
+        except Exception as e:
+            current_app.logger.error(f"Session refresh error: {str(e)}")
+            return jsonify({'message': 'Failed to refresh session'}), 500

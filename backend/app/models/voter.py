@@ -1,13 +1,23 @@
 # backend/app/models/voter.py
-from flask import current_app
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm import relationship
 from sqlalchemy import Index, CheckConstraint
 import bcrypt
 import json
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from app import db
+
+# Try importing ZKP-related libraries
+try:
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.backends import default_backend
+    # Import the EC libraries if you have a specific implementation
+    # from your_ec_library import ECPrivateKey, curve as cv
+    ZKP_AVAILABLE = True
+except ImportError:
+    ZKP_AVAILABLE = False
 
 class Voter(db.Model):
     __tablename__ = 'voters'
@@ -16,7 +26,7 @@ class Voter(db.Model):
     student_email = db.Column(db.String(255), nullable=False, unique=True)
     college_id = db.Column(db.Integer, db.ForeignKey('colleges.college_id'), nullable=False)
     
-    # Corrected to match database column names
+    # Personal information fields
     lastname = db.Column(db.String(100), nullable=False)
     firstname = db.Column(db.String(100), nullable=False)
     middlename = db.Column(db.String(100))
@@ -33,6 +43,13 @@ class Voter(db.Model):
     
     # ZKP fields
     zkp_commitment = db.Column(db.String(255))
+    
+    # OTP fields
+    otp_code = db.Column(db.String(10))
+    verified_at = db.Column(db.DateTime)
+    otp_expires_at = db.Column(db.DateTime)
+    
+    # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     validated_at = db.Column(db.DateTime)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -50,6 +67,39 @@ class Voter(db.Model):
     
     def check_password(self, password: str) -> bool:
         return bcrypt.checkpw(password.encode('utf-8'), self.password.encode('utf-8'))
+    
+    def generate_otp(self, length: int = 6, expires_in: int = 300) -> str:
+        """Generate and set a new OTP code with expiration time"""
+        import random
+        import string
+        
+        # Generate random numeric OTP
+        self.otp_code = ''.join(random.choices(string.digits, k=length))
+        self.otp_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+        self.verified_at = None
+        
+        # Ensure changes are added to session (commit will happen at controller level)
+        db.session.add(self)
+        
+        return self.otp_code
+    
+    def verify_otp(self, otp: str) -> bool:
+        """Verify the provided OTP code"""
+        if not self.otp_code or not self.otp_expires_at:
+            return False
+            
+        if datetime.utcnow() > self.otp_expires_at:
+            return False
+            
+        if self.otp_code != otp:
+            return False
+            
+        self.verified_at = datetime.utcnow()
+        return True
+    
+    def is_verified(self) -> bool:
+        """Check if the voter's email is verified"""
+        return self.verified_at is not None
     
     def set_zkp_credentials(self, student_id: str, password: str) -> None:
         """Generate secure ZKP credentials using elliptic curve cryptography"""

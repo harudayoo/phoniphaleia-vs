@@ -38,16 +38,9 @@ export default function Login() {
         password: data.password
       });
       
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
-        
-        // Store user info if available
-        if (response.data.voter) {
-          localStorage.setItem('user', JSON.stringify(response.data.voter));
-        }
-        
-        // Redirect to voting dashboard
-        router.push('/dashboard');
+      if (response.data.student_id) {
+        // If login successful, redirect to verification page with student_id
+        router.push(`/auth/verification?student_id=${response.data.student_id}`);
       } else {
         setError('Invalid response from server');
       }
@@ -185,12 +178,12 @@ export default function Login() {
           </div>
           
           {/* Image/Logo Section */}
-            <div className="hidden md:flex items-center justify-center">
+          <div className="hidden md:flex items-center justify-center">
             <div className="w-full max-w-md aspect-square rounded-lg flex items-center justify-center bg-gray-50">
-              {/* This is where you could add your voting system logo or illustration */}
-              <UsepStudents1 style={{ width: '100%', height: 'auto' }} />
+              {/* Adding priority prop to optimize LCP */}
+              <UsepStudents1 style={{ width: '100%', height: 'auto' }} priority />
             </div>
-            </div>
+          </div>
         </div>
       </main>
       <Footer />

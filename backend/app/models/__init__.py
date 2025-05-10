@@ -1,6 +1,6 @@
 # backend/app/models/__init__.py
 
-# Explicitly import all models
+# Import all models explicitly
 from .college import College
 from .organization import Organization
 from .election import Election
@@ -15,6 +15,7 @@ from .audit_log import AuditLog
 from .election_result import ElectionResult
 from .admin import Admin
 
+# Export all models for easy access
 __all__ = [
     'College',
     'Organization',
@@ -23,10 +24,10 @@ __all__ = [
     'TrustedAuthority',
     'KeyShare',
     'Voter',
-    'Position'
+    'Position',
     'Candidate',
     'Vote',
     'AuditLog',
     'ElectionResult',
-    'Admin'
+    'Admin',
 ]

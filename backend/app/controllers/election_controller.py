@@ -10,6 +10,7 @@ class ElectionController:
             elections = Election.query.all()
             result = []
             for e in elections:
+                # Make sure we return the date in a format the frontend can easily parse: YYYY-MM-DD
                 result.append({
                     "election_id": e.election_id,
                     "election_name": e.election_name,
