@@ -46,13 +46,13 @@ const Modal = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
       <div 
-        className={`bg-white rounded-xl p-6 w-full ${sizeClasses[size]} animate-fadeIn`}
+        className={`bg-white rounded-xl p-6 w-full shadow-xl border border-gray-100 ${sizeClasses[size]} animate-fadeIn`}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold">{title}</h3>
+        <div className="flex justify-between items-center mb-5">
+          <h3 className="text-xl font-bold text-gray-900">{title}</h3>
           <button 
             className="text-gray-500 hover:text-gray-700" 
             onClick={onClose}
@@ -62,12 +62,12 @@ const Modal = ({
           </button>
         </div>
         
-        <div className="mt-2">
+        <div className="mt-2 text-gray-800">
           {children}
         </div>
         
         {footer && (
-          <div className="mt-6 flex justify-end">
+          <div className="mt-8 flex justify-end">
             {footer}
           </div>
         )}

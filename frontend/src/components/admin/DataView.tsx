@@ -1,57 +1,39 @@
-import React from 'react';
-import LoadingState from './LoadingState';
-import EmptyState from './EmptyState';
+import React, { ReactNode } from 'react';
+import { PlusCircle } from 'lucide-react';
 
-interface DataViewProps<T> {
-  data: T[];
-  isLoading: boolean;
-  emptyTitle: string;
-  emptyDescription: string;
-  emptyAction?: React.ReactNode;
-  view: 'grid' | 'list';
-  renderGridItem: (item: T, index: number) => React.ReactNode;
-  renderListItem: (item: T, index: number) => React.ReactNode;
-  renderTable?: () => React.ReactNode;
-  loadingType?: 'default' | 'card' | 'table';
+interface DataViewProps {
+  title: string;
+  description: string;
+  children: ReactNode;
+  addButtonText: string;
+  onAdd: () => void;
 }
 
-export default function DataView<T>({
-  data,
-  isLoading,
-  emptyTitle,
-  emptyDescription,
-  emptyAction,
-  view,
-  renderGridItem,
-  renderListItem,
-  renderTable,
-  loadingType = 'default'
-}: DataViewProps<T>) {
-  if (isLoading) {
-    return <LoadingState view={view} count={6} type={loadingType} />;
-  }
-
-  if (data.length === 0) {
-    return <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />;
-  }
-
-  if (view === 'grid') {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {data.map((item, index) => renderGridItem(item, index))}
-      </div>
-    );
-  }
-
-  // If renderTable is provided, use it for list view
-  if (renderTable) {
-    return renderTable();
-  }
-
-  // Otherwise use the default list view
+const DataView: React.FC<DataViewProps> = ({
+  title,
+  description,
+  children,
+  addButtonText,
+  onAdd
+}) => {
   return (
-    <div className="space-y-4">
-      {data.map((item, index) => renderListItem(item, index))}
+    <div>
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
+          <p className="text-sm text-gray-600 mt-1">{description}</p>
+        </div>
+        <button
+          onClick={onAdd}
+          className="mt-3 md:mt-0 inline-flex items-center gap-2 px-4 py-2 bg-red-800 text-white rounded-md hover:bg-red-700"
+        >
+          <PlusCircle size={16} />
+          {addButtonText}
+        </button>
+      </div>
+      {children}
     </div>
   );
-}
+};
+
+export default DataView;

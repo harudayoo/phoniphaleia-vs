@@ -3,46 +3,23 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import AdminLayout from '@/layouts/AdminLayout';
 import PageHeader from '@/components/admin/PageHeader';
-import Modal from '@/components/Modal';
-import { Plus, Edit, Trash, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import axios from 'axios';
 
-// Updated interface to match the backend model
-interface College {
-  college_id: number;
-  college_name: string;
-  college_desc?: string;
-  created_at?: string;
-  updated_at?: string;
-  // Frontend-only fields for display
-  abbreviation?: string;
-}
-
-// Update the existing interfaces to match the API response
-interface Organization {
-  id: number;
-  name: string;
-  college_id: number;
-  college_name: string;
-  description?: string;
-  created_at: string;
-}
-
-interface Position {
-  id: number;
-  name: string;
-  organization_id: number;
-  organization_name: string;
-  max_candidates: number;
-  description?: string;
-  created_at: string;
-}
-
-interface CollegeFormData {
-  college_name: string;
-  college_desc?: string;
-  abbreviation?: string;
-}
+// Import our components and types
+import CollegesTab from '@/components/admin/CollegesTab';
+import OrganizationsTab from '@/components/admin/OrganizationsTab';
+import PositionsTab from '@/components/admin/PositionsTab';
+import EntityFormModal from '@/components/admin/EntityFormModal';
+import DeleteConfirmationModal from '@/components/admin/DeleteConfirmationModal';
+import { 
+  College, 
+  Organization, 
+  Position, 
+  CollegeFormData, 
+  OrganizationFormData, 
+  PositionFormData 
+} from '@/types/admin';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -55,37 +32,56 @@ export default function AdminEntriesPage() {
   const [error, setError] = useState<string | null>(null);
   
   // Modal states
-  const [showAddCollegeModal, setShowAddCollegeModal] = useState(false);
-  const [showEditCollegeModal, setShowEditCollegeModal] = useState(false);
-  const [showDeleteCollegeModal, setShowDeleteCollegeModal] = useState(false);
-  const [showAddOrganizationModal, setShowAddOrganizationModal] = useState(false);
-  const [showAddPositionModal, setShowAddPositionModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState<boolean>(false);
+  const [showEditModal, setShowEditModal] = useState<boolean>(false);
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
   
-  // Selected college for edit/delete operations
+  // Selected items - now properly typed
   const [selectedCollege, setSelectedCollege] = useState<College | null>(null);
+  const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(null);
+  const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
 
-  // Form handling for college
-  const { 
-    register: registerAddCollege, 
-    handleSubmit: handleSubmitAddCollege, 
-    reset: resetAddCollegeForm,
-    formState: { errors: addCollegeErrors }
-  } = useForm<CollegeFormData>();
+  // Form hooks for each entity type
+  const collegeForm = useForm<CollegeFormData>();
+  const organizationForm = useForm<OrganizationFormData>();
+  const positionForm = useForm<PositionFormData>();
 
-  const { 
-    register: registerEditCollege, 
-    handleSubmit: handleSubmitEditCollege, 
-    reset: resetEditCollegeForm,
-    setValue: setEditCollegeValue,
-    formState: { errors: editCollegeErrors }
-  } = useForm<CollegeFormData>();
+  // Strictly typed form fields for each entity type
+  const collegeFields = [
+    { name: 'college_name' as const, label: 'College Name', type: 'text' as const, required: true },
+    { name: 'college_desc' as const, label: 'Description', type: 'textarea' as const }
+  ];
 
-  // Fetch colleges from API
-  const fetchColleges = async () => {
+  const organizationFields = [
+    { name: 'name' as const, label: 'Organization Name', type: 'text' as const, required: true },
+    {
+      name: 'college_id' as const,
+      label: 'College',
+      type: 'select' as const,
+      required: true,
+      options: colleges.map(c => ({ value: c.college_id, label: c.college_name }))
+    },
+    { name: 'description' as const, label: 'Description', type: 'textarea' as const }
+  ];
+
+  const positionFields = [
+    { name: 'name' as const, label: 'Position Name', type: 'text' as const, required: true },
+    {
+      name: 'organization_id' as const,
+      label: 'Organization',
+      type: 'select' as const,
+      required: true,
+      options: organizations.map(o => ({ value: o.id, label: o.name }))
+    },
+    { name: 'description' as const, label: 'Description', type: 'textarea' as const }
+  ];
+
+  // Fetch functions
+  const fetchColleges = async (): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`${API_URL}/colleges`);
+      const response = await axios.get<College[]>(`${API_URL}/colleges`);
       setColleges(response.data);
     } catch (err) {
       console.error('Error fetching colleges:', err);
@@ -95,12 +91,11 @@ export default function AdminEntriesPage() {
     }
   };
 
-  // Add these functions to fetch data from API
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = async (): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`${API_URL}/organizations`);
+      const response = await axios.get<Organization[]>(`${API_URL}/organizations`);
       setOrganizations(response.data);
     } catch (err) {
       console.error('Error fetching organizations:', err);
@@ -110,11 +105,11 @@ export default function AdminEntriesPage() {
     }
   };
 
-  const fetchPositions = async () => {
+  const fetchPositions = async (): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`${API_URL}/positions`);
+      const response = await axios.get<Position[]>(`${API_URL}/positions`);
       setPositions(response.data);
     } catch (err) {
       console.error('Error fetching positions:', err);
@@ -124,78 +119,163 @@ export default function AdminEntriesPage() {
     }
   };
 
-  // Add new college
-  const addCollege = async (data: CollegeFormData) => {
+  // CRUD operations
+  const handleAdd = async (data: CollegeFormData | OrganizationFormData | PositionFormData): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
-      await axios.post(`${API_URL}/colleges`, data);
-      await fetchColleges(); // Refresh the list
-      setShowAddCollegeModal(false);
-      resetAddCollegeForm();
+      
+      if (activeTab === 'colleges') {
+        await axios.post(`${API_URL}/colleges`, data as CollegeFormData);
+        await fetchColleges();
+      } else if (activeTab === 'organizations') {
+        await axios.post(`${API_URL}/organizations`, data as OrganizationFormData);
+        await fetchOrganizations();
+      } else if (activeTab === 'positions') {
+        await axios.post(`${API_URL}/positions`, data as PositionFormData);
+        await fetchPositions();
+      }
+      
+      setShowAddModal(false);
+      
+      // Reset the appropriate form
+      if (activeTab === 'colleges') collegeForm.reset();
+      else if (activeTab === 'organizations') organizationForm.reset();
+      else if (activeTab === 'positions') positionForm.reset();
     } catch (err) {
-      console.error('Error adding college:', err);
-      setError('Failed to add college. Please try again.');
+      console.error(`Error adding ${activeTab.slice(0, -1)}:`, err);
+      setError(`Failed to add ${activeTab.slice(0, -1)}. Please try again.`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Edit college
-  const editCollege = async (data: CollegeFormData) => {
-    if (!selectedCollege) return;
+  const handleEdit = async (data: CollegeFormData | OrganizationFormData | PositionFormData): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (activeTab === 'colleges' && selectedCollege) {
+        await axios.put(`${API_URL}/colleges/${selectedCollege.college_id}`, data as CollegeFormData);
+        await fetchColleges();
+      } else if (activeTab === 'organizations' && selectedOrganization) {
+        await axios.put(`${API_URL}/organizations/${selectedOrganization.id}`, data as OrganizationFormData);
+        await fetchOrganizations();
+      } else if (activeTab === 'positions' && selectedPosition) {
+        await axios.put(`${API_URL}/positions/${selectedPosition.id}`, data as PositionFormData);
+        await fetchPositions();
+      }
+      
+      setShowEditModal(false);
+      
+      // Reset selected item and form
+      if (activeTab === 'colleges') {
+        setSelectedCollege(null);
+        collegeForm.reset();
+      } else if (activeTab === 'organizations') {
+        setSelectedOrganization(null);
+        organizationForm.reset();
+      } else if (activeTab === 'positions') {
+        setSelectedPosition(null);
+        positionForm.reset();
+      }
+    } catch (err) {
+      console.error(`Error updating ${activeTab.slice(0, -1)}:`, err);
+      setError(`Failed to update ${activeTab.slice(0, -1)}. Please try again.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (): Promise<void> => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (activeTab === 'colleges' && selectedCollege) {
+        await axios.delete(`${API_URL}/colleges/${selectedCollege.college_id}`);
+        await fetchColleges();
+      } else if (activeTab === 'organizations' && selectedOrganization) {
+        await axios.delete(`${API_URL}/organizations/${selectedOrganization.id}`);
+        await fetchOrganizations();
+      } else if (activeTab === 'positions' && selectedPosition) {
+        await axios.delete(`${API_URL}/positions/${selectedPosition.id}`);
+        await fetchPositions();
+      }
+      
+      setShowDeleteModal(false);
+      
+      // Reset selected item
+      if (activeTab === 'colleges') setSelectedCollege(null);
+      else if (activeTab === 'organizations') setSelectedOrganization(null);
+      else if (activeTab === 'positions') setSelectedPosition(null);
+    } catch (err) {
+      console.error(`Error deleting ${activeTab.slice(0, -1)}:`, err);
+      setError(`Failed to delete ${activeTab.slice(0, -1)}. Please try again.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handler functions for opening modals
+  const openAddModal = () => {
+    if (activeTab === 'colleges') collegeForm.reset();
+    else if (activeTab === 'organizations') organizationForm.reset();
+    else if (activeTab === 'positions') positionForm.reset();
     
-    try {
-      setLoading(true);
-      setError(null);
-      await axios.put(`${API_URL}/colleges/${selectedCollege.college_id}`, data);
-      await fetchColleges(); // Refresh the list
-      setShowEditCollegeModal(false);
-      resetEditCollegeForm();
-      setSelectedCollege(null);
-    } catch (err) {
-      console.error('Error updating college:', err);
-      setError('Failed to update college. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    setShowAddModal(true);
   };
 
-  // Delete college
-  const deleteCollege = async () => {
-    if (!selectedCollege) return;
+  const openEditModal = (item: College | Organization | Position) => {
+    if (activeTab === 'colleges') {
+      const college = item as College;
+      setSelectedCollege(college);
+      collegeForm.setValue('college_name', college.college_name);
+      collegeForm.setValue('college_desc', college.college_desc || '');
+    } else if (activeTab === 'organizations') {
+      const org = item as Organization;
+      setSelectedOrganization(org);
+      organizationForm.setValue('name', org.name);
+      organizationForm.setValue('college_id', org.college_id);
+      organizationForm.setValue('description', org.description || '');
+    } else if (activeTab === 'positions') {
+      const position = item as Position;
+      setSelectedPosition(position);
+      positionForm.setValue('name', position.name);
+      positionForm.setValue('organization_id', position.organization_id);
+      positionForm.setValue('description', position.description || '');
+    }
     
-    try {
-      setLoading(true);
-      setError(null);
-      await axios.delete(`${API_URL}/colleges/${selectedCollege.college_id}`);
-      await fetchColleges(); // Refresh the list
-      setShowDeleteCollegeModal(false);
-      setSelectedCollege(null);
-    } catch (err) {
-      console.error('Error deleting college:', err);
-      setError('Failed to delete college. Please try again.');
-    } finally {
-      setLoading(false);
+    setShowEditModal(true);
+  };
+
+  const openDeleteModal = (item: College | Organization | Position) => {
+    if (activeTab === 'colleges') setSelectedCollege(item as College);
+    else if (activeTab === 'organizations') setSelectedOrganization(item as Organization);
+    else if (activeTab === 'positions') setSelectedPosition(item as Position);
+    
+    setShowDeleteModal(true);
+  };
+
+  // Get entity name for delete confirmation
+  const getEntityName = () => {
+    if (activeTab === 'colleges' && selectedCollege) return selectedCollege.college_name;
+    else if (activeTab === 'organizations' && selectedOrganization) return selectedOrganization.name;
+    else if (activeTab === 'positions' && selectedPosition) return selectedPosition.name;
+    return '';
+  };
+
+  // Get warning message for delete confirmation
+  const getDeleteWarningMessage = () => {
+    if (activeTab === 'colleges') {
+      return 'This action cannot be undone. All associated organizations and positions will also be deleted.';
+    } else if (activeTab === 'organizations') {
+      return 'This action cannot be undone. All associated positions will also be deleted.';
+    } else {
+      return 'This action cannot be undone.';
     }
   };
 
-  // Open edit modal and populate form
-  const handleEditCollege = (college: College) => {
-    setSelectedCollege(college);
-    setEditCollegeValue('college_name', college.college_name);
-    setEditCollegeValue('college_desc', college.college_desc || '');
-    setEditCollegeValue('abbreviation', college.abbreviation || '');
-    setShowEditCollegeModal(true);
-  };
-
-  // Open delete confirmation modal
-  const handleDeleteCollege = (college: College) => {
-    setSelectedCollege(college);
-    setShowDeleteCollegeModal(true);
-  };
-
-  // Update the useEffect hook to call the appropriate fetch function based on active tab
   useEffect(() => {
     if (activeTab === 'colleges') {
       fetchColleges();
@@ -256,501 +336,122 @@ export default function AdminEntriesPage() {
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           {activeTab === 'colleges' && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-medium text-gray-800">College List</h2>
-                <button 
-                  onClick={() => {
-                    resetAddCollegeForm();
-                    setShowAddCollegeModal(true);
-                  }}
-                  className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-lg flex items-center gap-2"
-                >
-                  <Plus size={16} />
-                  Add New College
-                </button>
-              </div>
-              
-              <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-4">
-                          <div className="animate-pulse flex space-x-4">
-                            <div className="flex-1 space-y-6 py-1">
-                              <div className="h-2 bg-gray-200 rounded"></div>
-                              <div className="space-y-3">
-                                <div className="grid grid-cols-3 gap-4">
-                                  <div className="h-2 bg-gray-200 rounded col-span-2"></div>
-                                  <div className="h-2 bg-gray-200 rounded col-span-1"></div>
-                                </div>
-                                <div className="h-2 bg-gray-200 rounded"></div>
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : colleges.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="px-6 py-4 text-center text-gray-500">No colleges found. Create one to get started.</td>
-                      </tr>
-                    ) : (
-                      colleges.map((college) => (
-                        <tr key={college.college_id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{college.college_name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button 
-                              className="text-blue-600 hover:text-blue-900 mr-4 flex items-center gap-1"
-                              onClick={() => handleEditCollege(college)}
-                            >
-                              <Edit size={14} /> Edit
-                            </button>
-                            <button 
-                              className="text-red-600 hover:text-red-900 flex items-center gap-1"
-                              onClick={() => handleDeleteCollege(college)}
-                            >
-                              <Trash size={14} /> Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <CollegesTab 
+              colleges={colleges}
+              loading={loading}
+              onAdd={openAddModal}
+              onEdit={openEditModal}
+              onDelete={openDeleteModal}
+            />
           )}
 
-          {/* Organizations and Positions tabs remain unchanged */}
           {activeTab === 'organizations' && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-medium text-gray-800">Organization List</h2>
-                <button 
-                  onClick={() => setShowAddOrganizationModal(true)}
-                  className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-lg flex items-center gap-2"
-                >
-                  <Plus size={16} />
-                  Add New Organization
-                </button>
-              </div>
-              
-              <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">College</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-4">
-                          <div className="animate-pulse flex space-x-4">
-                            <div className="flex-1 space-y-6 py-1">
-                              <div className="h-2 bg-gray-200 rounded"></div>
-                              <div className="space-y-3">
-                                <div className="grid grid-cols-3 gap-4">
-                                  <div className="h-2 bg-gray-200 rounded col-span-2"></div>
-                                  <div className="h-2 bg-gray-200 rounded col-span-1"></div>
-                                </div>
-                                <div className="h-2 bg-gray-200 rounded"></div>
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : organizations.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-4 text-center text-gray-500">No organizations found. Create one to get started.</td>
-                      </tr>
-                    ) : (
-                      organizations.map((org) => (
-                        <tr key={org.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{org.name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{org.college_name}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{org.description || 'No description'}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(org.created_at).toLocaleDateString()}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button className="text-blue-600 hover:text-blue-900 mr-4 flex items-center gap-1">
-                              <Edit size={14} /> Edit
-                            </button>
-                            <button className="text-red-600 hover:text-red-900 flex items-center gap-1">
-                              <Trash size={14} /> Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <OrganizationsTab 
+              organizations={organizations}
+              loading={loading}
+              onAdd={openAddModal}
+              onEdit={openEditModal}
+              onDelete={openDeleteModal}
+            />
           )}
 
           {activeTab === 'positions' && (
-            <div>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-lg font-medium text-gray-800">Position List</h2>
-                <button 
-                  onClick={() => setShowAddPositionModal(true)}
-                  className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-lg flex items-center gap-2"
-                >
-                  <Plus size={16} />
-                  Add New Position
-                </button>
-              </div>
-              
-              <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organization</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Candidates</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                      <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {loading ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-4">
-                          <div className="animate-pulse flex space-x-4">
-                            <div className="flex-1 space-y-6 py-1">
-                              <div className="h-2 bg-gray-200 rounded"></div>
-                              <div className="space-y-3">
-                                <div className="grid grid-cols-3 gap-4">
-                                  <div className="h-2 bg-gray-200 rounded col-span-2"></div>
-                                  <div className="h-2 bg-gray-200 rounded col-span-1"></div>
-                                </div>
-                                <div className="h-2 bg-gray-200 rounded"></div>
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : positions.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">No positions found. Create one to get started.</td>
-                      </tr>
-                    ) : (
-                      positions.map((position) => (
-                        <tr key={position.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{position.name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{position.organization_name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{position.max_candidates}</td>
-                          <td className="px-6 py-4 text-sm text-gray-500">{position.description || 'No description'}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(position.created_at).toLocaleDateString()}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button className="text-blue-600 hover:text-blue-900 mr-4 flex items-center gap-1">
-                              <Edit size={14} /> Edit
-                            </button>
-                            <button className="text-red-600 hover:text-red-900 flex items-center gap-1">
-                              <Trash size={14} /> Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <PositionsTab 
+              positions={positions}
+              loading={loading}
+              onAdd={openAddModal}
+              onEdit={openEditModal}
+              onDelete={openDeleteModal}
+            />
           )}
         </div>
       </div>
 
-      {/* Add College Modal */}
-      <Modal
-        isOpen={showAddCollegeModal}
-        onClose={() => setShowAddCollegeModal(false)}
-        title="Add New College"
-        size="md"
-        footer={
-          <>
-            <button
-              type="button"
-              onClick={() => setShowAddCollegeModal(false)}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md mr-3"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmitAddCollege(addCollege)}
-              className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-md"
-            >
-              Save College
-            </button>
-          </>
-        }
-      >
-        <form className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              College Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="Enter college name"
-              {...registerAddCollege('college_name', { required: 'College name is required' })}
-            />
-            {addCollegeErrors.college_name && (
-              <p className="mt-1 text-sm text-red-600">{addCollegeErrors.college_name?.message}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              rows={3}
-              placeholder="Enter college description"
-              {...registerAddCollege('college_desc')}
-            ></textarea>
-          </div>
-        </form>
-      </Modal>
+      {/* Strictly typed Add/Edit Modals for each entity type */}
+      {activeTab === 'colleges' && (
+        <EntityFormModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          title="Add New College"
+          fields={collegeFields}
+          onSubmit={collegeForm.handleSubmit(handleAdd)}
+          register={collegeForm.register}
+          errors={collegeForm.formState.errors}
+          isEdit={false}
+        />
+      )}
+      {activeTab === 'organizations' && (
+        <EntityFormModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          title="Add New Organization"
+          fields={organizationFields}
+          onSubmit={organizationForm.handleSubmit(handleAdd)}
+          register={organizationForm.register}
+          errors={organizationForm.formState.errors}
+          isEdit={false}
+        />
+      )}
+      {activeTab === 'positions' && (
+        <EntityFormModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          title="Add New Position"
+          fields={positionFields}
+          onSubmit={positionForm.handleSubmit(handleAdd)}
+          register={positionForm.register}
+          errors={positionForm.formState.errors}
+          isEdit={false}
+        />
+      )}
+      {activeTab === 'colleges' && (
+        <EntityFormModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          title="Edit College"
+          fields={collegeFields}
+          onSubmit={collegeForm.handleSubmit(handleEdit)}
+          register={collegeForm.register}
+          errors={collegeForm.formState.errors}
+          isEdit={true}
+        />
+      )}
+      {activeTab === 'organizations' && (
+        <EntityFormModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          title="Edit Organization"
+          fields={organizationFields}
+          onSubmit={organizationForm.handleSubmit(handleEdit)}
+          register={organizationForm.register}
+          errors={organizationForm.formState.errors}
+          isEdit={true}
+        />
+      )}
+      {activeTab === 'positions' && (
+        <EntityFormModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          title="Edit Position"
+          fields={positionFields}
+          onSubmit={positionForm.handleSubmit(handleEdit)}
+          register={positionForm.register}
+          errors={positionForm.formState.errors}
+          isEdit={true}
+        />
+      )}
 
-      {/* Edit College Modal */}
-      <Modal
-        isOpen={showEditCollegeModal}
-        onClose={() => setShowEditCollegeModal(false)}
-        title="Edit College"
-        size="md"
-        footer={
-          <>
-            <button
-              type="button"
-              onClick={() => setShowEditCollegeModal(false)}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md mr-3"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmitEditCollege(editCollege)}
-              className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-md"
-            >
-              Update College
-            </button>
-          </>
-        }
-      >
-        <form className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              College Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="Enter college name"
-              {...registerEditCollege('college_name', { required: 'College name is required' })}
-            />
-            {editCollegeErrors.college_name && (
-              <p className="mt-1 text-sm text-red-600">{editCollegeErrors.college_name?.message}</p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              rows={3}
-              placeholder="Enter college description"
-              {...registerEditCollege('college_desc')}
-            ></textarea>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Delete College Modal */}
-      <Modal
-        isOpen={showDeleteCollegeModal}
-        onClose={() => setShowDeleteCollegeModal(false)}
-        title="Delete College"
-        size="sm"
-        footer={
-          <>
-            <button
-              type="button"
-              onClick={() => setShowDeleteCollegeModal(false)}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md mr-3"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={deleteCollege}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md"
-            >
-              Delete
-            </button>
-          </>
-        }
-      >
-        <div className="text-center">
-          <p className="text-gray-700 mb-2">
-            Are you sure you want to delete the college &quot;{selectedCollege?.college_name}&quot;?
-          </p>
-          <p className="text-gray-500 text-sm">
-            This action cannot be undone. All associated organizations and positions will also be deleted.
-          </p>
-        </div>
-      </Modal>
-
-      {/* Existing modals for organizations and positions */}
-      <Modal
-        isOpen={showAddOrganizationModal}
-        onClose={() => setShowAddOrganizationModal(false)}
-        title="Add New Organization"
-        size="md"
-        footer={
-          <>
-            <button
-              type="button"
-              onClick={() => setShowAddOrganizationModal(false)}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md mr-3"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-md"
-            >
-              Save Organization
-            </button>
-          </>
-        }
-      >
-        <form className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Organization Name
-            </label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="Enter organization name"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              College
-            </label>
-            <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-            >
-              <option value="">Select a college</option>
-              {colleges.map((college) => (
-                <option key={college.college_id} value={college.college_id}>{college.college_name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description (Optional)
-            </label>
-            <textarea
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              rows={3}
-              placeholder="Enter organization description"
-            ></textarea>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        isOpen={showAddPositionModal}
-        onClose={() => setShowAddPositionModal(false)}
-        title="Add New Position"
-        size="md"
-        footer={
-          <>
-            <button
-              type="button"
-              onClick={() => setShowAddPositionModal(false)}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md mr-3"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-md"
-            >
-              Save Position
-            </button>
-          </>
-        }
-      >
-        <form className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Position Name
-            </label>
-            <input
-              type="text"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="Enter position name"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Organization
-            </label>
-            <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-            >
-              <option value="">Select an organization</option>
-              {organizations.map((org) => (
-                <option key={org.id} value={org.id}>{org.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Maximum Number of Candidates
-            </label>
-            <input
-              type="number"
-              min="1"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              placeholder="Enter max candidates"
-              defaultValue={1}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description (Optional)
-            </label>
-            <textarea
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-              rows={3}
-              placeholder="Enter position description"
-            ></textarea>
-          </div>
-        </form>
-      </Modal>
+      {/* Unified Delete Modal */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onDelete={handleDelete}
+        title={`Delete ${activeTab.slice(0, -1).charAt(0).toUpperCase() + activeTab.slice(0, -1).slice(1)}`}
+        entityName={getEntityName()}
+        warningMessage={getDeleteWarningMessage()}
+      />
     </AdminLayout>
   );
 }
