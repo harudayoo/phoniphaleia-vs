@@ -42,7 +42,8 @@ const CollegesTab: React.FC<CollegesTabProps> = ({
     },
     { 
       key: 'college_desc',
-      header: 'Description' 
+      header: 'Description',
+      className: 'max-w-[180px] w-[180px] overflow-hidden text-ellipsis truncate align-top' 
     }
   ];
 
@@ -54,13 +55,10 @@ const CollegesTab: React.FC<CollegesTabProps> = ({
       onAdd={onAdd}
     >
       <ResponsiveEntityList<College>
-        title="Colleges List"
         entities={colleges}
         columns={columns}
-        onAdd={onAdd}
         onEdit={onEdit}
         onDelete={onDelete}
-        addButtonLabel="Add College"
         idField="college_id"
       />
     </DataView>

@@ -45,14 +45,9 @@ const PositionsTab: React.FC<PositionsTabProps> = ({
       header: 'Organization' 
     },
     { 
-      key: 'max_candidates',
-      header: 'Max Candidates' 
-    },
-    // Only include description if it's available in the data
-    ...(positions[0]?.description !== undefined ? [{ 
       key: 'description',
       header: 'Description' 
-    }] : [])
+    }
   ];
 
   return (
@@ -63,13 +58,10 @@ const PositionsTab: React.FC<PositionsTabProps> = ({
       onAdd={onAdd}
     >
       <ResponsiveEntityList<Position>
-        title="Positions List"
         entities={positions}
         columns={columns}
-        onAdd={onAdd}
         onEdit={onEdit}
         onDelete={onDelete}
-        addButtonLabel="Add Position"
         idField="id"
       />
     </DataView>

@@ -7,27 +7,22 @@ import { BaseEntity } from '@/types/admin';
 interface Column {
   key: string;
   header: string;
+  className?: string;
 }
 
 export interface ResponsiveEntityListProps<T extends BaseEntity> {
-  title: string;
   entities: T[];
   columns: Column[];
-  onAdd: () => void;
   onEdit: (entity: T) => void;
   onDelete: (entity: T) => void;
-  addButtonLabel: string;
   idField: string;
 }
 
 function ResponsiveEntityList<T extends BaseEntity>({
-  title,
   entities,
   columns,
-  onAdd,
   onEdit,
   onDelete,
-  addButtonLabel,
   idField,
 }: ResponsiveEntityListProps<T>) {
   const [selectedEntity, setSelectedEntity] = useState<T | null>(null);
@@ -45,16 +40,6 @@ function ResponsiveEntityList<T extends BaseEntity>({
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-lg font-medium text-gray-800">{title}</h2>
-        <button 
-          onClick={onAdd}
-          className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white rounded-lg flex items-center gap-2"
-        >
-          <span className="hidden md:inline">{addButtonLabel}</span>
-          <span className="md:hidden">Add</span>
-        </button>
-      </div>
       {/* Desktop view - Table */}
       <div className="hidden md:block bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
         <table className="min-w-full divide-y divide-gray-200">
@@ -64,7 +49,9 @@ function ResponsiveEntityList<T extends BaseEntity>({
                 <th 
                   key={String(column.key)} 
                   scope="col" 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-800 uppercase tracking-wider"
+                  className={`px-6 py-3 text-left text-xs font-medium text-gray-800 uppercase tracking-wider
+                    ${column.key === 'description' ? 'max-w-xs w-1/3 truncate' : ''}
+                  `}
                 >
                   {column.header}
                 </th>
@@ -86,16 +73,30 @@ function ResponsiveEntityList<T extends BaseEntity>({
               entities.map((entity) => (
                 <tr 
                   key={getEntityKey(entity)} 
-                  className="hover:bg-gray-50 cursor-pointer"
-                  onClick={() => handleItemClick(entity)}
+                  className="hover:bg-gray-50 group"
                 >
                   {columns.map((column) => (
-                    <td key={String(column.key)} className="px-6 py-4 whitespace-nowrap text-sm text-gray-800">
-                      {entity[column.key] !== undefined && entity[column.key] !== null ? String(entity[column.key]) : 'N/A'}
+                    <td
+                      key={String(column.key)}
+                      className={`px-6 py-4 whitespace-nowrap text-sm text-gray-800
+                        ${column.key === 'description' ? 'max-w-[180px] w-[180px] overflow-hidden text-ellipsis align-top truncate' : ''}
+                        ${column.className ? column.className : ''}
+                        cursor-pointer`}
+                      onClick={() => handleItemClick(entity)}
+                    >
+                      {column.key === 'description' && entity[column.key] && typeof entity[column.key] === 'string' ? (
+                        <span title={entity[column.key] as string}>{(entity[column.key] as string).length > 60 ? `${(entity[column.key] as string).slice(0, 60)}...` : entity[column.key]}</span>
+                      ) : (
+                        column.key === 'description' && (!entity[column.key] || entity[column.key] === null)
+                          ? ''
+                          : (entity[column.key] !== undefined && entity[column.key] !== null
+                            ? String(entity[column.key])
+                            : 'N/A')
+                      )}
                     </td>
                   ))}
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-4">
+                    <div className="flex justify-end space-x-4 opacity-100 group-hover:opacity-100 transition-opacity">
                       <button 
                         className="text-blue-600 hover:text-blue-900 flex items-center gap-1"
                         onClick={(e) => {

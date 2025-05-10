@@ -162,7 +162,13 @@ export default function AdminEntriesPage() {
         await axios.put(`${API_URL}/organizations/${selectedOrganization.id}`, data as OrganizationFormData);
         await fetchOrganizations();
       } else if (activeTab === 'positions' && selectedPosition) {
-        await axios.put(`${API_URL}/positions/${selectedPosition.id}`, data as PositionFormData);
+        // Always send description as a string, never undefined
+        const positionPayload = {
+          name: (data as PositionFormData).name,
+          organization_id: (data as PositionFormData).organization_id,
+          description: typeof (data as PositionFormData).description === 'string' ? (data as PositionFormData).description : '',
+        };
+        await axios.put(`${API_URL}/positions/${selectedPosition.id}`, positionPayload);
         await fetchPositions();
       }
       

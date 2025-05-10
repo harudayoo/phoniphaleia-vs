@@ -15,8 +15,7 @@ class PositionController:
                 'name': position.position_name,
                 'organization_id': position.org_id,
                 'organization_name': position.organization.org_name if position.organization else None,
-                'max_candidates': 3,  # Hard-coded until added to model
-                # Remove the problematic description field reference that's causing the error
+                'description': position.description,
                 'created_at': position.created_at.isoformat() if position.created_at else None,
                 'updated_at': position.updated_at.isoformat() if position.updated_at else None
             } for position in positions]
@@ -34,8 +33,8 @@ class PositionController:
             # Create new position
             new_position = Position(
                 org_id=data['organization_id'],
-                position_name=data['name']
-                # Do not include description field here since it doesn't exist in DB
+                position_name=data['name'],
+                description=data.get('description')  # Accept description if provided
             )
             
             db.session.add(new_position)
@@ -46,7 +45,7 @@ class PositionController:
                 'name': new_position.position_name,
                 'organization_id': new_position.org_id,
                 'organization_name': new_position.organization.org_name if new_position.organization else None,
-                'max_candidates': 3,
+                'description': new_position.description,  # Return description
                 'created_at': new_position.created_at.isoformat() if new_position.created_at else None,
                 'updated_at': new_position.updated_at.isoformat() if new_position.updated_at else None
             }), 201
@@ -67,6 +66,7 @@ class PositionController:
                 
             position.position_name = data.get('name', position.position_name)
             position.org_id = data.get('organization_id', position.org_id)
+            position.description = data.get('description', position.description)
             
             db.session.commit()
             
@@ -75,7 +75,7 @@ class PositionController:
                 'name': position.position_name,
                 'organization_id': position.org_id,
                 'organization_name': position.organization.org_name if position.organization else None,
-                'max_candidates': 3,
+                'description': position.description,
                 'created_at': position.created_at.isoformat() if position.created_at else None,
                 'updated_at': position.updated_at.isoformat() if position.updated_at else None
             })

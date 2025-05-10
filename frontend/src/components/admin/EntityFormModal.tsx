@@ -93,16 +93,23 @@ const EntityFormModal = <T extends FieldValues>({
               ></textarea>
             )}
             {field.type === 'select' && field.options && (
-              <select
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                {...register(field.name, { required: field.required ? `${field.label} is required` : false })}
-                defaultValue={isEdit ? undefined : ''}
-              >
-                {!isEdit && <option value="" disabled>Select {field.label}</option>}
-                {field.options.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                  {...register(field.name, { required: field.required ? `${field.label} is required` : false })}
+                >
+                  {!isEdit && <option value="" disabled>Select {field.label}</option>}
+                  {field.options.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                {/* Dropdown arrow */}
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                  <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
             )}
             {errors[field.name] && (
               <p className="mt-1 text-sm text-red-600">

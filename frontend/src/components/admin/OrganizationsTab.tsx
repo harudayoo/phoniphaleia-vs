@@ -58,13 +58,10 @@ const OrganizationsTab: React.FC<OrganizationsTabProps> = ({
       onAdd={onAdd}
     >
       <ResponsiveEntityList<Organization>
-        title="Organizations List"
         entities={organizations}
         columns={columns}
-        onAdd={onAdd}
         onEdit={onEdit}
         onDelete={onDelete}
-        addButtonLabel="Add Organization"
         idField="id"
       />
     </DataView>
