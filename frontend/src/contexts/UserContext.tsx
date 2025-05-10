@@ -15,12 +15,16 @@ interface UserContextType {
   user: UserInfo | null;
   loading: boolean;
   logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
+  fetchUserData: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType>({
   user: null,
   loading: true,
   logout: async () => {},
+  refreshSession: async () => {},
+  fetchUserData: async () => {},
 });
 
 export function useUser() {
@@ -59,15 +63,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('voter_token');
           localStorage.removeItem('user');
           window.location.href = '/auth/login';
+          return;
         }
         throw new Error('Failed to refresh session');
+      }
+      
+      // Store the new token if returned by the server
+      const data = await response.json();
+      if (data.token) {
+        localStorage.setItem('voter_token', data.token);
       }
     } catch (error) {
       console.error('Session refresh error:', error);
     }
   }, [API_URL]);
 
-  const fetchUserData = async () => {
+  const fetchUserData = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('voter_token');
@@ -108,11 +119,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
       });
     } catch (error) {
       console.error('Error fetching user data:', error);
-      setUser(null);
+      // Don't clear user on network errors to prevent unnecessary logouts
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        // Network error, keep current user state
+        console.warn('Network error occurred, keeping existing user state');
+      } else {
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
   // Function to handle logout
   const logout = async () => {
@@ -165,10 +182,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Fetch user data on component mount
   useEffect(() => {
     fetchUserData();
-  }, []);
+  }, [fetchUserData]);  // Add fetchUserData to dependencies
 
   return (
-    <UserContext.Provider value={{ user, loading, logout }}>
+    <UserContext.Provider value={{ 
+      user, 
+      loading, 
+      logout,
+      refreshSession, 
+      fetchUserData 
+    }}>
       {children}
     </UserContext.Provider>
   );

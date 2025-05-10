@@ -429,19 +429,37 @@ class AuthController:
             if not admin or not admin.verify_password(password):
                 return jsonify({"message": "Invalid credentials"}), 401
                 
-            # Generate OTP - use the model's generate_otp method if available
-            if hasattr(admin, 'generate_otp'):
-                otp = admin.generate_otp(6, 300)  # 6 digits, 5 minutes expiration
-            else:
-                # Fallback if generate_otp is not implemented
-                otp = f"{random.randint(100000, 999999)}"
-                expires_at = datetime.utcnow() + timedelta(minutes=5)
-                admin.otp_code = otp
-                admin.otp_expires_at = expires_at
+            # Generate OTP directly - no conditional logic
+            otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+            expires_at = datetime.utcnow() + timedelta(minutes=5)
+            
+            # Log the OTP generation
+            current_app.logger.info(f"Generating OTP for admin ID {admin.admin_id}: {otp}")
+            
+            # Set OTP values directly
+            admin.otp_code = otp
+            admin.otp_expires_at = expires_at
+            
+            # Explicitly save with transaction handling
+            try:
                 db.session.commit()
+                current_app.logger.info(f"OTP successfully saved for admin ID {admin.admin_id}")
+                
+                # Double-check OTP was saved correctly
+                admin_check = Admin.query.get(admin.admin_id)
+                current_app.logger.info(f"Verification - Admin {admin.admin_id} OTP data: code={admin_check.otp_code}, expires_at={admin_check.otp_expires_at}")
+            except Exception as db_err:
+                db.session.rollback()
+                current_app.logger.error(f"Failed to save OTP: {str(db_err)}")
+                return jsonify({"message": "Database error"}), 500
                 
             # Send OTP email
-            AuthController.send_otp_email(admin.email, otp)
+            try:
+                AuthController.send_otp_email(admin.email, otp)
+                current_app.logger.info(f"OTP email sent to {admin.email}")
+            except Exception as email_err:
+                current_app.logger.error(f"Failed to send OTP email: {str(email_err)}")
+                # Continue despite email failure - admin can request resend
 
             # Set session for admin (pending OTP verification)
             session['pending_admin_id'] = admin.admin_id
@@ -464,8 +482,8 @@ class AuthController:
             admin_id = data.get('admin_id')
             otp = data.get('otp')
             
-            # Add logging to debug the issue
-            current_app.logger.info(f"OTP verification attempt for admin_id: {admin_id}, otp: {otp}")
+            # Add detailed logging
+            current_app.logger.info(f"Admin OTP verification attempt: ID={admin_id}, OTP={otp}")
             
             if not all([admin_id, otp]):
                 current_app.logger.warning(f"Missing required fields: admin_id={admin_id}, otp={otp}")
@@ -478,38 +496,36 @@ class AuthController:
                 current_app.logger.warning(f"Invalid admin_id format: {admin_id}")
                 return jsonify({"message": "Invalid admin ID format"}), 400
                 
-            admin = Admin.query.filter_by(admin_id=admin_id).first()
+            # Retrieve admin directly by ID for clarity
+            admin = Admin.query.get(admin_id)
             if not admin:
                 current_app.logger.warning(f"Admin not found: admin_id={admin_id}")
-                return jsonify({"message": "Admin not found"}), 400
+                return jsonify({"message": "Admin not found"}), 404
+            
+            # Log the retrieved OTP data
+            current_app.logger.info(f"Admin {admin_id} OTP data: code={admin.otp_code}, expires_at={admin.otp_expires_at}")
                 
             if not admin.otp_code or not admin.otp_expires_at:
                 current_app.logger.warning(f"OTP not set: admin_id={admin_id}, has_otp_code={bool(admin.otp_code)}, has_expiry={bool(admin.otp_expires_at)}")
-                return jsonify({"message": "OTP not found or invalid admin"}), 400
+                return jsonify({"message": "No verification code found. Please request a new one."}), 400
 
-            # Check if OTP is valid
-            if hasattr(admin, 'verify_otp'):
-                current_app.logger.info(f"Using verify_otp method for admin {admin_id}")
-                if not admin.verify_otp(otp):
-                    current_app.logger.warning(f"OTP verification failed for admin_id={admin_id}")
-                    if datetime.utcnow() > admin.otp_expires_at:
-                        return jsonify({"message": "OTP expired"}), 400
-                    else:
-                        return jsonify({"message": "Invalid OTP"}), 400
-            else:
-                # Rest of the function remains the same...
-                if datetime.utcnow() > admin.otp_expires_at:
-                    return jsonify({"message": "OTP expired"}), 400
+            # Check if OTP is expired
+            if datetime.utcnow() > admin.otp_expires_at:
+                current_app.logger.warning(f"OTP expired: admin_id={admin_id}")
+                return jsonify({"message": "Verification code expired. Please request a new one."}), 400
                     
-                if admin.otp_code != otp:
-                    return jsonify({"message": "Invalid OTP"}), 400
+            # Check if OTP is correct
+            if admin.otp_code != otp:
+                current_app.logger.warning(f"Invalid OTP: expected={admin.otp_code}, received={otp}")
+                return jsonify({"message": "Invalid verification code"}), 400
 
             # OTP is valid, clear it and issue JWT
             admin.otp_code = None
             admin.otp_expires_at = None
             db.session.commit()
+            current_app.logger.info(f"OTP verified successfully for admin ID {admin_id}")
         
-            # Use the configured session timeout instead of hardcoded 1 hour
+            # Use the configured session timeout
             session_timeout = int(current_app.config.get('PERMANENT_SESSION_LIFETIME', 1800).total_seconds())
             
             payload = {
@@ -526,7 +542,7 @@ class AuthController:
                 
             return jsonify({
                 "verified": True,
-                "token": token  # <-- JWT for frontend
+                "token": token
             }), 200
 
         except Exception as e:
@@ -543,20 +559,36 @@ class AuthController:
             if not admin_id:
                 return jsonify({'message': 'Admin ID required'}), 400
                 
-            admin = Admin.query.filter_by(admin_id=admin_id).first()
+            # Convert admin_id to int to ensure proper lookup
+            try:
+                admin_id = int(admin_id)
+            except (ValueError, TypeError):
+                return jsonify({"message": "Invalid admin ID format"}), 400
+                
+            # Get admin directly by ID
+            admin = Admin.query.get(admin_id)
             if not admin:
                 return jsonify({"message": "Admin not found"}), 404
 
-            # Generate and save new OTP
-            if hasattr(admin, 'generate_otp'):
-                otp = admin.generate_otp(6, 300)  # 6 digits, 5 minutes expiration
-            else:
-                # Fallback if generate_otp is not implemented
-                otp = f"{random.randint(100000, 999999)}"
-                expires_at = datetime.utcnow() + timedelta(minutes=5)
-                admin.otp_code = otp
-                admin.otp_expires_at = expires_at
+            # Generate OTP directly - no conditional logic
+            otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+            expires_at = datetime.utcnow() + timedelta(minutes=5)
+            
+            # Log OTP generation
+            current_app.logger.info(f"Regenerating OTP for admin ID {admin_id}: {otp}")
+            
+            # Set OTP values
+            admin.otp_code = otp
+            admin.otp_expires_at = expires_at
+            
+            # Commit with transaction handling
+            try:
                 db.session.commit()
+                current_app.logger.info(f"Resent OTP successfully saved for admin ID {admin_id}")
+            except Exception as db_err:
+                db.session.rollback()
+                current_app.logger.error(f"Failed to save resent OTP: {str(db_err)}")
+                return jsonify({"message": "Database error"}), 500
 
             # Send OTP email
             AuthController.send_otp_email(admin.email, otp)

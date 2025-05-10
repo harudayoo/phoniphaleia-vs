@@ -51,6 +51,12 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         }
         throw new Error('Failed to refresh session');
       }
+      
+      // Store the new token
+      const data = await response.json();
+      if (data && data.token) {
+        localStorage.setItem('admin_token', data.token);
+      }
     } catch (error) {
       console.error('Session refresh error:', error);
     }
