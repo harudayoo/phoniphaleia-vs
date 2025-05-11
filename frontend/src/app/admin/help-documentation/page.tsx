@@ -323,20 +323,34 @@ export default function AdminHelpDocumentationPage() {
         />
       </SearchFilterBar>
 
-      <DataView 
-        data={filtered}
-        isLoading={loading}
-        emptyTitle="No documentation found"
-        emptyDescription={
-          search || status !== 'ALL' || category !== 'ALL'
-            ? 'Try adjusting your search or filters' 
-            : 'Get started by creating your first document'
-        }
-        emptyAction={emptyStateAction}
-        view={view}
-        renderGridItem={renderGridItem}
-        renderListItem={renderListItem}
-      />
+      <DataView
+        title="Help & Documentation"
+        description="Browse, search, and manage help documents for the system."
+        addButtonText="Create Document"
+        onAdd={() => { window.location.href = '/admin/help-documentation/create'; }}
+      >
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-semibold mb-2">No documentation found</h3>
+            <p className="text-gray-500 mb-4">
+              {search || status !== 'ALL' || category !== 'ALL'
+                ? 'Try adjusting your search or filters'
+                : 'Get started by creating your first document'}
+            </p>
+            {emptyStateAction}
+          </div>
+        ) : view === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filtered.map(renderGridItem)}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filtered.map(renderListItem)}
+          </div>
+        )}
+      </DataView>
     </AdminLayout>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
-import { FaPlus, FaDownload, FaEdit, FaEye, FaTrash, FaLock, FaLockOpen } from 'react-icons/fa';
+import { FaDownload, FaEdit, FaEye, FaTrash, FaLock, FaLockOpen } from 'react-icons/fa';
 import { Filter, Calendar, ArrowUp } from 'lucide-react';
 import Link from 'next/link';
 
@@ -157,24 +157,8 @@ export default function AdminResultsPage() {
     }
   };
 
-  // Create action button for header
-  const createButton = (
-    <button className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-      <FaPlus size={14} />
-      <span>Create New Result</span>
-    </button>
-  );
-
-  // Create empty state action
-  const emptyStateAction = (
-    <button className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-      <FaPlus size={14} />
-      <span>Create New Result</span>
-    </button>
-  );
-
-  const renderGridItem = (result: Result) => (
-    <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+  const renderGridItem = (result: Result, key?: React.Key) => (
+    <div key={key ?? result.result_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
       <div className="p-6">
         <div className="flex justify-between items-start mb-2">
           <span className="text-sm text-gray-600">{result.organization?.org_name}</span>
@@ -318,7 +302,6 @@ export default function AdminResultsPage() {
     <AdminLayout>
       <PageHeader 
         title="Election Results" 
-        action={createButton}
       />
 
       <SearchFilterBar 
@@ -343,22 +326,29 @@ export default function AdminResultsPage() {
         />
       </SearchFilterBar>
 
-      <DataView 
-        data={filtered}
-        isLoading={loading}
-        emptyTitle="No results found"
-        emptyDescription={
-          search || status !== 'ALL' 
-            ? 'Try adjusting your search or filters' 
-            : 'Create your first election result'
-        }
-        emptyAction={emptyStateAction}
-        view={view}
-        renderGridItem={renderGridItem}
-        renderListItem={() => <></>} // Not used when renderTable is provided
-        renderTable={renderListTable}
-        loadingType="card"
-      />
+      <DataView
+        title="Election Results"
+        description="Browse, search, and manage election results."
+      >
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-semibold mb-2">No results found</h3>
+            <p className="text-gray-500 mb-4">
+              {search || status !== 'ALL'
+                ? 'Try adjusting your search or filters'
+                : 'Create your first election result'}
+            </p>
+          </div>
+        ) : view === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filtered.map(result => renderGridItem(result, result.result_id))}
+          </div>
+        ) : (
+          renderListTable()
+        )}
+      </DataView>
     </AdminLayout>
   );
 }

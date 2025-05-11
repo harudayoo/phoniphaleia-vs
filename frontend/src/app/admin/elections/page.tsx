@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
-import { FaPlus, FaEdit, FaTrash, FaEye } from 'react-icons/fa';
+import { FaEdit, FaTrash, FaEye } from 'react-icons/fa';
 import { Filter, MoreVertical, Calendar, Users, Award } from 'lucide-react';
 import Link from 'next/link';
 import PageHeader from '@/components/admin/PageHeader';
@@ -175,27 +175,6 @@ export default function AdminElectionsPage() {
     return diffDays;
   };
 
-  const createButton = (
-    <Link href="/admin/elections/create">
-      <button className="bg-gradient-to-r from-red-700/95 to-red-800 px-4 py-2 text-white font-medium shadow-sm 
-                bg-[length:200%_100%] bg-right transition-[background-position] duration-300
-                hover:bg-left focus:outline-none focus:ring-2 focus:ring-red-800 disabled:opacity-75 rounded-lg
-                flex items-center gap-2">
-        <FaPlus size={14} /> Create New Election
-      </button>
-    </Link>
-  );
-
-  const emptyStateAction = (
-    <Link href="/admin/elections/create">
-      <button className="bg-gradient-to-r from-red-700/95 to-red-800 px-4 py-2 text-white font-medium shadow-sm 
-                rounded-lg flex items-center gap-2">
-        <FaPlus size={14} />
-        <span>Create New Election</span>
-      </button>
-    </Link>
-  );
-
   const renderGridItem = (election: Election) => {
     const daysRemaining = getDaysRemaining(election.date_end);
     const isActive = election.election_status === 'Ongoing';
@@ -335,7 +314,6 @@ export default function AdminElectionsPage() {
     <AdminLayout>
       <PageHeader 
         title="Election Management"
-        action={createButton}
       />
 
       <SearchFilterBar 
@@ -361,19 +339,35 @@ export default function AdminElectionsPage() {
       </SearchFilterBar>
 
       <DataView 
-        data={filtered}
-        isLoading={loading}
-        emptyTitle="No elections found"
-        emptyDescription={
-          search || status !== 'ALL' 
-            ? 'Try adjusting your search or filters' 
-            : 'Get started by creating your first election'
-        }
-        emptyAction={emptyStateAction}
-        view={view}
-        renderGridItem={renderGridItem}
-        renderListItem={renderListItem}
-      />
+        title="Election Management"
+        description="Manage and view all elections."
+        addButtonText="Create New Election"
+        onAdd={() => {
+          // Redirect to create page
+          window.location.href = '/admin/elections/create';
+        }}
+      >
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-semibold mb-2">No elections found</h3>
+            <p className="text-gray-500 mb-4">
+              {search || status !== 'ALL' 
+                ? 'Try adjusting your search or filters' 
+                : 'Get started by creating your first election'}
+            </p>
+          </div>
+        ) : view === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filtered.map(renderGridItem)}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filtered.map(renderListItem)}
+          </div>
+        )}
+      </DataView>
     </AdminLayout>
   );
 }

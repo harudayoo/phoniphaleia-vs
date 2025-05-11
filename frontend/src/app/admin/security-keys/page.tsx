@@ -1,13 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
-import { FaKey, FaDownload, FaEye, FaTrash, FaCopy, FaPlus } from 'react-icons/fa';
+import { FaKey, FaDownload, FaEye, FaTrash, FaCopy } from 'react-icons/fa';
 import { ShieldAlert, Lock, Award, Calendar, Copy } from 'lucide-react';
 import Link from 'next/link';
 import Modal from '@/components/Modal';
 
 // Import reusable components
-import PageHeader from '@/components/admin/PageHeader';
 import SearchFilterBar from '@/components/admin/SearchFilterBar';
 import FilterSelect from '@/components/admin/FilterSelect';
 import DataView from '@/components/admin/DataView';
@@ -161,17 +160,6 @@ export default function AdminSecurityKeysPage() {
         return null;
     }
   };
-
-  // Create action button for the header
-  const createButton = (
-    <button 
-      className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
-      onClick={() => setShowCreateModal(true)}
-    >
-      <FaPlus size={14} />
-      <span>Generate New Key</span>
-    </button>
-  );
 
   // Create empty state action
   const emptyStateAction = (
@@ -365,11 +353,6 @@ export default function AdminSecurityKeysPage() {
 
   return (
     <AdminLayout>
-      <PageHeader 
-        title="Security Keys" 
-        action={createButton}
-      />
-
       <SearchFilterBar 
         searchValue={search}
         onSearchChange={setSearch}
@@ -400,21 +383,31 @@ export default function AdminSecurityKeysPage() {
       </SearchFilterBar>
 
       <DataView 
-        data={filtered}
-        isLoading={loading}
-        emptyTitle="No security keys found"
-        emptyDescription={
-          search || status !== 'ALL' || keyType !== 'ALL' 
-            ? 'Try adjusting your search or filters' 
-            : 'Generate your first security key to get started'
-        }
-        emptyAction={emptyStateAction}
-        view={view}
-        renderGridItem={renderGridItem}
-        renderListItem={() => <></>} // Not used when renderTable is provided
-        renderTable={renderListTable}
-        loadingType="card"
-      />
+        title="Security Keys"
+        description="Manage cryptographic keys for elections."
+        addButtonText="Generate New Key"
+        onAdd={() => setShowCreateModal(true)}
+      >
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">Loading...</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-semibold mb-2">No security keys found</h3>
+            <p className="text-gray-500 mb-4">
+              {search || status !== 'ALL' || keyType !== 'ALL' 
+                ? 'Try adjusting your search or filters' 
+                : 'Generate your first security key to get started'}
+            </p>
+            {emptyStateAction}
+          </div>
+        ) : view === 'grid' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filtered.map(renderGridItem)}
+          </div>
+        ) : (
+          renderListTable()
+        )}
+      </DataView>
 
       {/* Create Key Modal */}
       <Modal
