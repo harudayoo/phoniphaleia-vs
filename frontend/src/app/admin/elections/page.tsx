@@ -21,7 +21,7 @@ type Election = {
   election_id: number;
   election_name: string;
   election_desc: string;
-  election_status: 'Active' | 'Ended' | 'Canceled';
+  election_status: 'Ongoing' | 'Upcoming' | 'Finished' | 'Canceled';
   date_start: string;
   date_end: string;
   organization?: { org_name: string };
@@ -34,7 +34,7 @@ type ElectionAPIResponse = {
   election_id: number;
   election_name: string;
   election_desc: string;
-  election_status: 'Active' | 'Ended' | 'Canceled';
+  election_status: 'Ongoing' | 'Upcoming' | 'Finished' | 'Canceled';
   date_start: string | null;
   date_end: string | null;
   organization?: { org_name: string | null };
@@ -44,9 +44,9 @@ type ElectionAPIResponse = {
 
 const statusOptions = [
   { value: 'ALL', label: 'All Status' },
-  { value: 'Active', label: 'Ongoing' },
+  { value: 'Ongoing', label: 'Ongoing' },
   { value: 'Upcoming', label: 'Upcoming' },
-  { value: 'Ended', label: 'Finished' },
+  { value: 'Finished', label: 'Finished' },
   { value: 'Canceled', label: 'Canceled' }
 ];
 
@@ -144,7 +144,7 @@ export default function AdminElectionsPage() {
               election_id: e.election_id,
               election_name: e.election_name,
               election_desc: e.election_desc,
-              election_status: e.election_status as 'Active' | 'Ended' | 'Canceled',
+              election_status: e.election_status as 'Ongoing' | 'Upcoming' | 'Finished' | 'Canceled',
               date_start: e.date_start ?? '',
               date_end: e.date_end ?? '',
               organization: e.organization
@@ -236,11 +236,18 @@ export default function AdminElectionsPage() {
   };
 
   const filtered = elections
+    .filter(e => {
+      if (status === 'ALL') return true;
+      if (status === 'Ongoing') return e.election_status === 'Ongoing';
+      if (status === 'Upcoming') return e.election_status === 'Upcoming';
+      if (status === 'Finished') return e.election_status === 'Finished';
+      if (status === 'Canceled') return e.election_status === 'Canceled';
+      return false;
+    })
     .filter(e =>
-      (status === 'ALL' || e.election_status === status) &&
-      (e.election_name.toLowerCase().includes(search.toLowerCase()) ||
-        e.election_desc.toLowerCase().includes(search.toLowerCase()) ||
-        (e.organization?.org_name ?? '').toLowerCase().includes(search.toLowerCase()))
+      e.election_name.toLowerCase().includes(search.toLowerCase()) ||
+      e.election_desc.toLowerCase().includes(search.toLowerCase()) ||
+      (e.organization?.org_name ?? '').toLowerCase().includes(search.toLowerCase())
     )
     .sort((a, b) => {
       if (sort === 'date_start') return new Date(a.date_start).getTime() - new Date(b.date_start).getTime();
@@ -257,10 +264,12 @@ export default function AdminElectionsPage() {
 
   const getStatusBadge = (status: string) => {
     switch(status) {
-      case 'Active':
-        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Active</span>;
-      case 'Ended':
-        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Ended</span>;
+      case 'Ongoing':
+        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Ongoing</span>;
+      case 'Upcoming':
+        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">Upcoming</span>;
+      case 'Finished':
+        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Finished</span>;
       case 'Canceled':
         return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Canceled</span>;
       default:
@@ -278,8 +287,8 @@ export default function AdminElectionsPage() {
 
   const renderGridItem = (election: Election) => {
     const daysRemaining = getDaysRemaining(election.date_end);
-    const isActive = election.election_status === 'Active';
-    const hasEnded = election.election_status === 'Ended' || election.election_status === 'Canceled';
+    const isActive = election.election_status === 'Ongoing';
+    const hasEnded = election.election_status === 'Finished' || election.election_status === 'Canceled';
     
     return (
       <div key={election.election_id} className="border rounded-xl bg-white shadow overflow-hidden flex flex-col">
@@ -341,8 +350,8 @@ export default function AdminElectionsPage() {
 
   const renderListItem = (election: Election) => {
     const daysRemaining = getDaysRemaining(election.date_end);
-    const isActive = election.election_status === 'Active';
-    const hasEnded = election.election_status === 'Ended' || election.election_status === 'Canceled';
+    const isActive = election.election_status === 'Ongoing';
+    const hasEnded = election.election_status === 'Finished' || election.election_status === 'Canceled';
     
     return (
       <div key={election.election_id} className="border rounded-lg bg-white shadow p-4">

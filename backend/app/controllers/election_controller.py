@@ -2,6 +2,7 @@ from app.models.election import Election
 from app.models.organization import Organization
 from app import db
 from flask import jsonify, request
+from datetime import datetime
 
 class ElectionController:
     @staticmethod
@@ -9,12 +10,22 @@ class ElectionController:
         try:
             elections = Election.query.all()
             result = []
+            now = datetime.utcnow().date()
             for e in elections:
+                # Determine status
+                if e.date_start > now:
+                    status = 'Upcoming'
+                elif e.date_start <= now <= e.date_end:
+                    status = 'Ongoing'
+                elif now > e.date_end:
+                    status = 'Finished'
+                else:
+                    status = e.election_status  # fallback
                 result.append({
                     "election_id": e.election_id,
                     "election_name": e.election_name,
                     "election_desc": e.election_desc,
-                    "election_status": e.election_status,
+                    "election_status": status,
                     "date_start": e.date_start.isoformat() if e.date_start else None,
                     "date_end": e.date_end.isoformat() if e.date_end else None,
                     "organization": {
@@ -32,13 +43,30 @@ class ElectionController:
     def create():
         try:
             data = request.json
+            # Parse dates
+            date_start = data.get('date_start')
+            date_end = data['date_end']
+            if isinstance(date_start, str):
+                date_start = datetime.fromisoformat(date_start).date()
+            if isinstance(date_end, str):
+                date_end = datetime.fromisoformat(date_end).date()
+            now = datetime.utcnow().date()
+            # Determine status
+            if date_start > now:
+                status = 'Upcoming'
+            elif date_start <= now <= date_end:
+                status = 'Ongoing'
+            elif now > date_end:
+                status = 'Finished'
+            else:
+                status = data.get('election_status', 'Upcoming')
             election = Election(
                 org_id=data['org_id'],
                 election_name=data['election_name'],
                 election_desc=data.get('election_desc'),
-                election_status=data.get('election_status', 'Upcoming'),
-                date_start=data.get('date_start'),
-                date_end=data['date_end'],
+                election_status=status,
+                date_start=date_start,
+                date_end=date_end,
             )
             db.session.add(election)
             db.session.commit()
@@ -50,3 +78,88 @@ class ElectionController:
             db.session.rollback()
             print("Error in create election:", ex)
             return jsonify({"error": str(ex)}), 500
+
+    @staticmethod
+    def update(election_id):
+        try:
+            data = request.json
+            election = Election.query.get(election_id)
+            if not election:
+                return jsonify({'error': 'Election not found'}), 404
+
+            # Update fields if present in request
+            if 'election_name' in data:
+                election.election_name = data['election_name']
+            if 'election_desc' in data:
+                election.election_desc = data['election_desc']
+            if 'date_start' in data:
+                date_start = data['date_start']
+                if isinstance(date_start, str):
+                    date_start = datetime.fromisoformat(date_start).date()
+                election.date_start = date_start
+            if 'date_end' in data:
+                date_end = data['date_end']
+                if isinstance(date_end, str):
+                    date_end = datetime.fromisoformat(date_end).date()
+                election.date_end = date_end
+            if 'org_id' in data:
+                election.org_id = data['org_id']
+
+            # Determine status after possible date changes
+            now = datetime.utcnow().date()
+            if election.date_start > now:
+                status = 'Upcoming'
+            elif election.date_start <= now <= election.date_end:
+                status = 'Ongoing'
+            elif now > election.date_end:
+                status = 'Finished'
+            else:
+                status = election.election_status
+            election.election_status = status
+
+            db.session.commit()
+            return jsonify({
+                'election_id': election.election_id,
+                'election_name': election.election_name,
+                'election_desc': election.election_desc,
+                'election_status': election.election_status,
+                'date_start': election.date_start.isoformat() if election.date_start else None,
+                'date_end': election.date_end.isoformat() if election.date_end else None,
+                'org_id': election.org_id
+            })
+        except Exception as ex:
+            db.session.rollback()
+            print('Error in update election:', ex)
+            return jsonify({'error': str(ex)}), 500
+
+    @staticmethod
+    def delete(election_id):
+        try:
+            from app.models.crypto_config import CryptoConfig
+            from app.models.key_share import KeyShare
+            from app.models.trusted_authority import TrustedAuthority
+            election = Election.query.get(election_id)
+            if not election:
+                return jsonify({'error': 'Election not found'}), 404
+
+            # Delete related CryptoConfig(s)
+            crypto_configs = CryptoConfig.query.filter_by(election_id=election_id).all()
+            for crypto in crypto_configs:
+                # Delete related KeyShares
+                key_shares = KeyShare.query.filter_by(crypto_id=crypto.crypto_id).all()
+                for ks in key_shares:
+                    ta = TrustedAuthority.query.get(ks.authority_id)
+                    db.session.delete(ks)
+                    # Only delete TA if it has no other key shares after this
+                    db.session.flush()  # flush to update relationships
+                    if ta and len(ta.key_shares) == 0:
+                        db.session.delete(ta)
+                db.session.delete(crypto)
+
+            db.session.delete(election)
+            db.session.commit()
+            return jsonify({'message': 'Election and related cryptographic data deleted successfully'}), 200
+        except Exception as ex:
+            db.session.rollback()
+            print('Error deleting election:', ex)
+            return jsonify({'error': str(ex)}), 500

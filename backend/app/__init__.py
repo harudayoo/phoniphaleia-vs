@@ -57,7 +57,7 @@ def create_app():
         db.create_all()
 
     # Register blueprints
-    from app.routes import auth_bp, college_bp, admin_bp, election_bp, user_bp, position_bp, organization_bp, trusted_authority_bp, crypto_config_bp, key_share_bp, crypto_bp, admin_search_bp
+    from app.routes import auth_bp, college_bp, admin_bp, election_bp, user_bp, position_bp, organization_bp, trusted_authority_bp, crypto_config_bp, key_share_bp, admin_search_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(college_bp)
     app.register_blueprint(admin_bp)
@@ -68,7 +68,6 @@ def create_app():
     app.register_blueprint(trusted_authority_bp)
     app.register_blueprint(crypto_config_bp)
     app.register_blueprint(key_share_bp)
-    app.register_blueprint(crypto_bp)
     app.register_blueprint(admin_search_bp)
 
     # Simple test route

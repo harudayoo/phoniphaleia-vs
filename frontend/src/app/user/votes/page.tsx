@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import UserLayout from '@/layouts/UserLayout';
 import { useUser } from '@/contexts/UserContext';
-import { ArrowRight, Search, Calendar, Filter } from 'lucide-react';
+import { ArrowRight, Calendar } from 'lucide-react';
 import NothingIcon from '@/components/NothingIcon';
 import ViewToggle from '@/components/admin/ViewToggle';
+import UserSearchFilterBar from '@/components/user/UserSearchFilterBar';
 
 interface Election {
   election_id: number;
@@ -18,7 +19,7 @@ interface Election {
   date_end: string;
   date_start?: string;
   days_left?: number;
-  status?: 'ongoing' | 'upcoming' | 'ended' | 'canceled' | 'ending-soon' | 'ending-today';
+  election_status?: 'Ongoing' | 'Upcoming' | 'Finished' | 'Canceled';
 }
 
 export default function UserVotesPage() {
@@ -27,7 +28,7 @@ export default function UserVotesPage() {
   const [filteredElections, setFilteredElections] = useState<Election[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all'); // 'all', 'ongoing', 'upcoming', 'ended', 'canceled', 'soon-ending'
+  const [filter, setFilter] = useState('all'); // 'all', 'Ongoing', 'Upcoming', 'Finished', 'Canceled'
   const [sort, setSort] = useState('end-date'); // 'end-date', 'alphabetical'
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
@@ -49,7 +50,7 @@ export default function UserVotesPage() {
         // Fetch organizations for college lookup
         const orgRes = await fetch(`${API_URL}/organizations`);
         const orgs = await orgRes.json();
-        // Process the elections to add days_left, status, and college_name
+        // Process the elections to add days_left, election_status, and college_name
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const processedData = data.map((election: {
@@ -59,29 +60,30 @@ export default function UserVotesPage() {
           organization?: { org_name: string };
           date_end: string;
           date_start?: string;
+          election_status?: string;
         }) => {
-          const dateStr = election.date_end;
-          const [year, month, day] = dateStr.split('-').map(Number);
-          const endDate = new Date(year, month - 1, day);
-          endDate.setHours(23, 59, 59, 999);
-          const diffTime = endDate.getTime() - today.getTime();
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          // Updated status mapping
-          let status: Election['status'] = 'ongoing';
-          if (diffDays < 0) {
-            status = 'ended';
-          } else if (diffDays === 0) {
-            status = 'ending-today';
-          } else if (diffDays <= 3) {
-            status = 'ending-soon';
-          }
-          // If election has not started yet, mark as 'upcoming'
-          if (election.date_start) {
-            const [sy, sm, sd] = election.date_start.split('-').map(Number);
-            const startDate = new Date(sy, sm - 1, sd);
-            startDate.setHours(0, 0, 0, 0);
-            if (today < startDate) {
-              status = 'upcoming';
+          // Use backend election_status if available, otherwise compute
+          let election_status: Election['election_status'] = 'Ongoing';
+          if (election.election_status) {
+            election_status = election.election_status as Election['election_status'];
+          } else {
+            const dateStr = election.date_end;
+            const [year, month, day] = dateStr.split('-').map(Number);
+            const endDate = new Date(year, month - 1, day);
+            endDate.setHours(23, 59, 59, 999);
+            const diffTime = endDate.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            if (diffDays < 0) {
+              election_status = 'Finished';
+            } else if (election.date_start) {
+              const [sy, sm, sd] = election.date_start.split('-').map(Number);
+              const startDate = new Date(sy, sm - 1, sd);
+              startDate.setHours(0, 0, 0, 0);
+              if (today < startDate) {
+                election_status = 'Upcoming';
+              } else if (today >= startDate && today <= endDate) {
+                election_status = 'Ongoing';
+              }
             }
           }
           let college_name = 'None';
@@ -89,9 +91,15 @@ export default function UserVotesPage() {
             const org = orgs.find((o: { name: string; college_name?: string }) => o.name === election.organization!.org_name);
             if (org && org.college_name) college_name = org.college_name;
           }
+          const dateStr = election.date_end;
+          const [year, month, day] = dateStr.split('-').map(Number);
+          const endDate = new Date(year, month - 1, day);
+          endDate.setHours(23, 59, 59, 999);
+          const diffTime = endDate.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
           return Object.assign({}, election, {
             days_left: Math.max(diffDays, 0),
-            status,
+            election_status: election_status,
             organization: Object.assign({}, election.organization, { college_name }),
           });
         });
@@ -108,38 +116,27 @@ export default function UserVotesPage() {
 
   // Helper function to render the time remaining badge
   const getTimeRemainingBadge = (election: Election) => {
-    if (!election.status) return null;
-    switch(election.status) {
-      case 'ended':
+    if (!election.election_status) return null;
+    switch(election.election_status) {
+      case 'Finished':
         return (
           <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">
             Election ended
           </span>
         );
-      case 'ending-today':
-        return (
-          <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-600 animate-pulse">
-            Ends today
-          </span>
-        );
-      case 'ending-soon':
-        return (
-          <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-600">
-            {election.days_left} {election.days_left === 1 ? 'day' : 'days'} left
-          </span>
-        );
-      case 'upcoming':
+      case 'Upcoming':
         return (
           <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-600">
             Upcoming
           </span>
         );
-      case 'canceled':
+      case 'Canceled':
         return (
           <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-600">
             Canceled
           </span>
         );
+      case 'Ongoing':
       default:
         return (
           <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-600">
@@ -152,10 +149,10 @@ export default function UserVotesPage() {
   // Update filter options
   const filterOptions = [
     { value: 'all', label: 'All Elections' },
-    { value: 'upcoming', label: 'Upcoming' },
-    { value: 'ongoing', label: 'Ongoing' },
-    { value: 'ended', label: 'Finished' },
-    { value: 'canceled', label: 'Canceled' },
+    { value: 'Upcoming', label: 'Upcoming' },
+    { value: 'Ongoing', label: 'Ongoing' },
+    { value: 'Finished', label: 'Finished' },
+    { value: 'Canceled', label: 'Canceled' },
   ];
 
   // Filter and sort elections when search, filter, or sort changes
@@ -169,15 +166,9 @@ export default function UserVotesPage() {
         election.organization?.org_name.toLowerCase().includes(searchLower)
       );
     }
-    // Updated filtering logic for new status mapping
-    if (filter === 'ongoing') {
-      result = result.filter(election => election.status === 'ongoing' || election.status === 'ending-soon' || election.status === 'ending-today');
-    } else if (filter === 'upcoming') {
-      result = result.filter(election => election.status === 'upcoming');
-    } else if (filter === 'ended') {
-      result = result.filter(election => election.status === 'ended');
-    } else if (filter === 'canceled') {
-      result = result.filter(election => election.status === 'canceled');
+    // Updated filtering logic for new election_status mapping
+    if (filter !== 'all') {
+      result = result.filter(election => election.election_status === filter);
     }
     if (sort === 'end-date') {
       result.sort((a, b) => (a.days_left || 0) - (b.days_left || 0));
@@ -195,66 +186,37 @@ export default function UserVotesPage() {
           View and participate in ongoing elections. Your vote matters!
         </p>
       </div>
-      
-      {/* Search and filter controls */}
-      <div className="bg-white rounded-xl shadow p-4 mb-8 border border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-800" />
-            <input
-              type="text"
-              placeholder="Search elections..."
-              className="pl-10 pr-4 py-2 w-full border text-gray-800 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          
-          <div className="flex gap-2">
-            <ViewToggle 
-              view={viewMode} 
-              onChange={setViewMode}
-              className="mr-1" 
-            />
-            
-            <div className="relative">
-              <select
-                className="appearance-none bg-white border text-gray-600 border-gray-300 rounded-lg pl-10 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-              >
-                {filterOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-              <Filter className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </div>
-            
-            <div className="relative">
-              <select
-                className="appearance-none bg-white border text-gray-600 border-gray-300 rounded-lg pl-10 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
-                value={sort}
-                onChange={(e) => setSort(e.target.value)}
-              >
-                <option value="end-date">Ending Soonest</option>
-                <option value="alphabetical">Alphabetical</option>
-              </select>
-              <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
+
+      <UserSearchFilterBar
+        searchValue={search}
+        onSearchChange={setSearch}
+        filterValue={filter}
+        onFilterChange={setFilter}
+        filterOptions={filterOptions}
+        searchPlaceholder="Search elections..."
+      >
+        {/* Sort and view controls */}
+        <div className="flex gap-2">
+          <ViewToggle view={viewMode} onChange={setViewMode} className="mr-1" />
+          <div className="relative">
+            <select
+              className="appearance-none bg-white border text-gray-600 border-gray-300 rounded-lg pl-10 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+            >
+              <option value="end-date">Ending Soonest</option>
+              <option value="alphabetical">Alphabetical</option>
+            </select>
+            <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
             </div>
           </div>
         </div>
-      </div>
-      
+      </UserSearchFilterBar>
+
       {/* Elections display - conditionally render grid or list view */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -294,7 +256,7 @@ export default function UserVotesPage() {
                 <div className="flex items-center mb-4">
                   <Calendar className="h-4 w-4 text-red-600 mr-2" />
                   <span className="text-sm text-gray-600">
-                    {election.status === 'ended' ? 'Ended on' : 'Ends on'} {new Date(election.date_end).toLocaleDateString()}
+                    {election.election_status === 'Finished' ? 'Ended on' : 'Ends on'} {new Date(election.date_end).toLocaleDateString()}
                   </span>
                 </div>
               </div>
@@ -302,21 +264,21 @@ export default function UserVotesPage() {
               <div className="px-6 pb-6 mt-auto">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-medium text-gray-500">
-                    {election.status === 'ended' ? 'Status:' : 'Time remaining:'}
+                    {election.election_status === 'Finished' ? 'Status:' : 'Time remaining:'}
                   </span>
                   {getTimeRemainingBadge(election)}
                 </div>
                 <Link href={`/user/vote/${election.election_id}`}>
                   <button 
                     className={`w-full ${
-                      election.status === 'ended' 
+                      election.election_status === 'Finished' 
                         ? 'bg-gray-500 cursor-not-allowed' 
                         : 'bg-red-600 hover:bg-red-700'
                     } text-white px-4 py-2 rounded-lg transition flex items-center justify-center gap-2`}
-                    disabled={election.status === 'ended'}
+                    disabled={election.election_status === 'Finished'}
                   >
-                    {election.status === 'ended' ? 'Election Closed' : 'Cast Your Vote'} 
-                    {election.status !== 'ended' && <ArrowRight size={16} />}
+                    {election.election_status === 'Finished' ? 'Election Closed' : 'Cast Your Vote'} 
+                    {election.election_status !== 'Finished' && <ArrowRight size={16} />}
                   </button>
                 </Link>
               </div>
@@ -340,7 +302,7 @@ export default function UserVotesPage() {
                   <div className="flex items-center">
                     <Calendar className="h-4 w-4 text-red-600 mr-2" />
                     <span className="text-sm text-gray-600">
-                      {election.status === 'ended' ? 'Ended on' : 'Ends on'} {new Date(election.date_end).toLocaleDateString()}
+                      {election.election_status === 'Finished' ? 'Ended on' : 'Ends on'} {new Date(election.date_end).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
@@ -350,14 +312,14 @@ export default function UserVotesPage() {
                   <Link href={`/user/vote/${election.election_id}`}>
                     <button 
                       className={`${
-                        election.status === 'ended' 
+                        election.election_status === 'Finished' 
                           ? 'bg-gray-500 cursor-not-allowed' 
                           : 'bg-red-600 hover:bg-red-700'
                       } text-white px-4 py-2 rounded-lg transition flex items-center justify-center gap-2`}
-                      disabled={election.status === 'ended'}
+                      disabled={election.election_status === 'Finished'}
                     >
-                      {election.status === 'ended' ? 'Election Closed' : 'Cast Your Vote'} 
-                      {election.status !== 'ended' && <ArrowRight size={16} />}
+                      {election.election_status === 'Finished' ? 'Election Closed' : 'Cast Your Vote'} 
+                      {election.election_status !== 'Finished' && <ArrowRight size={16} />}
                     </button>
                   </Link>
                 </div>

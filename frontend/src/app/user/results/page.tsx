@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import UserLayout from '@/layouts/UserLayout';
 import { useUser } from '@/contexts/UserContext';
-import { Calendar, Search, Filter, Download, ExternalLink } from 'lucide-react';
+import UserSearchFilterBar from '@/components/user/UserSearchFilterBar';
+import { Calendar, Download, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 
 interface ElectionResult {
@@ -28,6 +29,12 @@ export default function UserResultsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // 'all', 'recent', 'highest-participation'
+
+  const filterOptions = [
+    { value: 'all', label: 'All Results' },
+    { value: 'recent', label: 'Most Recent' },
+    { value: 'highest-participation', label: 'Highest Participation' },
+  ];
 
   // Fetch election results
   useEffect(() => {
@@ -136,41 +143,16 @@ export default function UserResultsPage() {
           View the outcomes of completed elections you participated in.
         </p>
       </div>
-      
-      {/* Search and filter controls */}
-      <div className="bg-white rounded-xl shadow p-4 mb-8 border border-gray-200">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search results..."
-              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          
-          <div className="relative">
-            <select
-              className="appearance-none bg-white border border-gray-300 rounded-lg pl-10 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            >
-              <option value="all">All Results</option>
-              <option value="recent">Most Recent</option>
-              <option value="highest-participation">Highest Participation</option>
-            </select>
-            <Filter className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </div>
-      
+
+      <UserSearchFilterBar
+        searchValue={search}
+        onSearchChange={setSearch}
+        filterValue={filter}
+        onFilterChange={setFilter}
+        filterOptions={filterOptions}
+        searchPlaceholder="Search results..."
+      />
+
       {/* Results list */}
       {loading ? (
         <div className="space-y-6">

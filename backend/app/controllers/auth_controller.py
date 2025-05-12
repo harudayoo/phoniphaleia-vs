@@ -601,61 +601,83 @@ class AuthController:
 
     @staticmethod
     def refresh_session():
-        """Refresh the admin session and extend token validity"""
+        """Refresh the session and extend token validity for voter or admin"""
         try:
             auth_header = request.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
                 return jsonify({'message': 'Missing or invalid token'}), 401
-            
+
             token = auth_header.split(' ')[1]
-            
+
             try:
                 # Decode the current token without verifying expiration
                 payload = jwt.decode(
-                    token, 
-                    current_app.config['JWT_SECRET_KEY'], 
+                    token,
+                    current_app.config['JWT_SECRET_KEY'],
                     algorithms=['HS256'],
                     options={"verify_exp": False}
                 )
-                
-                # Verify that it's an admin token
-                if payload.get('role') != 'admin':
-                    return jsonify({'message': 'Invalid admin token'}), 401
-                
-                admin_id = payload.get('admin_id')
-                if not admin_id:
-                    return jsonify({'message': 'Invalid token payload'}), 401
-                
-                # Verify admin still exists
-                admin = Admin.query.get(admin_id)
-                if not admin:
-                    return jsonify({'message': 'Admin no longer exists'}), 401
-                
-                # Generate a new token with updated expiration
-                session_timeout = int(current_app.config.get('PERMANENT_SESSION_LIFETIME', 1800).total_seconds())
-                new_payload = {
-                    "admin_id": admin.admin_id,
-                    "role": "admin",
-                    "exp": datetime.utcnow() + timedelta(seconds=session_timeout)
-                }
-                
-                new_token = jwt.encode(
-                    new_payload, 
-                    current_app.config['JWT_SECRET_KEY'], 
-                    algorithm="HS256"
-                )
-                
-                if isinstance(new_token, bytes):
-                    new_token = new_token.decode('utf-8')
-                
-                return jsonify({
-                    "token": new_token,
-                    "expires_in": session_timeout
-                }), 200
-                
+
+                # Check if this is an admin or voter token
+                if payload.get('role') == 'admin':
+                    admin_id = payload.get('admin_id')
+                    if not admin_id:
+                        return jsonify({'message': 'Invalid token payload'}), 401
+                    from app.models.admin import Admin
+                    admin = Admin.query.get(admin_id)
+                    if not admin:
+                        return jsonify({'message': 'Admin no longer exists'}), 401
+                    session_timeout = int(current_app.config.get('PERMANENT_SESSION_LIFETIME', 1800).total_seconds())
+                    new_payload = {
+                        "admin_id": admin.admin_id,
+                        "role": "admin",
+                        "exp": datetime.utcnow() + timedelta(seconds=session_timeout)
+                    }
+                    new_token = jwt.encode(
+                        new_payload,
+                        current_app.config['JWT_SECRET_KEY'],
+                        algorithm="HS256"
+                    )
+                    if isinstance(new_token, bytes):
+                        new_token = new_token.decode('utf-8')
+                    return jsonify({
+                        "token": new_token,
+                        "expires_in": session_timeout
+                    }), 200
+
+                # Voter token (legacy: user_type == 'voter')
+                elif payload.get('user_type') == 'voter' or payload.get('role') == 'voter':
+                    student_id = payload.get('student_id')
+                    if not student_id:
+                        return jsonify({'message': 'Invalid token payload'}), 401
+                    from app.models.voter import Voter
+                    voter = Voter.query.get(student_id)
+                    if not voter:
+                        return jsonify({'message': 'Voter no longer exists'}), 401
+                    session_timeout = int(current_app.config.get('PERMANENT_SESSION_LIFETIME', 1800).total_seconds())
+                    new_payload = {
+                        "student_id": voter.student_id,
+                        "user_type": "voter",
+                        "exp": datetime.utcnow() + timedelta(seconds=session_timeout)
+                    }
+                    new_token = jwt.encode(
+                        new_payload,
+                        current_app.config['JWT_SECRET_KEY'],
+                        algorithm="HS256"
+                    )
+                    if isinstance(new_token, bytes):
+                        new_token = new_token.decode('utf-8')
+                    return jsonify({
+                        "token": new_token,
+                        "expires_in": session_timeout
+                    }), 200
+
+                else:
+                    return jsonify({'message': 'Invalid token type'}), 401
+
             except jwt.InvalidTokenError:
                 return jsonify({'message': 'Invalid token'}), 401
-                
+
         except Exception as e:
             current_app.logger.error(f"Session refresh error: {str(e)}")
             return jsonify({'message': 'Failed to refresh session'}), 500
