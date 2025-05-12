@@ -459,7 +459,58 @@ export default function AdminElectionsPage() {
           </div>
         )}
       </DataView>
-      <CreateElectionModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <CreateElectionModal 
+        open={modalOpen} 
+        onClose={() => setModalOpen(false)}
+        onCreated={async () => {
+          setLoading(true);
+          try {
+            const response = await fetch(`${API_URL}/elections`);
+            if (!response.ok) throw new Error('Failed to fetch elections');
+            const data: ElectionAPIResponse[] = await response.json();
+            const processedData: Election[] = data
+              .filter(e =>
+                typeof e.election_id === 'number' &&
+                typeof e.election_name === 'string' &&
+                typeof e.election_desc === 'string' &&
+                typeof e.election_status === 'string' &&
+                (typeof e.date_start === 'string' || e.date_start === null) &&
+                (typeof e.date_end === 'string' || e.date_end === null)
+              )
+              .map(e => {
+                let collegeName = 'None';
+                if (e.organization && e.organization.org_name) {
+                  const org = organizations.find(
+                    o => o.name === e.organization!.org_name
+                  );
+                  if (org && org.college_name) {
+                    collegeName = org.college_name;
+                  }
+                }
+                return {
+                  election_id: e.election_id,
+                  election_name: e.election_name,
+                  election_desc: e.election_desc,
+                  election_status: e.election_status as 'Ongoing' | 'Upcoming' | 'Finished' | 'Canceled',
+                  date_start: e.date_start ?? '',
+                  date_end: e.date_end ?? '',
+                  organization: e.organization
+                    ? { org_name: e.organization.org_name ?? '' }
+                    : undefined,
+                  voters_count: e.voters_count ?? 0,
+                  participation_rate: e.participation_rate ?? undefined,
+                  college_name: collegeName,
+                };
+              });
+            setElections(processedData);
+            setError(null);
+          } catch {
+            setError('Failed to load elections. Please try again later.');
+          } finally {
+            setLoading(false);
+          }
+        }}
+      />
       <EntityDetailModal
         isOpen={showDetailModal}
         onClose={() => setShowDetailModal(false)}

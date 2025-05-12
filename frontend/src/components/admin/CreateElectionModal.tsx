@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Modal from '@/components/Modal';
 import ErrorAlert from '@/components/ErrorAlert';
-import { Copy, Download, Plus } from 'lucide-react';
+import { Download, Plus } from 'lucide-react';
 
 type Organization = { id: number; name: string; college_name?: string };
 type Admin = { id: number; name: string; email: string };
@@ -14,11 +14,12 @@ interface KeyGenerationResponse {
 interface Props {
   open: boolean;
   onClose: () => void;
+  onCreated?: () => void;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-const CreateElectionModal: React.FC<Props> = ({ open, onClose }) => {
+const CreateElectionModal: React.FC<Props> = ({ open, onClose, onCreated }) => {
   const [step, setStep] = useState(1);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [orgId, setOrgId] = useState<number | undefined>();
@@ -182,6 +183,7 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose }) => {
       setSuccess('Election created successfully!');
       setTimeout(() => {
         onClose();
+        if (onCreated) onCreated();
       }, 1500);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'Failed to create election');
@@ -301,6 +303,9 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose }) => {
       <div>
         <h3 className="font-semibold text-lg mb-2">Security Keys</h3>
         <p className="text-gray-600 mb-4">Improved Key Generation</p>
+        <div className="mb-4 text-sm text-yellow-700 bg-yellow-100 rounded p-2 border border-yellow-300">
+          <strong>Important:</strong> Private key shares will <b>not</b> be viewable again after this step. Please save each share securely and distribute to the assigned personnel. The public key and private shares cannot be copied to clipboard for security reasons.
+        </div>
         <div className="mb-4">
           <button
             type="button"
@@ -320,22 +325,18 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose }) => {
                 value={publicKey}
                 readOnly
               />
-              <button
-                type="button"
-                className="p-2 bg-gray-100 rounded hover:bg-gray-200"
-                onClick={() => navigator.clipboard.writeText(publicKey)}
-              >
-                <Copy size={16} />
-              </button>
+              {/* Remove copy button for public key */}
               <button
                 type="button"
                 className="p-2 bg-gray-100 rounded hover:bg-gray-200"
                 onClick={() => {
+                  const sanitize = (str: string) => str.replace(/[^a-zA-Z0-9_-]/g, '_');
+                  const prefix = electionName ? sanitize(electionName) + '_' : '';
                   const blob = new Blob([publicKey], { type: 'text/plain' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = 'public_key.txt';
+                  a.download = `${prefix}public_key.txt`;
                   a.click();
                   URL.revokeObjectURL(url);
                 }}
@@ -356,16 +357,18 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose }) => {
                     value={share}
                     readOnly
                   />
-                  {/* Only allow save to txt, no copy button */}
+                  {/* Remove copy button for private shares, update file name */}
                   <button
                     type="button"
                     className="p-2 bg-gray-100 rounded hover:bg-gray-200"
                     onClick={() => {
+                      const sanitize = (str: string) => str.replace(/[^a-zA-Z0-9_-]/g, '_');
+                      const prefix = electionName ? sanitize(electionName) + '_' : '';
                       const blobObj = new Blob([share], { type: 'text/plain' });
                       const url = URL.createObjectURL(blobObj);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = `private_share_${idx + 1}.txt`;
+                      a.download = `${prefix}private_share_${idx + 1}.txt`;
                       a.click();
                       setTimeout(() => URL.revokeObjectURL(url), 100);
                     }}
