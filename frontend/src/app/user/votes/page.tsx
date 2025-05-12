@@ -114,36 +114,64 @@ export default function UserVotesPage() {
     fetchElections();
   }, []);
 
+  // Helper function to format time remaining
+  const formatTimeRemaining = (endDateStr: string) => {
+    const endDate = new Date(endDateStr);
+    endDate.setHours(23, 59, 59, 999);
+    const now = new Date();
+    const diff = endDate.getTime() - now.getTime();
+    if (diff <= 0) return 'Ended';
+    const seconds = Math.floor(diff / 1000) % 60;
+    const minutes = Math.floor(diff / (1000 * 60)) % 60;
+    const hours = Math.floor(diff / (1000 * 60 * 60)) % 24;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24)) % 7;
+    const weeks = Math.floor(diff / (1000 * 60 * 60 * 24 * 7)) % 4;
+    const months = Math.floor(diff / (1000 * 60 * 60 * 24 * 30));
+    if (months > 0) return `${months} month${months > 1 ? 's' : ''} left`;
+    if (weeks > 0) return `${weeks} week${weeks > 1 ? 's' : ''} left`;
+    if (days > 0) return `${days} day${days > 1 ? 's' : ''} left`;
+    if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} left`;
+    if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} left`;
+    return `${seconds} second${seconds > 1 ? 's' : ''} left`;
+  };
+
   // Helper function to render the time remaining badge
   const getTimeRemainingBadge = (election: Election) => {
     if (!election.election_status) return null;
-    switch(election.election_status) {
-      case 'Finished':
-        return (
-          <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">
-            Election ended
-          </span>
-        );
-      case 'Upcoming':
-        return (
-          <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-600">
-            Upcoming
-          </span>
-        );
-      case 'Canceled':
-        return (
-          <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-600">
-            Canceled
-          </span>
-        );
-      case 'Ongoing':
-      default:
-        return (
-          <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-600">
-            {election.days_left} days left
-          </span>
-        );
+    if (election.election_status === 'Finished') {
+      return (
+        <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">
+          Election ended
+        </span>
+      );
     }
+    if (election.election_status === 'Canceled') {
+      return (
+        <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-600">
+          Canceled
+        </span>
+      );
+    }
+    // Show actual time remaining for Ongoing/Upcoming
+    return (
+      <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-600">
+        {formatTimeRemaining(election.date_end)}
+      </span>
+    );
+  };
+
+  // Helper function to render the status badge (top-right corner)
+  const getStatusBadge = (election: Election) => {
+    if (!election.election_status) return null;
+    let color = 'bg-blue-100 text-blue-600';
+    if (election.election_status === 'Finished') color = 'bg-gray-100 text-gray-600';
+    if (election.election_status === 'Canceled') color = 'bg-red-100 text-red-600';
+    if (election.election_status === 'Upcoming') color = 'bg-yellow-100 text-yellow-600';
+    return (
+      <span className={`text-xs px-2 py-1 rounded font-semibold shadow ${color}`}>
+        {election.election_status}
+      </span>
+    );
   };
 
   // Update filter options
@@ -243,44 +271,38 @@ export default function UserVotesPage() {
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredElections.map((election) => (
-            <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden flex flex-col">
-              <div className="p-6 flex-1">
+            <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden flex flex-col relative">
+              <div className="px-6 pt-6 pb-0 flex flex-col items-start">
+                {getStatusBadge(election)}
                 {election.organization && (
-                  <div className="text-sm text-gray-600 mb-1">{election.organization.org_name}</div>
+                  <div className="text-xs text-gray-500 mt-2 mb-2">
+                    {election.organization.org_name}
+                    {election.organization.college_name && (
+                      <span className="ml-2 text-gray-400">({election.organization.college_name})</span>
+                    )}
+                  </div>
                 )}
-                <div className="text-xs text-gray-500 mb-2">
-                  <span className="font-medium">College:</span> {election.organization?.college_name || 'None'}
-                </div>
+              </div>
+              <div className="p-6 pt-2 flex-1">
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">{election.election_name}</h3>
                 <p className="text-gray-600 text-sm mb-4">{election.election_desc}</p>
-                <div className="flex items-center mb-4">
-                  <Calendar className="h-4 w-4 text-red-600 mr-2" />
-                  <span className="text-sm text-gray-600">
-                    {election.election_status === 'Finished' ? 'Ended on' : 'Ends on'} {new Date(election.date_end).toLocaleDateString()}
-                  </span>
-                </div>
               </div>
-              
-              <div className="px-6 pb-6 mt-auto">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-medium text-gray-500">
-                    {election.election_status === 'Finished' ? 'Status:' : 'Time remaining:'}
-                  </span>
-                  {getTimeRemainingBadge(election)}
-                </div>
-                <Link href={`/user/vote/${election.election_id}`}>
-                  <button 
-                    className={`w-full ${
-                      election.election_status === 'Finished' 
-                        ? 'bg-gray-500 cursor-not-allowed' 
-                        : 'bg-red-600 hover:bg-red-700'
-                    } text-white px-4 py-2 rounded-lg transition flex items-center justify-center gap-2`}
-                    disabled={election.election_status === 'Finished'}
-                  >
-                    {election.election_status === 'Finished' ? 'Election Closed' : 'Cast Your Vote'} 
-                    {election.election_status !== 'Finished' && <ArrowRight size={16} />}
-                  </button>
-                </Link>
+              <div className="px-6 pb-3 flex flex-col gap-1 items-start justify-between">
+                <span className="text-xs text-gray-500">
+                  Ends on {new Date(election.date_end).toLocaleDateString()}
+                </span>
+                {getTimeRemainingBadge(election)}
+              </div>
+              <div className="px-6 pb-6">
+                <button
+                  className={`w-full mt-2 px-4 py-2 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 ${
+                    election.election_status === 'Finished' ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+                  }`}
+                  disabled={election.election_status === 'Finished'}
+                >
+                  {election.election_status === 'Finished' ? 'Election Closed' : 'Cast your votes'}
+                  {election.election_status !== 'Finished' && <ArrowRight size={16} />}
+                </button>
               </div>
             </div>
           ))}

@@ -5,9 +5,10 @@
     <title>Your OTP Code</title>
     <style>
       body { font-family: Arial, sans-serif; background: #f9f9f9; }
-      .container { background: #fff; padding: 32px; border-radius: 8px; max-width: 400px; margin: 40px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.07);}
+      .container { background: #fff; padding: 32px; border-radius: 8px; max-width: 400px; margin: 40px auto; box-shadow: 0 2px 8px rgba(0,0,0,0.07); text-align: center; }
       .otp { font-size: 2em; letter-spacing: 8px; color: #2d7ff9; margin: 24px 0; }
       .footer { font-size: 0.9em; color: #888; margin-top: 32px; }
+      .logo { display: flex; justify-content: center; margin-bottom: 18px; }
     </style>
   </head>
   <body>

@@ -33,14 +33,14 @@ const UserSearchFilterBar: React.FC<UserSearchFilterBarProps> = ({
         <input
           type="text"
           placeholder={searchPlaceholder}
-          className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+          className="pl-10 pr-4 py-2 w-full border text-gray-600 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
           value={searchValue}
           onChange={(e) => onSearchChange(e.target.value)}
         />
       </div>
       <div className="relative">
         <select
-          className="appearance-none bg-white border border-gray-300 rounded-lg pl-10 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+          className="appearance-none bg-white border text-gray-600 border-gray-300 rounded-lg pl-10 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
           value={filterValue}
           onChange={(e) => onFilterChange(e.target.value)}
         >

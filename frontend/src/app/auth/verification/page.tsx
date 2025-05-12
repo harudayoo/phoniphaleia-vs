@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
 import Header from '@/components/Header';
@@ -22,9 +22,17 @@ export default function UserVerification() {
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showLoadingPage, setShowLoadingPage] = useState<boolean>(false);
+  const [resendTimer, setResendTimer] = useState<number>(0);
 
   // Get student ID from query params
   const studentId = searchParams.get('student_id') || '';
+
+  useEffect(() => {
+    if (resendTimer > 0) {
+      const timer = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendTimer]);
 
   const handleResendOtp = async () => {
     setError('');
@@ -32,6 +40,7 @@ export default function UserVerification() {
     try {
       await axios.post(`${API_URL}/auth/resend_otp`, { student_id: studentId });
       setError('A new verification code has been sent to your email.');
+      setResendTimer(30); // Set timer for 30 seconds
     } catch {
       setError('Failed to resend verification code. Please try again.');
     } finally {
@@ -97,29 +106,29 @@ export default function UserVerification() {
         <div className="flex w-full justify-center items-center">
           <div className="w-full max-w-md">
             <div className="border border-gray-200 rounded-lg shadow-sm bg-white p-6 md:p-8">
-              <h2 className="text-2xl font-bold mb-6 text-gray-800">Identity Verification</h2>
-              <p className="mb-6 text-gray-600">
+              <h2 className="text-2xl font-bold mb-6 text-gray-800 text-center">Identity Verification</h2>
+              <p className="mb-6 text-gray-600 text-center">
                 Enter the verification code sent to your email to confirm your identity and access your account.
               </p>
               {error && (
-                <div className="rounded-md bg-red-50 p-4 mb-4">
+                <div className={`rounded-md p-4 mb-4 ${error.toLowerCase().includes('sent to your email') ? 'bg-green-50' : 'bg-red-50'}`}> 
                   <div className="flex flex-col gap-2">
-                    <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                    <h3 className={`text-sm font-medium ${error.toLowerCase().includes('sent to your email') ? 'text-green-800' : 'text-red-800'}`}>{error}</h3>
                     {error.toLowerCase().includes('expired') && (
                       <button
                         type="button"
                         onClick={handleResendOtp}
                         className="text-sm text-red-800 underline self-start"
-                        disabled={isLoading}
+                        disabled={isLoading || resendTimer > 0}
                       >
-                        {isLoading ? 'Resending...' : 'Resend verification code'}
+                        {isLoading ? 'Resending...' : resendTimer > 0 ? `Resend verification code (${resendTimer}s)` : 'Resend verification code'}
                       </button>
                     )}
                   </div>
                 </div>
               )}
               <form className="space-y-4 text-gray-500" onSubmit={handleSubmit}>
-                <div>
+                <div className="flex flex-col items-center">
                   <label htmlFor="otp" className="sr-only">
                     Verification Code
                   </label>
@@ -130,10 +139,10 @@ export default function UserVerification() {
                     value={otp}
                     onChange={e => setOtp(e.target.value)}
                     required
-                    className="block w-full rounded-md border text-gray-700 border-gray-300 px-3 py-2 shadow-sm focus:border-red-800 focus:ring-red-800"
+                    className="block w-full rounded-md border text-center text-gray-700 border-gray-300 px-3 py-2 shadow-sm focus:border-red-800 focus:ring-red-800"
                   />
                 </div>
-                <div className="flex flex-col space-y-3">
+                <div className="flex flex-col space-y-3 items-center">
                   <button
                     type="submit"
                     disabled={isLoading}
@@ -143,14 +152,13 @@ export default function UserVerification() {
                   >
                     {isLoading ? 'Verifying...' : 'Verify Identity'}
                   </button>
-                  
                   <button
                     type="button"
                     onClick={handleResendOtp}
-                    disabled={isLoading}
-                    className="text-sm text-red-800 hover:underline self-center"
+                    disabled={isLoading || resendTimer > 0}
+                    className="text-sm text-red-800 hover:underline self-center disabled:opacity-60"
                   >
-                    {isLoading ? 'Processing...' : 'Resend verification code'}
+                    {isLoading ? 'Processing...' : resendTimer > 0 ? `Resend verification code (${resendTimer}s)` : 'Resend verification code'}
                   </button>
                 </div>
               </form>
