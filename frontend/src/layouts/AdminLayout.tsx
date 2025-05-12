@@ -188,9 +188,9 @@ function AdminLayoutInner({ children }: AdminLayoutProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="text-right p-2 rounded-l-lg"
+                className="text-right p-2 rounded-xl"
                 style={{
-                  background: 'linear-gradient(to left, rgba(253, 230, 138, 0.1), rgba(253, 230, 138, 0) 70%)'
+                  background: 'linear-gradient(to left, rgba(253, 230, 138, 0.1), rgba(253, 230, 138, 0) 85%)'
                 }}
               >
                 <motion.div 

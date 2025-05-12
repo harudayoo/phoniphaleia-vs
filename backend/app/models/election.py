@@ -12,10 +12,13 @@ class Election(db.Model):
     election_status = db.Column(db.String(50), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    date_start = db.Column(db.Date, nullable=False)
     date_end = db.Column(db.Date, nullable=False)
-    
+    voters_count = db.Column(db.Integer, default=0)
+    participation_rate = db.Column(db.Float, nullable=True)
+
     # Relationships
     organization = relationship("Organization", backref="elections")
     
     def __repr__(self):
-        return f'<Election {self.election_name}>'   
+        return f'<Election {self.election_name}>'

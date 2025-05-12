@@ -13,10 +13,12 @@ interface Election {
   election_desc: string;
   organization?: {
     org_name: string;
+    college_name?: string;
   };
   date_end: string;
+  date_start?: string;
   days_left?: number;
-  status?: 'active' | 'ending-soon' | 'ended' | 'ending-today';
+  status?: 'ongoing' | 'upcoming' | 'ended' | 'canceled' | 'ending-soon' | 'ending-today';
 }
 
 export default function UserVotesPage() {
@@ -25,7 +27,7 @@ export default function UserVotesPage() {
   const [filteredElections, setFilteredElections] = useState<Election[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all'); // 'all', 'soon-ending', 'recently-added'
+  const [filter, setFilter] = useState('all'); // 'all', 'ongoing', 'upcoming', 'ended', 'canceled', 'soon-ending'
   const [sort, setSort] = useState('end-date'); // 'end-date', 'alphabetical'
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
@@ -34,42 +36,38 @@ export default function UserVotesPage() {
     const fetchElections = async () => {
       try {
         setLoading(true);
-        
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
         const response = await fetch(`${API_URL}/elections`, {
-          headers: { 
-            Authorization: `Bearer ${localStorage.getItem('voter_token')}` 
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('voter_token')}`
           }
         });
-        
         if (!response.ok) {
           throw new Error(`API error: ${response.statusText}`);
         }
-        
         const data = await response.json();
-        
-        // Process the elections to add days_left property and status
+        // Fetch organizations for college lookup
+        const orgRes = await fetch(`${API_URL}/organizations`);
+        const orgs = await orgRes.json();
+        // Process the elections to add days_left, status, and college_name
         const today = new Date();
-        today.setHours(0, 0, 0, 0); // Normalize to start of day
-        
-        const processedData = data.map((election: Election) => {
-          // Parse the date_end string in a timezone-safe way
-          // For date-only strings (YYYY-MM-DD), ensure we're parsing as local date
+        today.setHours(0, 0, 0, 0);
+        const processedData = data.map((election: {
+          election_id: number;
+          election_name: string;
+          election_desc: string;
+          organization?: { org_name: string };
+          date_end: string;
+          date_start?: string;
+        }) => {
           const dateStr = election.date_end;
-          // Split the YYYY-MM-DD format and create a local date
           const [year, month, day] = dateStr.split('-').map(Number);
-          const endDate = new Date(year, month - 1, day); // month is 0-indexed in JS
-          endDate.setHours(23, 59, 59, 999); // Set to end of day
-          
-          // Calculate days between dates
+          const endDate = new Date(year, month - 1, day);
+          endDate.setHours(23, 59, 59, 999);
           const diffTime = endDate.getTime() - today.getTime();
           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          
-          // For debugging
-          console.log(`Election: ${election.election_name}, End date: ${endDate.toLocaleDateString()}, Days left: ${diffDays}`);
-          
-          // Determine election status
-          let status: Election['status'] = 'active';
+          // Updated status mapping
+          let status: Election['status'] = 'ongoing';
           if (diffDays < 0) {
             status = 'ended';
           } else if (diffDays === 0) {
@@ -77,14 +75,26 @@ export default function UserVotesPage() {
           } else if (diffDays <= 3) {
             status = 'ending-soon';
           }
-          
-          return {
-            ...election,
-            days_left: Math.max(diffDays, 0), // Ensure non-negative
-            status
-          };
+          // If election has not started yet, mark as 'upcoming'
+          if (election.date_start) {
+            const [sy, sm, sd] = election.date_start.split('-').map(Number);
+            const startDate = new Date(sy, sm - 1, sd);
+            startDate.setHours(0, 0, 0, 0);
+            if (today < startDate) {
+              status = 'upcoming';
+            }
+          }
+          let college_name = 'None';
+          if (election.organization && election.organization.org_name) {
+            const org = orgs.find((o: { name: string; college_name?: string }) => o.name === election.organization!.org_name);
+            if (org && org.college_name) college_name = org.college_name;
+          }
+          return Object.assign({}, election, {
+            days_left: Math.max(diffDays, 0),
+            status,
+            organization: Object.assign({}, election.organization, { college_name }),
+          });
         });
-        
         setElections(processedData);
         setFilteredElections(processedData);
         setLoading(false);
@@ -93,14 +103,12 @@ export default function UserVotesPage() {
         setLoading(false);
       }
     };
-
     fetchElections();
   }, []);
 
   // Helper function to render the time remaining badge
   const getTimeRemainingBadge = (election: Election) => {
     if (!election.status) return null;
-    
     switch(election.status) {
       case 'ended':
         return (
@@ -120,6 +128,18 @@ export default function UserVotesPage() {
             {election.days_left} {election.days_left === 1 ? 'day' : 'days'} left
           </span>
         );
+      case 'upcoming':
+        return (
+          <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-600">
+            Upcoming
+          </span>
+        );
+      case 'canceled':
+        return (
+          <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-600">
+            Canceled
+          </span>
+        );
       default:
         return (
           <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-600">
@@ -129,36 +149,41 @@ export default function UserVotesPage() {
     }
   };
 
+  // Update filter options
+  const filterOptions = [
+    { value: 'all', label: 'All Elections' },
+    { value: 'upcoming', label: 'Upcoming' },
+    { value: 'ongoing', label: 'Ongoing' },
+    { value: 'ended', label: 'Finished' },
+    { value: 'canceled', label: 'Canceled' },
+  ];
+
   // Filter and sort elections when search, filter, or sort changes
   useEffect(() => {
     let result = [...elections];
-    
-    // Apply search filter
     if (search) {
       const searchLower = search.toLowerCase();
-      result = result.filter(election => 
-        election.election_name.toLowerCase().includes(searchLower) || 
+      result = result.filter(election =>
+        election.election_name.toLowerCase().includes(searchLower) ||
         election.election_desc.toLowerCase().includes(searchLower) ||
         election.organization?.org_name.toLowerCase().includes(searchLower)
       );
     }
-    
-    // Apply category filter
-    if (filter === 'soon-ending') {
-      result = result.filter(election => election.status === 'ending-soon' || election.status === 'ending-today');
-    } else if (filter === 'recently-added') {
-      // In a real app, we would filter by creation date
-      // For now, just getting the first few items
-      result = result.slice(0, Math.min(3, result.length));
+    // Updated filtering logic for new status mapping
+    if (filter === 'ongoing') {
+      result = result.filter(election => election.status === 'ongoing' || election.status === 'ending-soon' || election.status === 'ending-today');
+    } else if (filter === 'upcoming') {
+      result = result.filter(election => election.status === 'upcoming');
+    } else if (filter === 'ended') {
+      result = result.filter(election => election.status === 'ended');
+    } else if (filter === 'canceled') {
+      result = result.filter(election => election.status === 'canceled');
     }
-    
-    // Apply sorting
     if (sort === 'end-date') {
       result.sort((a, b) => (a.days_left || 0) - (b.days_left || 0));
     } else if (sort === 'alphabetical') {
       result.sort((a, b) => a.election_name.localeCompare(b.election_name));
     }
-    
     setFilteredElections(result);
   }, [elections, search, filter, sort]);
 
@@ -198,9 +223,9 @@ export default function UserVotesPage() {
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
               >
-                <option value="all">All Elections</option>
-                <option value="soon-ending">Ending Soon</option>
-                <option value="recently-added">Recently Added</option>
+                {filterOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
               <Filter className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
@@ -261,6 +286,9 @@ export default function UserVotesPage() {
                 {election.organization && (
                   <div className="text-sm text-gray-600 mb-1">{election.organization.org_name}</div>
                 )}
+                <div className="text-xs text-gray-500 mb-2">
+                  <span className="font-medium">College:</span> {election.organization?.college_name || 'None'}
+                </div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">{election.election_name}</h3>
                 <p className="text-gray-600 text-sm mb-4">{election.election_desc}</p>
                 <div className="flex items-center mb-4">
@@ -304,6 +332,9 @@ export default function UserVotesPage() {
                   {election.organization && (
                     <div className="text-sm text-gray-600 mb-1">{election.organization.org_name}</div>
                   )}
+                  <div className="text-xs text-gray-500 mb-2">
+                    <span className="font-medium">College:</span> {election.organization?.college_name || 'None'}
+                  </div>
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">{election.election_name}</h3>
                   <p className="text-gray-600 text-sm mb-4">{election.election_desc}</p>
                   <div className="flex items-center">

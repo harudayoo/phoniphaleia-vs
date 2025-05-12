@@ -1,0 +1,435 @@
+import { useEffect, useState } from 'react';
+import Modal from '@/components/Modal';
+import ErrorAlert from '@/components/ErrorAlert';
+import { Copy, Download, Plus } from 'lucide-react';
+
+type Organization = { id: number; name: string; college_name?: string };
+type Admin = { id: number; name: string; email: string };
+
+interface KeyGenerationResponse {
+  public_key: string;
+  private_shares: string[];
+}
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+}
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+const CreateElectionModal: React.FC<Props> = ({ open, onClose }) => {
+  const [step, setStep] = useState(1);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [orgId, setOrgId] = useState<number | undefined>();
+  const [electionName, setElectionName] = useState('');
+  const [description, setDescription] = useState('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [dateStart, setDateStart] = useState<string>('');
+  const [personnel, setPersonnel] = useState<{ name: string; id?: number }[]>([
+    { name: '' }, { name: '' }, { name: '' }
+  ]);
+  const [adminSuggestions, setAdminSuggestions] = useState<Admin[][]>([[], [], []]);
+  const [publicKey, setPublicKey] = useState('');
+  const [privateShares, setPrivateShares] = useState<string[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Reset state on modal open/close
+  useEffect(() => {
+    if (!open) {
+      setStep(1);
+      setElectionName('');
+      setDescription('');
+      setEndDate('');
+      setDateStart('');
+      setOrgId(undefined);
+      setPersonnel([{ name: '' }, { name: '' }, { name: '' }]);
+      setAdminSuggestions([[], [], []]);
+      setPublicKey('');
+      setPrivateShares([]);
+      setError(null);
+      setSuccess(null);
+    }
+  }, [open]);
+
+  // Fetch organizations on open
+  useEffect(() => {
+    if (open) {
+      fetch(`${API_URL}/organizations`)
+        .then(res => res.json())
+        .then((data: Organization[]) => {
+          setOrganizations(
+            data.map(org => ({
+              ...org,
+              college_name: org.college_name ? org.college_name : 'None',
+            }))
+          );
+        })
+        .catch(() => setError('Failed to fetch organizations'));
+      // Fetch current admin info
+      fetch(`${API_URL}/admin/me`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` }
+      })
+        .then(res => res.json())
+        .then((data) => {
+          setPersonnel(p => [{ name: data.full_name, id: data.id_number }, ...p.slice(1)]);
+        })
+        .catch(() => {});
+    }
+  }, [open]);
+
+  // Admin auto-suggest
+  const handlePersonnelChange = (idx: number, value: string): void => {
+    setPersonnel(p => p.map((item, i) => i === idx ? { ...item, name: value } : item));
+    if (value.trim()) {
+      fetch(`${API_URL}/admins/search?query=${encodeURIComponent(value)}`)
+        .then(res => res.json())
+        .then((data: Admin[]) => {
+          setAdminSuggestions(s => s.map((arr, i) => i === idx ? data : arr));
+        });
+    } else {
+      setAdminSuggestions(s => s.map((arr, i) => i === idx ? [] : arr));
+    }
+  };
+
+  // Add personnel input
+  const addPersonnel = (): void => {
+    if (personnel.length < 10) {
+      setPersonnel(p => [...p, { name: '' }]);
+      setAdminSuggestions(s => [...s, []]);
+    }
+  };
+
+  // Generate keys (call backend)
+  const handleGenerateKeys = async (): Promise<void> => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/crypto/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ n_personnel: personnel.length })
+      });
+      if (!res.ok) throw new Error('Failed to generate keys');
+      const data: KeyGenerationResponse = await res.json();
+      setPublicKey(data.public_key);
+      setPrivateShares(data.private_shares);
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Key generation failed');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Save all data
+  const handleFinish = async (): Promise<void> => {
+    setError(null);
+    setSuccess(null);
+    try {
+      // 1. Create election
+      const electionRes = await fetch(`${API_URL}/elections`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          org_id: orgId,
+          election_name: electionName,
+          election_desc: description,
+          election_status: 'Upcoming',
+          date_start: dateStart,
+          date_end: endDate
+        })
+      });
+      if (!electionRes.ok) throw new Error('Failed to create election');
+      const election = await electionRes.json();
+      // 2. Save public key
+      const cryptoRes = await fetch(`${API_URL}/crypto_configs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          election_id: election.election_id,
+          public_key: publicKey
+        })
+      });
+      if (!cryptoRes.ok) throw new Error('Failed to save public key');
+      const crypto = await cryptoRes.json();
+      // 3. Save personnel and key shares
+      for (let i = 0; i < personnel.length; i++) {
+        // Save trusted authority
+        const taRes = await fetch(`${API_URL}/trusted_authorities`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            authority_name: personnel[i].name,
+            contact_info: ''
+          })
+        });
+        if (!taRes.ok) throw new Error('Failed to save trusted authority');
+        const ta = await taRes.json();
+        // Save key share
+        const ksRes = await fetch(`${API_URL}/key_shares`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            crypto_id: crypto.crypto_id,
+            authority_id: ta.authority_id,
+            share_value: privateShares[i]
+          })
+        });
+        if (!ksRes.ok) throw new Error('Failed to save key share');
+      }
+      setSuccess('Election created successfully!');
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Failed to create election');
+    }
+  };
+
+  // Modal content per step
+  let content;
+  if (step === 1) {
+    const selectedOrg = organizations.find(org => org.id === orgId);
+    content = (
+      <div>
+        <h3 className="font-semibold text-lg mb-2">Election Details</h3>
+        <p className="text-gray-600 mb-4">Input general election details</p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Organization</label>
+            <select
+              className="w-full border rounded px-3 py-2"
+              value={orgId ?? ''}
+              onChange={e => setOrgId(Number(e.target.value))}
+            >
+              <option value="" disabled>Select organization</option>
+              {organizations.map(org => (
+                <option key={org.id} value={org.id}>{org.name}</option>
+              ))}
+            </select>
+            {selectedOrg && (
+              <div className="mt-2 text-xs text-gray-600">
+                <span className="font-medium">College:</span> {selectedOrg.college_name || 'None'}
+              </div>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Election Name</label>
+            <input
+              className="w-full border rounded px-3 py-2"
+              value={electionName}
+              onChange={e => setElectionName(e.target.value)}
+              placeholder="Election name"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Description</label>
+            <textarea
+              className="w-full border rounded px-3 py-2"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Description"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Start Date</label>
+            <input
+              type="date"
+              className="w-full border rounded px-3 py-2"
+              value={dateStart}
+              onChange={e => setDateStart(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">End Date</label>
+            <input
+              type="date"
+              className="w-full border rounded px-3 py-2"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  } else if (step === 2) {
+    content = (
+      <div>
+        <h3 className="font-semibold text-lg mb-2">Authorized Personnel</h3>
+        <p className="text-gray-600 mb-4">Trusted personnel needed for key decryption</p>
+        <div className="space-y-4">
+          {personnel.map((p, idx) => (
+            <div key={idx} className="relative">
+              <input
+                className="w-full border rounded px-3 py-2"
+                value={p.name}
+                onChange={e => handlePersonnelChange(idx, e.target.value)}
+                placeholder={`Assign Personnel Name #${idx + 1}`}
+                autoComplete="off"
+              />
+              {adminSuggestions[idx] && adminSuggestions[idx].length > 0 && (
+                <div className="absolute z-10 bg-white border rounded shadow w-full mt-1">
+                  {adminSuggestions[idx].map(admin => (
+                    <div
+                      key={admin.id}
+                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                      onClick={() => setPersonnel(pers => pers.map((item, i) => i === idx ? { name: admin.name, id: admin.id } : item))}
+                    >
+                      {admin.name} <span className="text-xs text-gray-500">{admin.email}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded hover:bg-gray-200 text-sm mt-2"
+            onClick={addPersonnel}
+            disabled={personnel.length >= 10}
+          >
+            <Plus size={16} /> Add Personnel
+          </button>
+        </div>
+      </div>
+    );
+  } else {
+    // Step 3
+    content = (
+      <div>
+        <h3 className="font-semibold text-lg mb-2">Security Keys</h3>
+        <p className="text-gray-600 mb-4">Improved Key Generation</p>
+        <div className="mb-4">
+          <button
+            type="button"
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            onClick={handleGenerateKeys}
+            disabled={generating || !!publicKey}
+          >
+            {generating ? 'Generating...' : 'Generate Key Pair'}
+          </button>
+        </div>
+        {publicKey && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Public Key</label>
+            <div className="flex items-center gap-2">
+              <input
+                className="w-full border rounded px-3 py-2"
+                value={publicKey}
+                readOnly
+              />
+              <button
+                type="button"
+                className="p-2 bg-gray-100 rounded hover:bg-gray-200"
+                onClick={() => navigator.clipboard.writeText(publicKey)}
+              >
+                <Copy size={16} />
+              </button>
+              <button
+                type="button"
+                className="p-2 bg-gray-100 rounded hover:bg-gray-200"
+                onClick={() => {
+                  const blob = new Blob([publicKey], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'public_key.txt';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Download size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+        {privateShares.length > 0 && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Private Key Shares</label>
+            <div className="space-y-2">
+              {privateShares.map((share, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <input
+                    className="w-full border rounded px-3 py-2"
+                    value={share}
+                    readOnly
+                  />
+                  {/* Only allow save to txt, no copy button */}
+                  <button
+                    type="button"
+                    className="p-2 bg-gray-100 rounded hover:bg-gray-200"
+                    onClick={() => {
+                      const blobObj = new Blob([share], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blobObj);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `private_share_${idx + 1}.txt`;
+                      a.click();
+                      setTimeout(() => URL.revokeObjectURL(url), 100);
+                    }}
+                  >
+                    <Download size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Create footer buttons with proper keys and handling
+  const footerButtons = [];
+  if (step > 1) {
+    footerButtons.push(
+      <button key="back" className="px-4 py-2 bg-gray-200 text-gray-700 rounded mr-2" onClick={() => setStep(step - 1)}>
+        Back
+      </button>
+    );
+  }
+  if (step < 3) {
+    footerButtons.push(
+      <button
+        key="next"
+        className="px-4 py-2 bg-red-700 text-white rounded"
+        onClick={() => setStep(step + 1)}
+        disabled={
+          (step === 1 && (!orgId || !electionName || !description || !endDate || !dateStart)) ||
+          (step === 2 && personnel.some(p => !p.name))
+        }
+      >
+        Next
+      </button>
+    );
+  } else {
+    footerButtons.push(
+      <button
+        key="finish"
+        className="px-4 py-2 bg-green-700 text-white rounded"
+        onClick={handleFinish}
+        disabled={!publicKey || privateShares.length !== personnel.length}
+      >
+        Finish
+      </button>
+    );
+  }
+
+  return (
+    <Modal
+      isOpen={open}
+      onClose={onClose}
+      title="Create New Election"
+      size="md"
+      footer={footerButtons}
+    >
+      {error && <ErrorAlert message={error} onDismiss={() => setError(null)} />}
+      {success && <div className="bg-green-100 text-green-800 rounded p-3 mb-4 text-center">{success}</div>}
+      {content}
+    </Modal>
+  );
+};
+
+export default CreateElectionModal;

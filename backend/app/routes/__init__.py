@@ -1,8 +1,4 @@
 # routes/__init__.py
-from flask import Blueprint
-
-# Create the main blueprint
-main_bp = Blueprint('main', __name__)
 
 # Import routes to register them with the blueprint
 from .auth_routes import auth_bp
@@ -12,6 +8,11 @@ from .election_routes import election_bp
 from .user_routes import user_bp
 from .organization_routes import organization_bp
 from .position_routes import position_bp
+from .trusted_authority_routes import trusted_authority_bp
+from .crypto_config_routes import crypto_config_bp
+from .key_share_routes import key_share_bp
+from .crypto_routes import crypto_bp
+from .admin_search_routes import admin_search_bp
 
 # Define __all__ for clarity
 __all__ = [
@@ -22,4 +23,9 @@ __all__ = [
     "user_bp",
     "organization_bp",
     "position_bp",
+    "trusted_authority_bp",
+    "crypto_config_bp",
+    "key_share_bp",
+    "crypto_bp",
+    "admin_search_bp",
 ]

@@ -19,7 +19,7 @@ export default function FilterSelect({
   return (
     <div className="relative">
       <select
-        className="appearance-none bg-white border border-gray-300 rounded-lg pl-10 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+        className="appearance-none bg-white border border-gray-300 text-gray-600 rounded-lg pl-10 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >

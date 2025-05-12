@@ -11,6 +11,14 @@ interface ElectionStats {
   completed: number;
 }
 
+interface Election {
+  election_id: number;
+  election_name: string;
+  election_desc: string;
+  date_start: string;
+  date_end: string;
+}
+
 export default function UserDashboard() {
   useUser();
   const [electionStats, setElectionStats] = useState<ElectionStats>({
@@ -18,21 +26,60 @@ export default function UserDashboard() {
     upcoming: 0,
     completed: 0
   });
-  
-  // Fetch election stats on component mount
+  const [elections, setElections] = useState<Election[]>([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    // This would be replaced with an actual API call
-    // Example: fetch(`${API_URL}/user/election_stats`)
-    
-    // Mock data for now
-    const mockStats = {
-      ongoing: 2,
-      upcoming: 1,
-      completed: 5
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const fetchElections = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_URL}/elections`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('voter_token')}` }
+        });
+        const data = await res.json();
+        setElections(data);
+        // Calculate stats
+        let ongoing = 0, upcoming = 0, completed = 0;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        data.forEach((election: Election) => {
+          const [year, month, day] = election.date_end.split('-').map(Number);
+          const endDate = new Date(year, month - 1, day);
+          endDate.setHours(23, 59, 59, 999);
+          const diffTime = endDate.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          if (diffDays < 0) completed++;
+          else if ((diffDays === 0 || diffDays > 0) && new Date(election.date_start) <= today) ongoing++;
+          else if (new Date(election.date_start) > today) upcoming++;
+        });
+        setElectionStats({ ongoing, upcoming, completed });
+      } catch {
+        setElectionStats({ ongoing: 0, upcoming: 0, completed: 0 });
+      } finally {
+        setLoading(false);
+      }
     };
-    
-    setElectionStats(mockStats);
+    fetchElections();
   }, []);
+
+  // Helper function to check if an election is ongoing
+  const isOngoing = (election: Election): boolean => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const [year, month, day] = election.date_end.split('-').map(Number);
+      const endDate = new Date(year, month - 1, day);
+      endDate.setHours(23, 59, 59, 999);
+      const diffTime = endDate.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && new Date(election.date_start) <= today;
+    } catch {
+      return false;
+    }
+  };
+
+  const ongoingElections = elections.filter(isOngoing);
 
   return (
     <UserLayout>
@@ -77,7 +124,7 @@ export default function UserDashboard() {
         <div className="bg-white rounded-xl shadow p-6 border border-gray-200">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">Quick Access</h2>
           <div className="grid grid-cols-2 gap-4">
-            <Link href="/user/vote">
+            <Link href="/user/votes">
               <button className="w-full py-3 px-4 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-left transition duration-200">
                 <span className="block font-medium">Cast Vote</span>
                 <span className="text-xs text-red-600">View active ballots</span>
@@ -107,41 +154,43 @@ export default function UserDashboard() {
         {/* Current Elections */}
         <div className="bg-white rounded-xl shadow p-6 border border-gray-200">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">Current Elections</h2>
-          
-          {electionStats.ongoing > 0 ? (
-            <div className="space-y-4">
-              {/* Election items would be mapped from actual data */}
-              <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
-                <div className="flex justify-between">
-                  <h3 className="font-medium text-gray-800">Student Council Election</h3>
-                  <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">Ends in 2 days</span>
-                </div>
-                <p className="text-sm text-gray-600 mt-1">Cast your vote for student representatives.</p>
-                <Link href="/user/vote/student-council-2025">
-                  <button className="mt-3 text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded flex items-center gap-1">
-                    Vote Now <ArrowRight size={14} />
-                  </button>
-                </Link>
-              </div>
-              
-              <div className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
-                <div className="flex justify-between">
-                  <h3 className="font-medium text-gray-800">Department Chair Selection</h3>
-                  <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">Ends in 5 days</span>
-                </div>
-                <p className="text-sm text-gray-600 mt-1">Select your preferred department chair candidate.</p>
-                <Link href="/user/vote/dept-chair-2025">
-                  <button className="mt-3 text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded flex items-center gap-1">
-                    Vote Now <ArrowRight size={14} />
-                  </button>
-                </Link>
-              </div>
-            </div>
+          {loading ? (
+            <div className="text-gray-500">Loading...</div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-              <p>No ongoing elections at this time.</p>
-              <p className="text-sm mt-1">Check back soon for upcoming votes!</p>
-            </div>
+            ongoingElections.length > 0 ? (
+              <div className="space-y-4">
+                {ongoingElections.map((election: Election) => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const [year, month, day] = election.date_end.split('-').map(Number);
+                  const endDate = new Date(year, month - 1, day);
+                  endDate.setHours(23, 59, 59, 999);
+                  const diffTime = endDate.getTime() - today.getTime();
+                  const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  return (
+                    <div key={election.election_id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+                      <div className="flex justify-between">
+                        <h3 className="font-medium text-gray-800">{election.election_name}</h3>
+                        <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
+                          Ends in {daysLeft} days
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mt-1">{election.election_desc}</p>
+                      <Link href={`/user/vote/${election.election_id}`}>
+                        <button className="mt-3 text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded flex items-center gap-1">
+                          Vote Now <ArrowRight size={14} />
+                        </button>
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                <p>No ongoing elections at this time.</p>
+                <p className="text-sm mt-1">Check back soon for upcoming votes!</p>
+              </div>
+            )
           )}
         </div>
       </div>

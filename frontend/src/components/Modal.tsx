@@ -51,10 +51,12 @@ const Modal = ({
         className={`bg-white rounded-xl p-6 w-full shadow-xl border border-gray-100 ${sizeClasses[size]} animate-fadeIn`}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-5">
-          <h3 className="text-xl font-bold text-gray-900">{title}</h3>
+        <div className="flex justify-between items-center mb-5 relative">
+          <div className="absolute left-0 right-0 flex justify-center pointer-events-none">
+            <h3 className="text-xl font-bold text-red-950 pointer-events-auto">{title}</h3>
+          </div>
           <button 
-            className="text-gray-500 hover:text-gray-700" 
+            className="text-gray-500 hover:text-gray-700 ml-auto relative z-10" 
             onClick={onClose}
             aria-label="Close modal"
           >

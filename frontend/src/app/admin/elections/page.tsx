@@ -1,31 +1,52 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import AdminLayout from '@/layouts/AdminLayout';
 import { FaEdit, FaTrash, FaEye } from 'react-icons/fa';
-import { Filter, MoreVertical, Calendar, Users, Award } from 'lucide-react';
-import Link from 'next/link';
+import { Filter, Calendar, Users, Award } from 'lucide-react';
 import PageHeader from '@/components/admin/PageHeader';
 import SearchFilterBar from '@/components/admin/SearchFilterBar';
 import FilterSelect from '@/components/admin/FilterSelect';
 import DataView from '@/components/admin/DataView';
+import LoadingState from '@/components/admin/LoadingState';
+import NothingIcon from '@/components/NothingIcon';
+import CreateElectionModal from '@/components/admin/CreateElectionModal';
+import EntityDetailModal from '@/components/admin/EntityDetailModal';
+import EntityFormModal from '@/components/admin/EntityFormModal';
+import DeleteConfirmationModal from '@/components/admin/DeleteConfirmationModal';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 type Election = {
   election_id: number;
   election_name: string;
   election_desc: string;
-  election_status: 'Ongoing' | 'Scheduled' | 'Finished' | 'Canceled';
+  election_status: 'Active' | 'Ended' | 'Canceled';
   date_start: string;
   date_end: string;
   organization?: { org_name: string };
   voters_count: number;
   participation_rate?: number;
+  college_name?: string;
+};
+
+type ElectionAPIResponse = {
+  election_id: number;
+  election_name: string;
+  election_desc: string;
+  election_status: 'Active' | 'Ended' | 'Canceled';
+  date_start: string | null;
+  date_end: string | null;
+  organization?: { org_name: string | null };
+  voters_count: number;
+  participation_rate?: number | null;
 };
 
 const statusOptions = [
   { value: 'ALL', label: 'All Status' },
-  { value: 'Ongoing', label: 'Ongoing' },
-  { value: 'Scheduled', label: 'Scheduled' },
-  { value: 'Finished', label: 'Finished' },
+  { value: 'Active', label: 'Ongoing' },
+  { value: 'Upcoming', label: 'Upcoming' },
+  { value: 'Ended', label: 'Finished' },
   { value: 'Canceled', label: 'Canceled' }
 ];
 
@@ -44,93 +65,175 @@ export default function AdminElectionsPage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('date_end');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [organizations, setOrganizations] = useState<{ id: number; name: string; college_name: string }[]>([]);
+  const [selectedElection, setSelectedElection] = useState<Election | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Election> | null>(null);
+
+  // Add useForm for editing elections
+  const {
+    register: editRegister,
+    handleSubmit: handleEditSubmit,
+    formState: { errors: editErrors },
+    reset: resetEditForm
+  } = useForm<Election>({
+    defaultValues: editForm ?? undefined
+  });
+
+  // When editForm changes (i.e., when opening the edit modal), reset the form values
+  useEffect(() => {
+    if (editForm) {
+      resetEditForm(editForm as Election);
+    }
+  }, [editForm, resetEditForm]);
 
   useEffect(() => {
-    const mockData: Election[] = [
-      {
-        election_id: 1,
-        election_name: "Student Council Election",
-        election_desc: "Annual election for student government positions",
-        election_status: "Ongoing",
-        date_start: "2025-05-01",
-        date_end: "2025-05-15",
-        organization: { org_name: "Student Affairs Office" },
-        voters_count: 3470,
-        participation_rate: 57.2
-      },
-      {
-        election_id: 2,
-        election_name: "Library Committee Representatives",
-        election_desc: "Selection for library committee student members",
-        election_status: "Scheduled",
-        date_start: "2025-06-01",
-        date_end: "2025-06-10",
-        organization: { org_name: "University Library" },
-        voters_count: 1240,
-        participation_rate: undefined
-      },
-      {
-        election_id: 3,
-        election_name: "Department Chair Selection",
-        election_desc: "Faculty voting for department chair position",
-        election_status: "Finished",
-        date_start: "2025-03-20",
-        date_end: "2025-04-05",
-        organization: { org_name: "Computer Science Department" },
-        voters_count: 128,
-        participation_rate: 92.3
-      },
-      {
-        election_id: 4,
-        election_name: "Dormitory Council Election",
-        election_desc: "Annual election for dormitory representatives",
-        election_status: "Scheduled",
-        date_start: "2025-07-10",
-        date_end: "2025-07-20",
-        organization: { org_name: "Campus Housing" },
-        voters_count: 856,
-        participation_rate: undefined
-      },
-      {
-        election_id: 5,
-        election_name: "Sports Committee Election",
-        election_desc: "Selection of student sports representatives",
-        election_status: "Ongoing",
-        date_start: "2025-05-05",
-        date_end: "2025-05-18",
-        organization: { org_name: "Athletics Department" },
-        voters_count: 745,
-        participation_rate: 31.8
-      },
-      {
-        election_id: 6,
-        election_name: "Graduate Student Association",
-        election_desc: "Board member selection for graduate student body",
-        election_status: "Finished",
-        date_start: "2025-02-15",
-        date_end: "2025-02-28",
-        organization: { org_name: "Graduate School" },
-        voters_count: 423,
-        participation_rate: 76.5
-      },
-      {
-        election_id: 7,
-        election_name: "Budget Advisory Committee",
-        election_desc: "Student representatives for budget oversight",
-        election_status: "Canceled",
-        date_start: "2025-04-10",
-        date_end: "2025-04-25",
-        organization: { org_name: "Finance Office" },
-        voters_count: 0,
-        participation_rate: 0
+    async function fetchOrganizations() {
+      try {
+        const res = await fetch(`${API_URL}/organizations`);
+        if (!res.ok) throw new Error('Failed to fetch organizations');
+        const orgs: { id: number; name: string; college_name?: string }[] = await res.json();
+        setOrganizations(
+          orgs.map(org => ({
+            id: org.id,
+            name: org.name,
+            college_name: org.college_name || 'None',
+          }))
+        );
+      } catch {
+        // Optionally handle error
       }
-    ];
-
-    setTimeout(() => {
-      setElections(mockData);
-      setLoading(false);
-    }, 800);
+    }
+    fetchOrganizations();
   }, []);
+
+  useEffect(() => {
+    async function fetchElections() {
+      try {
+        setLoading(true);
+        const response = await fetch(`${API_URL}/elections`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch elections: ${response.status}`);
+        }
+        const data: ElectionAPIResponse[] = await response.json();
+
+        const processedData: Election[] = data
+          .filter((e): e is ElectionAPIResponse =>
+            typeof e.election_id === 'number' &&
+            typeof e.election_name === 'string' &&
+            typeof e.election_desc === 'string' &&
+            typeof e.election_status === 'string' &&
+            (typeof e.date_start === 'string' || e.date_start === null) &&
+            (typeof e.date_end === 'string' || e.date_end === null)
+          )
+          .map(e => {
+            let collegeName = 'None';
+            if (e.organization && e.organization.org_name) {
+              const org = organizations.find(
+                o => o.name === e.organization!.org_name
+              );
+              if (org && org.college_name) {
+                collegeName = org.college_name;
+              }
+            }
+            return {
+              election_id: e.election_id,
+              election_name: e.election_name,
+              election_desc: e.election_desc,
+              election_status: e.election_status as 'Active' | 'Ended' | 'Canceled',
+              date_start: e.date_start ?? '',
+              date_end: e.date_end ?? '',
+              organization: e.organization
+                ? { org_name: e.organization.org_name ?? '' }
+                : undefined,
+              voters_count: e.voters_count ?? 0,
+              participation_rate: e.participation_rate ?? undefined,
+              college_name: collegeName,
+            };
+          });
+
+        setElections(processedData);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching elections:', err);
+        setError('Failed to load elections. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchElections();
+  }, [organizations]);
+
+  const handleShowInfo = (election: Election) => {
+    setSelectedElection(election);
+    setShowDetailModal(true);
+  };
+
+  const handleEdit = (election: Election) => {
+    setEditForm(election);
+    setShowEditModal(true);
+  };
+
+  const handleDelete = (election: Election) => {
+    setSelectedElection(election);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedElection) return;
+    try {
+      setLoading(true);
+      await fetch(`${API_URL}/elections/${selectedElection.election_id}`, {
+        method: 'DELETE',
+      });
+      setElections(prev => prev.filter(e => e.election_id !== selectedElection.election_id));
+      setShowDeleteModal(false);
+      setSelectedElection(null);
+    } catch {
+      setError('Failed to delete election.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveEdit = async (updated: Partial<Election>) => {
+    if (!editForm) return;
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_URL}/elections/${editForm.election_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      });
+      if (!res.ok) throw new Error('Failed to update election');
+      const updatedElection: Election = await res.json();
+      setElections(prev => prev.map(e => e.election_id === updatedElection.election_id ? { ...e, ...updatedElection } : e));
+      setShowEditModal(false);
+      setEditForm(null);
+    } catch {
+      setError('Failed to update election.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getDetailEntity = (election: Election | null) => {
+    if (!election) return null;
+    return {
+      ...election,
+      organization: election.organization?.org_name || '',
+      date_start: election.date_start || '',
+      date_end: election.date_end || '',
+      college_name: election.college_name || 'None',
+      voters_count: election.voters_count,
+      participation_rate: election.participation_rate,
+    };
+  };
 
   const filtered = elections
     .filter(e =>
@@ -154,12 +257,10 @@ export default function AdminElectionsPage() {
 
   const getStatusBadge = (status: string) => {
     switch(status) {
-      case 'Ongoing':
-        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Ongoing</span>;
-      case 'Scheduled':
-        return <span className="px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-full">Scheduled</span>;
-      case 'Finished':
-        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Finished</span>;
+      case 'Active':
+        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Active</span>;
+      case 'Ended':
+        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Ended</span>;
       case 'Canceled':
         return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Canceled</span>;
       default:
@@ -177,9 +278,8 @@ export default function AdminElectionsPage() {
 
   const renderGridItem = (election: Election) => {
     const daysRemaining = getDaysRemaining(election.date_end);
-    const isActive = election.election_status === 'Ongoing';
-    const isScheduled = election.election_status === 'Scheduled';
-    const hasEnded = election.election_status === 'Finished' || election.election_status === 'Canceled';
+    const isActive = election.election_status === 'Active';
+    const hasEnded = election.election_status === 'Ended' || election.election_status === 'Canceled';
     
     return (
       <div key={election.election_id} className="border rounded-xl bg-white shadow overflow-hidden flex flex-col">
@@ -190,7 +290,9 @@ export default function AdminElectionsPage() {
           </div>
           <h3 className="text-lg font-semibold text-gray-800 mb-2">{election.election_name}</h3>
           <p className="text-sm text-gray-500 mb-4">{election.election_desc}</p>
-          
+          <div className="text-xs text-gray-500 mb-2">
+            <span className="font-medium">College:</span> {election.college_name || 'None'}
+          </div>
           <div className="space-y-2">
             <div className="flex items-center text-sm">
               <Calendar className="h-4 w-4 text-gray-400 mr-2" />
@@ -210,16 +312,10 @@ export default function AdminElectionsPage() {
             )}
           </div>
         </div>
-        
         <div className="px-6 pb-6 flex justify-between items-center mt-2">
           {isActive && (
             <div className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
               {daysRemaining > 0 ? `${daysRemaining} days remaining` : "Ends today"}
-            </div>
-          )}
-          {isScheduled && (
-            <div className="text-xs px-2 py-1 bg-amber-100 text-amber-800 rounded">
-              {`Starts in ${Math.abs(getDaysRemaining(election.date_start))} days`}
             </div>
           )}
           {hasEnded && (
@@ -227,19 +323,14 @@ export default function AdminElectionsPage() {
               Ended {Math.abs(daysRemaining)} days ago
             </div>
           )}
-          
           <div className="flex gap-2">
-            <Link href={`/admin/elections/${election.election_id}`}>
-              <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
-                <FaEye size={16} />
-              </button>
-            </Link>
-            <Link href={`/admin/elections/${election.election_id}/edit`}>
-              <button className="p-2 text-amber-600 hover:bg-amber-50 rounded" disabled={hasEnded}>
-                <FaEdit size={16} />
-              </button>
-            </Link>
-            <button className="p-2 text-red-600 hover:bg-red-50 rounded" disabled={hasEnded}>
+            <button className="p-2 text-blue-600 hover:bg-blue-50 rounded" onClick={() => handleShowInfo(election)}>
+              <FaEye size={16} />
+            </button>
+            <button className="p-2 text-amber-600 hover:bg-amber-50 rounded" disabled={hasEnded} onClick={() => handleEdit(election)}>
+              <FaEdit size={16} />
+            </button>
+            <button className="p-2 text-red-600 hover:bg-red-50 rounded" disabled={hasEnded} onClick={() => handleDelete(election)}>
               <FaTrash size={16} />
             </button>
           </div>
@@ -250,9 +341,8 @@ export default function AdminElectionsPage() {
 
   const renderListItem = (election: Election) => {
     const daysRemaining = getDaysRemaining(election.date_end);
-    const isActive = election.election_status === 'Ongoing';
-    const isScheduled = election.election_status === 'Scheduled';
-    const hasEnded = election.election_status === 'Finished' || election.election_status === 'Canceled';
+    const isActive = election.election_status === 'Active';
+    const hasEnded = election.election_status === 'Ended' || election.election_status === 'Canceled';
     
     return (
       <div key={election.election_id} className="border rounded-lg bg-white shadow p-4">
@@ -262,17 +352,14 @@ export default function AdminElectionsPage() {
         </div>
         <h3 className="text-lg font-semibold text-gray-800 mb-1">{election.election_name}</h3>
         <p className="text-sm text-gray-500 mb-3">{election.election_desc}</p>
-        
+        <div className="text-xs text-gray-500 mb-2">
+          <span className="font-medium">College:</span> {election.college_name || 'None'}
+        </div>
         <div className="flex justify-between items-center">
           <div className="text-sm text-gray-600">
             {isActive && (
               <span className="text-blue-700">
                 {daysRemaining > 0 ? `${daysRemaining} days remaining` : "Ends today"}
-              </span>
-            )}
-            {isScheduled && (
-              <span className="text-amber-700">
-                {`Starts in ${Math.abs(getDaysRemaining(election.date_start))} days`}
               </span>
             )}
             {hasEnded && (
@@ -284,26 +371,16 @@ export default function AdminElectionsPage() {
               <span className="ml-4 text-green-700">{election.participation_rate}% participation</span>
             )}
           </div>
-          
           <div className="flex gap-2">
-            <Link href={`/admin/elections/${election.election_id}`}>
-              <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
-                <FaEye size={16} />
-              </button>
-            </Link>
-            <Link href={`/admin/elections/${election.election_id}/edit`}>
-              <button className="p-2 text-amber-600 hover:bg-amber-50 rounded" disabled={hasEnded}>
-                <FaEdit size={16} />
-              </button>
-            </Link>
-            <button className="p-2 text-red-600 hover:bg-red-50 rounded" disabled={hasEnded}>
+            <button className="p-2 text-blue-600 hover:bg-blue-50 rounded" onClick={() => handleShowInfo(election)}>
+              <FaEye size={16} />
+            </button>
+            <button className="p-2 text-amber-600 hover:bg-amber-50 rounded" disabled={hasEnded} onClick={() => handleEdit(election)}>
+              <FaEdit size={16} />
+            </button>
+            <button className="p-2 text-red-600 hover:bg-red-50 rounded" disabled={hasEnded} onClick={() => handleDelete(election)}>
               <FaTrash size={16} />
             </button>
-            <div className="relative">
-              <button className="p-2 text-gray-600 hover:bg-gray-50 rounded">
-                <MoreVertical size={16} />
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -342,21 +419,26 @@ export default function AdminElectionsPage() {
         title="Election Management"
         description="Manage and view all elections."
         addButtonText="Create New Election"
-        onAdd={() => {
-          // Redirect to create page
-          window.location.href = '/admin/elections/create';
-        }}
+        onAdd={() => setModalOpen(true)}
       >
         {loading ? (
-          <div className="text-center py-12 text-gray-500">Loading...</div>
-        ) : filtered.length === 0 ? (
+          <LoadingState message="Loading elections..." />
+        ) : error ? (
           <div className="text-center py-12">
-            <h3 className="text-lg font-semibold mb-2">No elections found</h3>
-            <p className="text-gray-500 mb-4">
-              {search || status !== 'ALL' 
-                ? 'Try adjusting your search or filters' 
-                : 'Get started by creating your first election'}
-            </p>
+            <h3 className="text-lg font-semibold mb-2 text-red-600">Error</h3>
+            <p className="text-gray-500">{error}</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-xl shadow p-8 border border-gray-200 text-center">
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-gray-700">
+              <NothingIcon className="mb-4" width={64} height={64} />
+              <span className="text-lg font-semibold">No elections found</span>
+              <p className="text-gray-500 mt-2">
+                {search || status !== 'ALL' 
+                  ? 'Try adjusting your search or filters' 
+                  : 'Get started by creating your first election'}
+              </p>
+            </div>
           </div>
         ) : view === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -368,6 +450,47 @@ export default function AdminElectionsPage() {
           </div>
         )}
       </DataView>
+      <CreateElectionModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <EntityDetailModal
+        isOpen={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        entity={getDetailEntity(selectedElection)}
+        columns={[
+          { key: 'election_name', header: 'Election Name' },
+          { key: 'election_desc', header: 'Description' },
+          { key: 'date_start', header: 'Start Date', render: e => e.date_start ? new Date(e.date_start).toLocaleDateString() : '' },
+          { key: 'date_end', header: 'End Date', render: e => e.date_end ? new Date(e.date_end).toLocaleDateString() : '' },
+          { key: 'organization', header: 'Organization' },
+          { key: 'college_name', header: 'College' },
+          { key: 'voters_count', header: 'Eligible Voters' },
+          { key: 'participation_rate', header: 'Participation Rate', render: e => e.participation_rate !== undefined ? `${e.participation_rate}%` : 'N/A' },
+        ]}
+        onEdit={() => { setShowDetailModal(false); if (selectedElection) handleEdit(selectedElection); }}
+        onDelete={() => { setShowDetailModal(false); if (selectedElection) handleDelete(selectedElection); }}
+      />
+      <EntityFormModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title="Edit Election"
+        fields={[
+          { name: 'election_name', label: 'Election Name', type: 'text', required: true },
+          { name: 'election_desc', label: 'Description', type: 'textarea' },
+          { name: 'date_start', label: 'Start Date', type: 'text', required: true },
+          { name: 'date_end', label: 'End Date', type: 'text', required: true },
+        ]}
+        onSubmit={handleEditSubmit(saveEdit)}
+        register={editRegister}
+        errors={editErrors}
+        isEdit={true}
+      />
+      <DeleteConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onDelete={confirmDelete}
+        title="Delete Election"
+        entityName={selectedElection?.election_name || ''}
+        warningMessage="This will permanently delete the election and all related data."
+      />
     </AdminLayout>
   );
 }
