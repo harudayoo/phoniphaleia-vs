@@ -2,7 +2,7 @@ import React from "react";
 
 export default function Footer() {
   return (
-    <footer className="bg-gradient-to-b from-gray-50 via-gray-200 to-gray-400 text-white p-1">
+    <footer className="bg-gradient-to-t from-gray-400 via-gray-200 to-transparent text-white p-1">
       <div className="container mx-auto">
         <div className="flex flex-col items-center justify-center">
           <div className="flex space-x-4 mb-2">
