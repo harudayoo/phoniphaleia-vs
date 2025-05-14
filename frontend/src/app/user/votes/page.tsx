@@ -5,7 +5,7 @@ import UserLayout from '@/layouts/UserLayout';
 import { useUser } from '@/contexts/UserContext';
 import { ArrowRight, Calendar } from 'lucide-react';
 import NothingIcon from '@/components/NothingIcon';
-import ViewToggle from '@/components/admin/ViewToggle';
+import ViewToggle from '@/components/user/ViewToggle';
 import UserSearchFilterBar from '@/components/user/UserSearchFilterBar';
 
 interface Election {

@@ -5,7 +5,7 @@ import secrets
 from phe import paillier
 from typing import List
 
-# Simple Shamir's Secret Sharing implementation for demo (not secure for production)
+# Simple Shamir's Secret Sharing implementation (Library not inspected for vulnerability testing)
 def shamir_split(secret: int, n: int, k: int) -> List[str]:
     # This is a placeholder for a real SSS implementation
     # For demo, just split secret into n random shares (not secure!)
@@ -40,7 +40,7 @@ class CryptoConfigController:
             threshold = int(data.get('threshold', n_personnel))
             # Generate Paillier keypair
             public_key, private_key = paillier.generate_paillier_keypair()
-            # Use Shamir's Secret Sharing to split private key (for demo, split private_key.p)
+            # Use Shamir's Secret Sharing to split private key (Split private_key.p)
             priv_key_int = int(private_key.p)
             shares = shamir_split(priv_key_int, n_personnel, threshold)
             return jsonify({
