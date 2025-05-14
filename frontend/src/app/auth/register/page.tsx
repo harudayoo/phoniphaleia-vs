@@ -34,7 +34,7 @@ interface RegisterFormData {
 
 interface College {
   college_id: number;
-  name: string;
+  college_name: string;
 }
 
 export default function Register() {
@@ -451,7 +451,7 @@ export default function Register() {
               <option value="">Select College</option>
               {colleges.map(college => (
                 <option key={college.college_id} value={college.college_id}>
-                  {college.name}
+                  {college.college_name}
                 </option>
               ))}
             </select>
@@ -546,7 +546,7 @@ export default function Register() {
                             <p><strong>Student ID:</strong> {formValues.student_id}</p>
                             <p><strong>Email:</strong> {formValues.student_email}@usep.edu.ph</p>
                             <p><strong>Status:</strong> {formValues.status}</p>
-                            <p><strong>College:</strong> {colleges.find(c => c.college_id.toString() === formValues.college_id)?.name || formValues.college_id}</p>
+                            <p><strong>College:</strong> {colleges.find(c => c.college_id.toString() === formValues.college_id)?.college_name || formValues.college_id}</p>
                             <p><strong>Program:</strong> {formValues.program}</p>
                             <p><strong>Major:</strong> {formValues.major}</p>
                             <p><strong>ID Photo:</strong> {idPicture ? 'Photo uploaded' : 'No photo uploaded'}</p>
@@ -558,7 +558,7 @@ export default function Register() {
                     <label htmlFor="password" className="block text-sm font-medium text-gray-500">
                         Password <span className="text-red-500">*</span>
                     </label>
-                    <div className="mt-1 relative">
+                    <div className="mt-1 flex items-center relative">
                         <input
                             id="password"
                             type={showPassword ? 'text' : 'password'}
@@ -569,12 +569,13 @@ export default function Register() {
                                     message: 'Password must be at least 8 characters',
                                 },
                             })}
-                            className="block w-full rounded-md text-gray-800 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+                            className="block w-full rounded-md text-gray-800 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800 pr-10"
                         />
                         <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
-                            className="absolute inset-y-0 right-0 flex items-center pr-3"
+                            className="ml-[-2.5rem] z-10 p-1 bg-transparent border-none focus:outline-none"
+                            tabIndex={-1}
                         >
                             {showPassword ? (
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
@@ -589,21 +590,21 @@ export default function Register() {
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                                     <path
                                         fillRule="evenodd"
-                                        d="M3.293 9.293a1 1 0 011.414 0L10 14.586l5.293-5.293a1 1 0 011.414 1.414l-6 6a1 1 0 010-1.414z"
+                                        d="M3.293 9.293a1 1 0 011.414 0L10 14.586l5.293-5.293a1 1 0 011.414 1.414l-6-6a1 1 0 010-1.414z"
                                         clipRule="evenodd"
                                     />
                                 </svg>
                             )}
                         </button>
-                        {errors.password && <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>}
                     </div>
+                    {errors.password && <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>}
                 </div>
 
                 <div>
                     <label htmlFor="confirm_password" className="block text-sm font-medium text-gray-500">
                         Confirm Password <span className="text-red-500">*</span>
                     </label>
-                    <div className="mt-1 relative">
+                    <div className="mt-1 flex items-center relative">
                         <input
                             id="confirm_password"
                             type={showConfirmPassword ? 'text' : 'password'}
@@ -611,12 +612,13 @@ export default function Register() {
                                 required: 'Please confirm your password',
                                 validate: (value) => value === password || 'Passwords do not match',
                             })}
-                            className="block w-full rounded-md text-gray-800 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
+                            className="block w-full rounded-md text-gray-800 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800 pr-10"
                         />
                         <button
                             type="button"
                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            className="absolute inset-y-0 right-0 flex items-center pr-3"
+                            className="ml-[-2.5rem] z-10 p-1 bg-transparent border-none focus:outline-none"
+                            tabIndex={-1}
                         >
                             {showConfirmPassword ? (
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
@@ -637,8 +639,8 @@ export default function Register() {
                                 </svg>
                             )}
                         </button>
-                        {errors.confirm_password && <p className="mt-2 text-sm text-red-600">{errors.confirm_password.message}</p>}
                     </div>
+                    {errors.confirm_password && <p className="mt-2 text-sm text-red-600">{errors.confirm_password.message}</p>}
                 </div>
             </>
         );
