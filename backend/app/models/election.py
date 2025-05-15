@@ -16,9 +16,12 @@ class Election(db.Model):
     date_end = db.Column(db.Date, nullable=False)
     voters_count = db.Column(db.Integer, default=0)
     participation_rate = db.Column(db.Float, nullable=True)
+    queued_access = db.Column(db.Boolean, default=False, nullable=False)
+    max_concurrent_voters = db.Column(db.Integer, nullable=True)
 
     # Relationships
     organization = relationship("Organization", backref="elections")
+    waitlist = relationship("ElectionWaitlist", backref="election", lazy='dynamic')
     
     def __repr__(self):
         return f'<Election {self.election_name}>'

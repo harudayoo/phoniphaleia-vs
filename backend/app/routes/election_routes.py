@@ -16,3 +16,23 @@ def update_election(election_id):
 @election_bp.route('/elections/<int:election_id>', methods=['DELETE'])
 def delete_election(election_id):
     return ElectionController.delete(election_id)
+
+@election_bp.route('/elections/<int:election_id>/waitlist/join', methods=['POST'])
+def join_waitlist(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.join_waitlist(election_id)
+
+@election_bp.route('/elections/<int:election_id>/waitlist/leave', methods=['POST'])
+def leave_waitlist(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.leave_waitlist(election_id)
+
+@election_bp.route('/elections/<int:election_id>/waitlist/position', methods=['GET'])
+def waitlist_position(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.waitlist_position(election_id)
+
+@election_bp.route('/elections/<int:election_id>/waitlist/next', methods=['POST'])
+def next_in_waitlist(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.next_in_waitlist(election_id)

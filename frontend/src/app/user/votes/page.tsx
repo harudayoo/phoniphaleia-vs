@@ -20,6 +20,8 @@ interface Election {
   date_start?: string;
   days_left?: number;
   election_status?: 'Ongoing' | 'Upcoming' | 'Finished' | 'Canceled';
+  queued_access?: boolean;
+  max_concurrent_voters?: number;
 }
 
 export default function UserVotesPage() {
@@ -273,7 +275,7 @@ export default function UserVotesPage() {
           {filteredElections.map((election) => (
             <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden flex flex-col relative">
               <div className="px-6 pt-6 pb-0 flex flex-col items-start">
-                {getStatusBadge(election)}
+                <div className="self-end">{getStatusBadge(election)}</div>
                 {election.organization && (
                   <div className="text-xs text-gray-500 mt-2 mb-2">
                     {election.organization.org_name}
@@ -292,17 +294,22 @@ export default function UserVotesPage() {
                   Ends on {new Date(election.date_end).toLocaleDateString()}
                 </span>
                 {getTimeRemainingBadge(election)}
+                {election.queued_access && (
+                  <span className="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded ml-2">Queued Access</span>
+                )}
               </div>
               <div className="px-6 pb-6">
-                <button
-                  className={`w-full mt-2 px-4 py-2 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 ${
-                    election.election_status === 'Finished' ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
-                  }`}
-                  disabled={election.election_status === 'Finished'}
-                >
-                  {election.election_status === 'Finished' ? 'Election Closed' : 'Cast your votes'}
-                  {election.election_status !== 'Finished' && <ArrowRight size={16} />}
-                </button>
+                <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
+                  <button
+                    className={`w-full mt-2 px-4 py-2 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 ${
+                      election.election_status === 'Finished' ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+                    }`}
+                    disabled={election.election_status === 'Finished'}
+                  >
+                    {election.election_status === 'Finished' ? 'Election Closed' : 'Cast Your Vote'}
+                    {election.election_status !== 'Finished' && <ArrowRight size={16} />}
+                  </button>
+                </Link>
               </div>
             </div>
           ))}
@@ -328,10 +335,12 @@ export default function UserVotesPage() {
                     </span>
                   </div>
                 </div>
-                
                 <div className="flex flex-col items-start md:items-end gap-3 mt-4 md:mt-0 md:ml-6">
                   {getTimeRemainingBadge(election)}
-                  <Link href={`/user/vote/${election.election_id}`}>
+                  {election.queued_access && (
+                    <span className="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded">Queued Access</span>
+                  )}
+                  <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
                     <button 
                       className={`${
                         election.election_status === 'Finished' 

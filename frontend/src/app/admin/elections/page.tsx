@@ -79,10 +79,15 @@ export default function AdminElectionsPage() {
     register: editRegister,
     handleSubmit: handleEditSubmit,
     formState: { errors: editErrors },
-    reset: resetEditForm
-  } = useForm<Election>({
+    reset: resetEditForm,
+    setValue: setEditValue,
+    watch: watchEdit,
+  } = useForm<Election & { queued_access?: boolean; max_concurrent_voters?: number }>({
     defaultValues: editForm ?? undefined
   });
+
+  // Watch for queued access toggle
+  const queuedAccess = watchEdit('queued_access') || false;
 
   // When editForm changes (i.e., when opening the edit modal), reset the form values
   useEffect(() => {
@@ -201,7 +206,7 @@ export default function AdminElectionsPage() {
     }
   };
 
-  const saveEdit = async (updated: Partial<Election>) => {
+  const saveEdit = async (updated: Partial<Election & { queued_access?: boolean; max_concurrent_voters?: number }>) => {
     if (!editForm) return;
     try {
       setLoading(true);
@@ -537,11 +542,30 @@ export default function AdminElectionsPage() {
           { name: 'election_desc', label: 'Description', type: 'textarea' },
           { name: 'date_start', label: 'Start Date', type: 'text', required: true },
           { name: 'date_end', label: 'End Date', type: 'text', required: true },
+          // The following are handled as custom fields in EntityFormModal
         ]}
-        onSubmit={handleEditSubmit(saveEdit)}
+        onSubmit={handleEditSubmit((data) => {
+          // Ensure queued_access and max_concurrent_voters are sent
+          saveEdit({
+            ...data,
+            queued_access: data.queued_access || false,
+            max_concurrent_voters: data.queued_access ? (data.max_concurrent_voters ?? undefined) : undefined,
+          });
+        })}
         register={editRegister}
         errors={editErrors}
         isEdit={true}
+        // Pass custom props for toggle
+        customFields={{
+          queued_access: {
+            value: queuedAccess,
+            setValue: (v: boolean) => setEditValue('queued_access', v),
+          },
+          max_concurrent_voters: {
+            value: watchEdit('max_concurrent_voters') ?? '',
+            setValue: (v: number) => setEditValue('max_concurrent_voters', v),
+          },
+        }}
       />
       <DeleteConfirmationModal
         isOpen={showDeleteModal}

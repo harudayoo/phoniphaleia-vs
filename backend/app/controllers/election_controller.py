@@ -32,7 +32,9 @@ class ElectionController:
                         "org_name": e.organization.org_name if e.organization else None
                     },
                     "voters_count": e.voters_count if hasattr(e, "voters_count") else 0,
-                    "participation_rate": e.participation_rate if hasattr(e, "participation_rate") else None
+                    "participation_rate": e.participation_rate if hasattr(e, "participation_rate") else None,
+                    "queued_access": getattr(e, "queued_access", False),
+                    "max_concurrent_voters": getattr(e, "max_concurrent_voters", None)
                 })
             return jsonify(result)
         except Exception as ex:
@@ -67,12 +69,16 @@ class ElectionController:
                 election_status=status,
                 date_start=date_start,
                 date_end=date_end,
+                queued_access=data.get('queued_access', False),
+                max_concurrent_voters=data.get('max_concurrent_voters')
             )
             db.session.add(election)
             db.session.commit()
             return jsonify({
                 'election_id': election.election_id,
-                'election_name': election.election_name
+                'election_name': election.election_name,
+                'queued_access': election.queued_access,
+                'max_concurrent_voters': election.max_concurrent_voters
             }), 201
         except Exception as ex:
             db.session.rollback()
@@ -104,6 +110,10 @@ class ElectionController:
                 election.date_end = date_end
             if 'org_id' in data:
                 election.org_id = data['org_id']
+            if 'queued_access' in data:
+                election.queued_access = data['queued_access']
+            if 'max_concurrent_voters' in data:
+                election.max_concurrent_voters = data['max_concurrent_voters']
 
             # Determine status after possible date changes
             now = datetime.utcnow().date()
@@ -163,3 +173,80 @@ class ElectionController:
             db.session.rollback()
             print('Error deleting election:', ex)
             return jsonify({'error': str(ex)}), 500
+
+    @staticmethod
+    def join_waitlist(election_id):
+        from app.models.election_waitlist import ElectionWaitlist
+        from app.models.election import Election
+        data = request.json or {}
+        voter_id = data.get('voter_id')
+        if not voter_id:
+            return jsonify({'error': 'voter_id required'}), 400
+        election = Election.query.get(election_id)
+        if not election or not election.queued_access:
+            return jsonify({'error': 'Election not found or not using queued access'}), 404
+        # Check if already in waitlist
+        existing = ElectionWaitlist.query.filter_by(election_id=election_id, voter_id=voter_id, status='waiting').first()
+        if existing:
+            return jsonify({'message': 'Already in waitlist', 'position': ElectionWaitlist.query.filter_by(election_id=election_id, status='waiting').order_by(ElectionWaitlist.joined_at).all().index(existing) + 1}), 200
+        # Count active voters
+        active_count = ElectionWaitlist.query.filter_by(election_id=election_id, status='active').count()
+        if active_count < (election.max_concurrent_voters or 1):
+            # Grant immediate access
+            entry = ElectionWaitlist(election_id=election_id, voter_id=voter_id, status='active')
+            db.session.add(entry)
+            db.session.commit()
+            return jsonify({'message': 'Access granted', 'status': 'active'}), 200
+        else:
+            # Add to waitlist
+            entry = ElectionWaitlist(election_id=election_id, voter_id=voter_id, status='waiting')
+            db.session.add(entry)
+            db.session.commit()
+            position = ElectionWaitlist.query.filter_by(election_id=election_id, status='waiting').order_by(ElectionWaitlist.joined_at).all().index(entry) + 1
+            return jsonify({'message': 'Added to waitlist', 'status': 'waiting', 'position': position}), 200
+
+    @staticmethod
+    def leave_waitlist(election_id):
+        from app.models.election_waitlist import ElectionWaitlist
+        data = request.json or {}
+        voter_id = data.get('voter_id')
+        if not voter_id:
+            return jsonify({'error': 'voter_id required'}), 400
+        entry = ElectionWaitlist.query.filter_by(election_id=election_id, voter_id=voter_id).filter(ElectionWaitlist.status.in_(['waiting', 'active'])).first()
+        if not entry:
+            return jsonify({'error': 'Not in waitlist'}), 404
+        entry.status = 'done'
+        db.session.commit()
+        return jsonify({'message': 'Left waitlist'}), 200
+
+    @staticmethod
+    def waitlist_position(election_id):
+        from app.models.election_waitlist import ElectionWaitlist
+        voter_id = request.args.get('voter_id')
+        if not voter_id:
+            return jsonify({'error': 'voter_id required'}), 400
+        entry = ElectionWaitlist.query.filter_by(election_id=election_id, voter_id=voter_id, status='waiting').first()
+        if not entry:
+            return jsonify({'error': 'Not in waitlist'}), 404
+        waitlist = ElectionWaitlist.query.filter_by(election_id=election_id, status='waiting').order_by(ElectionWaitlist.joined_at).all()
+        position = waitlist.index(entry) + 1
+        return jsonify({'position': position, 'total_waiting': len(waitlist)}), 200
+
+    @staticmethod
+    def next_in_waitlist(election_id):
+        from app.models.election_waitlist import ElectionWaitlist
+        from app.models.election import Election
+        election = Election.query.get(election_id)
+        if not election or not election.queued_access:
+            return jsonify({'error': 'Election not found or not using queued access'}), 404
+        # Count active voters
+        active_count = ElectionWaitlist.query.filter_by(election_id=election_id, status='active').count()
+        if active_count >= (election.max_concurrent_voters or 1):
+            return jsonify({'message': 'No slot available'}), 200
+        # Get next waiting
+        next_entry = ElectionWaitlist.query.filter_by(election_id=election_id, status='waiting').order_by(ElectionWaitlist.joined_at).first()
+        if not next_entry:
+            return jsonify({'message': 'No one in waitlist'}), 200
+        next_entry.status = 'active'
+        db.session.commit()
+        return jsonify({'message': 'Next voter activated', 'voter_id': next_entry.voter_id}), 200

@@ -21,6 +21,10 @@ export interface EntityFormModalProps<T extends FieldValues> {
   register: UseFormRegister<T>;
   errors: FieldErrors<T>;
   isEdit?: boolean;
+  customFields?: {
+    queued_access?: { value: boolean; setValue: (v: boolean) => void };
+    max_concurrent_voters?: { value: number | ''; setValue: (v: number) => void };
+  };
 }
 
 const EntityFormModal = <T extends FieldValues>({
@@ -31,8 +35,15 @@ const EntityFormModal = <T extends FieldValues>({
   onSubmit,
   register,
   errors,
-  isEdit = false
+  isEdit = false,
+  customFields
 }: EntityFormModalProps<T>) => {
+  // Custom field logic for queued_access and max_concurrent_voters
+  const queuedAccess = customFields?.queued_access?.value ?? false;
+  const setQueuedAccess = customFields?.queued_access?.setValue;
+  const maxConcurrentVoters = customFields?.max_concurrent_voters?.value ?? '';
+  const setMaxConcurrentVoters = customFields?.max_concurrent_voters?.setValue;
+
   return (
     <Modal
       isOpen={isOpen}
@@ -59,6 +70,35 @@ const EntityFormModal = <T extends FieldValues>({
       }
     >
       <form className="space-y-4" id="entity-form" onSubmit={e => { e.preventDefault(); onSubmit(); }}>
+        {/* Custom Queued Access Toggle */}
+        {typeof queuedAccess === 'boolean' && setQueuedAccess && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Enable Waitlist</label>
+            <button
+              type="button"
+              className={`px-3 py-1 rounded ${queuedAccess ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+              onClick={() => setQueuedAccess(!queuedAccess)}
+            >
+              {queuedAccess ? 'Enabled' : 'Disabled'}
+            </button>
+          </div>
+        )}
+        {/* Max Concurrent Voters Input */}
+        {queuedAccess && setMaxConcurrentVoters && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Max Concurrent Voters</label>
+            <input
+              type="number"
+              min={1}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+              placeholder="Enter max voters allowed at a time"
+              value={maxConcurrentVoters ?? ''}
+              onChange={e => setMaxConcurrentVoters(Number(e.target.value))}
+              required={queuedAccess}
+            />
+          </div>
+        )}
+        {/* Standard fields */}
         {fields.map((field) => (
           <div key={String(field.name)}>
             <label className="block text-sm font-medium text-gray-700 mb-1">

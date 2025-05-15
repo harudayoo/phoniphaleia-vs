@@ -36,6 +36,8 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose, onCreated }) => {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [queuedAccess, setQueuedAccess] = useState(false);
+  const [maxConcurrentVoters, setMaxConcurrentVoters] = useState<number | ''>('');
 
   // Reset state on modal open/close
   useEffect(() => {
@@ -52,6 +54,8 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose, onCreated }) => {
       setPrivateShares([]);
       setError(null);
       setSuccess(null);
+      setQueuedAccess(false);
+      setMaxConcurrentVoters('');
     }
   }, [open]);
 
@@ -139,7 +143,9 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose, onCreated }) => {
           election_desc: description,
           election_status: 'Upcoming',
           date_start: dateStart,
-          date_end: endDate
+          date_end: endDate,
+          queued_access: queuedAccess,
+          max_concurrent_voters: queuedAccess ? maxConcurrentVoters : null
         })
       });
       if (!electionRes.ok) throw new Error('Failed to create election');
@@ -253,6 +259,30 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose, onCreated }) => {
               onChange={e => setEndDate(e.target.value)}
             />
           </div>
+          <div className="flex items-center gap-2 mt-4">
+            <label className="font-medium">Queued Access</label>
+            <button
+              type="button"
+              className={`px-3 py-1 rounded ${queuedAccess ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+              onClick={() => setQueuedAccess(v => !v)}
+            >
+              {queuedAccess ? 'Enabled' : 'Disabled'}
+            </button>
+          </div>
+          {queuedAccess && (
+            <div className="mt-2">
+              <label className="block text-sm font-medium mb-1">Max Concurrent Voters</label>
+              <input
+                type="number"
+                min={1}
+                className="w-full border rounded px-3 py-2"
+                value={maxConcurrentVoters}
+                onChange={e => setMaxConcurrentVoters(Number(e.target.value))}
+                placeholder="Enter max voters allowed at a time"
+                required
+              />
+            </div>
+          )}
         </div>
       </div>
     );
