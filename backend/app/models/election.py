@@ -25,3 +25,6 @@ class Election(db.Model):
     
     def __repr__(self):
         return f'<Election {self.election_name}>'
+
+# Fix for circular import: import ElectionWaitlist at the end
+from .election_waitlist import ElectionWaitlist

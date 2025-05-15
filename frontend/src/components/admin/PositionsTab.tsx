@@ -44,6 +44,11 @@ const PositionsTab: React.FC<PositionsTabProps> = ({
       key: 'organization_name',
       header: 'Organization' 
     },
+    {
+      key: 'college_name',
+      header: 'College',
+      render: (position: Position) => position.college_name || 'None'
+    },
     { 
       key: 'description',
       header: 'Description' 

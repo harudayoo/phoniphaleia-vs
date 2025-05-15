@@ -36,3 +36,28 @@ def waitlist_position(election_id):
 def next_in_waitlist(election_id):
     from app.controllers.election_controller import ElectionController
     return ElectionController.next_in_waitlist(election_id)
+
+@election_bp.route('/elections/<int:election_id>/active_voters', methods=['GET'])
+def get_active_voters(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.get_active_voters(election_id)
+
+@election_bp.route('/elections/<int:election_id>/eligible_voters', methods=['GET'])
+def get_eligible_voters(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.get_eligible_voters(election_id)
+
+@election_bp.route('/elections/<int:election_id>/access-check', methods=['POST'])
+def access_check(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.access_check(election_id)
+
+@election_bp.route('/elections/<int:election_id>/candidates', methods=['GET'])
+def get_candidates_by_election(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.get_candidates_by_election(election_id)
+
+@election_bp.route('/elections/<int:election_id>/vote', methods=['POST'])
+def submit_vote(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.submit_vote(election_id)

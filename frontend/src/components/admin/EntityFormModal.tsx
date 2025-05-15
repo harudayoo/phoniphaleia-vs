@@ -73,10 +73,10 @@ const EntityFormModal = <T extends FieldValues>({
         {/* Custom Queued Access Toggle */}
         {typeof queuedAccess === 'boolean' && setQueuedAccess && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Enable Waitlist</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Queued Access</label>
             <button
               type="button"
-              className={`px-3 py-1 rounded ${queuedAccess ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+              className={`px-3 py-1 rounded transition-colors duration-150 ${queuedAccess ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}
               onClick={() => setQueuedAccess(!queuedAccess)}
             >
               {queuedAccess ? 'Enabled' : 'Disabled'}

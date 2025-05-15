@@ -29,7 +29,7 @@ const NotVerifiedPage: React.FC = () => (
         </p>
         <div className="mt-10 w-full flex justify-center md:justify-start">
             <Link
-            href="/"
+            href="/user/votes"
             className="inline-flex items-center gap-2 rounded-lg bg-white/80 border border-gray-300 px-5 py-2 text-base font-medium text-gray-800 shadow-sm hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-yellow-400"
             >
             <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

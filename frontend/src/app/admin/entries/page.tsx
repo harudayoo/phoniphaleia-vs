@@ -71,7 +71,13 @@ export default function AdminEntriesPage() {
       label: 'Organization',
       type: 'select' as const,
       required: true,
-      options: organizations.map(o => ({ value: o.id, label: o.name }))
+      options: organizations.map(o => {
+        const college = colleges.find(c => c.college_id === o.college_id);
+        return {
+          value: o.id,
+          label: college ? `${o.name} (${college.college_name})` : o.name
+        };
+      })
     },
     { name: 'description' as const, label: 'Description', type: 'textarea' as const }
   ];

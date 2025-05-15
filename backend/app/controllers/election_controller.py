@@ -1,8 +1,13 @@
 from app.models.election import Election
 from app.models.organization import Organization
+from app.models.candidate import Candidate
 from app import db
 from flask import jsonify, request
 from datetime import datetime
+from app.models.election_waitlist import ElectionWaitlist
+from app.models.voter import Voter
+from app.models.position import Position
+from app.models.vote import Vote
 
 class ElectionController:
     @staticmethod
@@ -21,6 +26,15 @@ class ElectionController:
                     status = 'Finished'
                 else:
                     status = e.election_status  # fallback
+                # Fetch college_name and college_id from organization relationship
+                college_name = None
+                college_id = None
+                org_name = None
+                if e.organization:
+                    org_name = e.organization.org_name
+                    if e.organization.college:
+                        college_name = e.organization.college.college_name
+                        college_id = e.organization.college.college_id
                 result.append({
                     "election_id": e.election_id,
                     "election_name": e.election_name,
@@ -29,8 +43,10 @@ class ElectionController:
                     "date_start": e.date_start.isoformat() if e.date_start else None,
                     "date_end": e.date_end.isoformat() if e.date_end else None,
                     "organization": {
-                        "org_name": e.organization.org_name if e.organization else None
-                    },
+                        "org_name": org_name,
+                        "college_id": college_id,
+                        "college_name": college_name
+                    } if e.organization else None,
                     "voters_count": e.voters_count if hasattr(e, "voters_count") else 0,
                     "participation_rate": e.participation_rate if hasattr(e, "participation_rate") else None,
                     "queued_access": getattr(e, "queued_access", False),
@@ -74,6 +90,20 @@ class ElectionController:
             )
             db.session.add(election)
             db.session.commit()
+
+            # Handle candidates if provided
+            candidates = data.get('candidates', [])
+            for cand in candidates:
+                candidate = Candidate(
+                    election_id=election.election_id,
+                    fullname=cand['fullname'],
+                    position_id=cand['position_id'],
+                    party=cand.get('party'),
+                    candidate_desc=cand.get('candidate_desc')
+                )
+                db.session.add(candidate)
+            db.session.commit()
+
             return jsonify({
                 'election_id': election.election_id,
                 'election_name': election.election_name,
@@ -93,11 +123,7 @@ class ElectionController:
             if not election:
                 return jsonify({'error': 'Election not found'}), 404
 
-            # Update fields if present in request
-            if 'election_name' in data:
-                election.election_name = data['election_name']
-            if 'election_desc' in data:
-                election.election_desc = data['election_desc']
+            # Parse and update date fields if present
             if 'date_start' in data:
                 date_start = data['date_start']
                 if isinstance(date_start, str):
@@ -108,6 +134,12 @@ class ElectionController:
                 if isinstance(date_end, str):
                     date_end = datetime.fromisoformat(date_end).date()
                 election.date_end = date_end
+
+            # Update other fields if present in request
+            if 'election_name' in data:
+                election.election_name = data['election_name']
+            if 'election_desc' in data:
+                election.election_desc = data['election_desc']
             if 'org_id' in data:
                 election.org_id = data['org_id']
             if 'queued_access' in data:
@@ -115,64 +147,57 @@ class ElectionController:
             if 'max_concurrent_voters' in data:
                 election.max_concurrent_voters = data['max_concurrent_voters']
 
-            # Determine status after possible date changes
+            # Ensure date fields are datetime.date for comparison
+            ds = election.date_start
+            de = election.date_end
+            if isinstance(ds, str):
+                ds = datetime.fromisoformat(ds).date()
+            if isinstance(de, str):
+                de = datetime.fromisoformat(de).date()
             now = datetime.utcnow().date()
-            if election.date_start > now:
+            if ds > now:
                 status = 'Upcoming'
-            elif election.date_start <= now <= election.date_end:
+            elif ds <= now <= de:
                 status = 'Ongoing'
-            elif now > election.date_end:
+            elif now > de:
                 status = 'Finished'
             else:
                 status = election.election_status
             election.election_status = status
 
             db.session.commit()
-            return jsonify({
-                'election_id': election.election_id,
-                'election_name': election.election_name,
-                'election_desc': election.election_desc,
-                'election_status': election.election_status,
-                'date_start': election.date_start.isoformat() if election.date_start else None,
-                'date_end': election.date_end.isoformat() if election.date_end else None,
-                'org_id': election.org_id
-            })
+            return jsonify({'message': 'Election updated successfully', 'election_id': election.election_id, 'election_name': election.election_name, 'election_desc': election.election_desc, 'election_status': election.election_status, 'date_start': election.date_start.isoformat(), 'date_end': election.date_end.isoformat(), 'queued_access': election.queued_access, 'max_concurrent_voters': election.max_concurrent_voters}), 200
         except Exception as ex:
             db.session.rollback()
             print('Error in update election:', ex)
-            return jsonify({'error': str(ex)}), 500
+            return jsonify({'error': f'Failed to update election: {str(ex)}'}), 500
 
     @staticmethod
     def delete(election_id):
         try:
-            from app.models.crypto_config import CryptoConfig
-            from app.models.key_share import KeyShare
-            from app.models.trusted_authority import TrustedAuthority
             election = Election.query.get(election_id)
             if not election:
                 return jsonify({'error': 'Election not found'}), 404
 
-            # Delete related CryptoConfig(s)
+            # Delete all candidates linked to this election
+            from app.models.candidate import Candidate
+            Candidate.query.filter_by(election_id=election_id).delete()
+
+            # Delete all key shares and crypto configs linked to this election
+            from app.models.crypto_config import CryptoConfig
+            from app.models.key_share import KeyShare
             crypto_configs = CryptoConfig.query.filter_by(election_id=election_id).all()
             for crypto in crypto_configs:
-                # Delete related KeyShares
-                key_shares = KeyShare.query.filter_by(crypto_id=crypto.crypto_id).all()
-                for ks in key_shares:
-                    ta = TrustedAuthority.query.get(ks.authority_id)
-                    db.session.delete(ks)
-                    # Only delete TA if it has no other key shares after this
-                    db.session.flush()  # flush to update relationships
-                    if ta and len(ta.key_shares) == 0:
-                        db.session.delete(ta)
+                KeyShare.query.filter_by(crypto_id=crypto.crypto_id).delete()
                 db.session.delete(crypto)
 
             db.session.delete(election)
             db.session.commit()
-            return jsonify({'message': 'Election and related cryptographic data deleted successfully'}), 200
+            return jsonify({'message': 'Election and related data deleted successfully'})
         except Exception as ex:
             db.session.rollback()
-            print('Error deleting election:', ex)
-            return jsonify({'error': str(ex)}), 500
+            print('Error in delete election:', ex)
+            return jsonify({'error': 'Failed to delete election'}), 500
 
     @staticmethod
     def join_waitlist(election_id):
@@ -250,3 +275,106 @@ class ElectionController:
         next_entry.status = 'active'
         db.session.commit()
         return jsonify({'message': 'Next voter activated', 'voter_id': next_entry.voter_id}), 200
+
+    @staticmethod
+    def get_active_voters(election_id):
+        election = Election.query.get(election_id)
+        if not election:
+            return jsonify({'error': 'Election not found'}), 404
+        count = ElectionWaitlist.query.filter_by(election_id=election_id, status='active').count()
+        return jsonify({'active_voters': count})
+
+    @staticmethod
+    def get_eligible_voters(election_id):
+        """Return the number of eligible voters for an election (same college as org)."""
+        election = Election.query.get(election_id)
+        if not election:
+            return jsonify({'error': 'Election not found'}), 404
+        org = election.organization
+        if not org or not org.college_id:
+            return jsonify({'eligible_voters': 0})
+        count = Voter.query.filter_by(college_id=org.college_id).count()
+        return jsonify({'eligible_voters': count})
+
+    @staticmethod
+    def access_check(election_id):
+        data = request.json or {}
+        voter_id = data.get('voter_id')
+        if not voter_id:
+            return jsonify({'eligible': False, 'reason': 'No voter_id provided'}), 400
+        election = Election.query.get(election_id)
+        if not election or not election.organization or not election.organization.college_id:
+            return jsonify({'eligible': False, 'reason': 'Election or organization/college not found'}), 404
+        voter = Voter.query.get(voter_id)
+        if not voter:
+            return jsonify({'eligible': False, 'reason': 'Voter not found'}), 404
+        if voter.college_id != election.organization.college_id:
+            return jsonify({'eligible': False, 'reason': 'Voter not in the same college as election'}), 403
+        return jsonify({'eligible': True})
+
+    @staticmethod
+    def get_candidates_by_election(election_id):
+        """Return all candidates for a given election, grouped by position."""
+        try:
+            candidates = Candidate.query.filter_by(election_id=election_id).all()
+            positions = Position.query.join(Candidate, Position.position_id == Candidate.position_id).filter(Candidate.election_id == election_id).all()
+            grouped = {}
+            for pos in positions:
+                grouped[pos.position_id] = {
+                    'position_id': pos.position_id,
+                    'position_name': pos.position_name,
+                    'description': pos.description,
+                    'candidates': []
+                }
+            for cand in candidates:
+                pos_id = cand.position_id
+                if pos_id in grouped:
+                    grouped[pos_id]['candidates'].append({
+                        'candidate_id': cand.candidate_id,
+                        'fullname': cand.fullname,
+                        'party': cand.party,
+                        'candidate_desc': cand.candidate_desc
+                    })
+            return jsonify(list(grouped.values()))
+        except Exception as ex:
+            print('Error in get_candidates_by_election:', ex)
+            return jsonify({'error': 'Failed to fetch candidates'}), 500
+
+    @staticmethod
+    def submit_vote(election_id):
+        """Submit a vote for an election. Enforce one per position, one per election per voter."""
+        try:
+            data = request.json or {}
+            student_id = data.get('student_id')
+            votes = data.get('votes')  # [{position_id, candidate_id, encrypted_vote, zkp_proof, verification_receipt}]
+            if not student_id or not isinstance(votes, list):
+                return jsonify({'error': 'Missing student_id or votes'}), 400
+            # Check for duplicate vote for this election
+            existing = Vote.query.filter_by(election_id=election_id, student_id=student_id).first()
+            if existing:
+                return jsonify({'error': 'You have already voted in this election.'}), 400
+            # Enforce one vote per position
+            seen_positions = set()
+            for v in votes:
+                pos_id = v.get('position_id')
+                if pos_id in seen_positions:
+                    return jsonify({'error': 'Multiple votes for the same position are not allowed.'}), 400
+                seen_positions.add(pos_id)
+            # Save votes
+            for v in votes:
+                vote = Vote(
+                    election_id=election_id,
+                    student_id=student_id,
+                    candidate_id=v['candidate_id'],
+                    encrypted_vote=v.get('encrypted_vote', ''),
+                    zkp_proof=v.get('zkp_proof', ''),
+                    verification_receipt=v.get('verification_receipt', ''),
+                    vote_status='cast'
+                )
+                db.session.add(vote)
+            db.session.commit()
+            return jsonify({'message': 'Vote submitted successfully'})
+        except Exception as ex:
+            db.session.rollback()
+            print('Error in submit_vote:', ex)
+            return jsonify({'error': 'Failed to submit vote'}), 500

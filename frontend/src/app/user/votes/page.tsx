@@ -7,6 +7,7 @@ import { ArrowRight, Calendar } from 'lucide-react';
 import NothingIcon from '@/components/NothingIcon';
 import ViewToggle from '@/components/user/ViewToggle';
 import UserSearchFilterBar from '@/components/user/UserSearchFilterBar';
+import toast, { Toaster } from 'react-hot-toast';
 
 interface Election {
   election_id: number;
@@ -14,6 +15,7 @@ interface Election {
   election_desc: string;
   organization?: {
     org_name: string;
+    college_id?: number;
     college_name?: string;
   };
   date_end: string;
@@ -33,6 +35,8 @@ export default function UserVotesPage() {
   const [filter, setFilter] = useState('all'); // 'all', 'Ongoing', 'Upcoming', 'Finished', 'Canceled'
   const [sort, setSort] = useState('end-date'); // 'end-date', 'alphabetical'
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [activeVoters, setActiveVoters] = useState<{ [electionId: number]: number }>({});
+  const [waitlistStatus, setWaitlistStatus] = useState<{ [electionId: number]: 'waiting' | 'active' | null }>({});
 
   // Fetch available elections
   useEffect(() => {
@@ -49,27 +53,15 @@ export default function UserVotesPage() {
           throw new Error(`API error: ${response.statusText}`);
         }
         const data = await response.json();
-        // Fetch organizations for college lookup
-        const orgRes = await fetch(`${API_URL}/organizations`);
-        const orgs = await orgRes.json();
-        // Process the elections to add days_left, election_status, and college_name
+        // Use the college_name directly from the API response for each election
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const processedData = data.map((election: {
-          election_id: number;
-          election_name: string;
-          election_desc: string;
-          organization?: { org_name: string };
-          date_end: string;
-          date_start?: string;
-          election_status?: string;
-        }) => {
-          // Use backend election_status if available, otherwise compute
+        const processedData: Election[] = (data as Election[]).map((election) => {
           let election_status: Election['election_status'] = 'Ongoing';
           if (election.election_status) {
             election_status = election.election_status as Election['election_status'];
           } else {
-            const dateStr = election.date_end;
+            const dateStr: string = election.date_end;
             const [year, month, day] = dateStr.split('-').map(Number);
             const endDate = new Date(year, month - 1, day);
             endDate.setHours(23, 59, 59, 999);
@@ -88,22 +80,25 @@ export default function UserVotesPage() {
               }
             }
           }
-          let college_name = 'None';
-          if (election.organization && election.organization.org_name) {
-            const org = orgs.find((o: { name: string; college_name?: string }) => o.name === election.organization!.org_name);
-            if (org && org.college_name) college_name = org.college_name;
-          }
-          const dateStr = election.date_end;
-          const [year, month, day] = dateStr.split('-').map(Number);
-          const endDate = new Date(year, month - 1, day);
-          endDate.setHours(23, 59, 59, 999);
-          const diffTime = endDate.getTime() - today.getTime();
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          return Object.assign({}, election, {
-            days_left: Math.max(diffDays, 0),
-            election_status: election_status,
-            organization: Object.assign({}, election.organization, { college_name }),
-          });
+          // Use college_name from API response if present
+          const college_name = election.organization?.college_name || 'None';
+          // Only calculate diffTime/diffDays once
+          const dateStr2: string = election.date_end;
+          const [year2, month2, day2] = dateStr2.split('-').map(Number);
+          const endDate2 = new Date(year2, month2 - 1, day2);
+          endDate2.setHours(23, 59, 59, 999);
+          const diffTime2 = endDate2.getTime() - today.getTime();
+          const diffDays2 = Math.ceil(diffTime2 / (1000 * 60 * 60 * 24));
+          return {
+            ...election,
+            days_left: Math.max(diffDays2, 0),
+            election_status,
+            organization: {
+              org_name: election.organization?.org_name || '',
+              college_id: election.organization?.college_id,
+              college_name,
+            },
+          };
         });
         setElections(processedData);
         setFilteredElections(processedData);
@@ -115,6 +110,76 @@ export default function UserVotesPage() {
     };
     fetchElections();
   }, []);
+
+  // Fetch active voter counts for queued elections
+  useEffect(() => {
+    const fetchActiveVoters = async () => {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const updates: { [electionId: number]: number } = {};
+      await Promise.all(
+        filteredElections.filter(e => e.queued_access).map(async (election) => {
+          try {
+            const res = await fetch(`${API_URL}/elections/${election.election_id}/active_voters`);
+            if (res.ok) {
+              const data = await res.json();
+              updates[election.election_id] = data.active_voters;
+            }
+          } catch {}
+        })
+      );
+      setActiveVoters(updates);
+    };
+    if (filteredElections.some(e => e.queued_access)) {
+      fetchActiveVoters();
+      const interval = setInterval(fetchActiveVoters, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [filteredElections]);
+
+  // Poll for waitlist activation for elections where the user is waiting
+  useEffect(() => {
+    const pollWaitlist = async () => {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      for (const election of filteredElections) {
+        if (election.queued_access && waitlistStatus[election.election_id] === 'waiting') {
+          try {
+            const res = await fetch(`${API_URL}/elections/${election.election_id}/waitlist/position?voter_id=${user.student_id}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.position === 1) {
+                const activeRes = await fetch(`${API_URL}/elections/${election.election_id}/active_voters`);
+                if (activeRes.ok) {
+                  const activeData = await activeRes.json();
+                  if (activeData.active_voters < Number(election.max_concurrent_voters || 1)) {
+                    setWaitlistStatus(prev => ({ ...prev, [election.election_id]: 'active' }));
+                    toast((t) => (
+                      <span>
+                        It&apos;s your turn to vote!{' '}
+                        <button
+                          className="underline text-blue-700 ml-2"
+                          onClick={() => {
+                            toast.dismiss(t.id);
+                            window.location.href = `/user/votes/access-check?election_id=${election.election_id}`;
+                          }}
+                        >
+                          Click here to proceed
+                        </button>
+                      </span>
+                    ), { duration: 10000, icon: '✅' });
+                  }
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+    };
+    if (Object.values(waitlistStatus).includes('waiting')) {
+      const interval = setInterval(pollWaitlist, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [filteredElections, waitlistStatus]);
 
   // Helper function to format time remaining
   const formatTimeRemaining = (endDateStr: string) => {
@@ -210,6 +275,7 @@ export default function UserVotesPage() {
 
   return (
     <UserLayout>
+      <Toaster position="top-center" />
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Active Elections</h1>
         <p className="text-gray-600 mt-2">
@@ -275,7 +341,17 @@ export default function UserVotesPage() {
           {filteredElections.map((election) => (
             <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden flex flex-col relative">
               <div className="px-6 pt-6 pb-0 flex flex-col items-start">
-                <div className="self-end">{getStatusBadge(election)}</div>
+                <div className="flex w-full justify-between items-start mb-2">
+                  {election.queued_access && (
+                    <span className="text-xs px-2 py-1 rounded font-semibold shadow bg-yellow-200 text-yellow-800">
+                      Queued Access
+                      {typeof activeVoters[election.election_id] === 'number' && election.max_concurrent_voters ? (
+                        <span className="ml-2 text-gray-700">{activeVoters[election.election_id]}/{election.max_concurrent_voters} active</span>
+                      ) : null}
+                    </span>
+                  )}
+                  <div className="self-end">{getStatusBadge(election)}</div>
+                </div>
                 {election.organization && (
                   <div className="text-xs text-gray-500 mt-2 mb-2">
                     {election.organization.org_name}
@@ -294,20 +370,26 @@ export default function UserVotesPage() {
                   Ends on {new Date(election.date_end).toLocaleDateString()}
                 </span>
                 {getTimeRemainingBadge(election)}
-                {election.queued_access && (
-                  <span className="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded ml-2">Queued Access</span>
-                )}
               </div>
               <div className="px-6 pb-6">
                 <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
                   <button
                     className={`w-full mt-2 px-4 py-2 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 ${
-                      election.election_status === 'Finished' ? 'bg-gray-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+                      election.election_status === 'Finished' || (election.date_start && new Date(election.date_start) > new Date())
+                        ? 'bg-gray-500 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-700'
                     }`}
-                    disabled={election.election_status === 'Finished'}
+                    disabled={Boolean(
+                      election.election_status === 'Finished' ||
+                      (election.date_start && new Date(election.date_start) > new Date())
+                    )}
                   >
-                    {election.election_status === 'Finished' ? 'Election Closed' : 'Cast Your Vote'}
-                    {election.election_status !== 'Finished' && <ArrowRight size={16} />}
+                    {election.election_status === 'Finished'
+                      ? 'Election Closed'
+                      : election.date_start && new Date(election.date_start) > new Date()
+                        ? 'Voting Not Started'
+                        : 'Cast Your Vote'}
+                    {election.election_status !== 'Finished' && (!election.date_start || new Date(election.date_start) <= new Date()) && <ArrowRight size={16} />}
                   </button>
                 </Link>
               </div>
@@ -338,19 +420,31 @@ export default function UserVotesPage() {
                 <div className="flex flex-col items-start md:items-end gap-3 mt-4 md:mt-0 md:ml-6">
                   {getTimeRemainingBadge(election)}
                   {election.queued_access && (
-                    <span className="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded">Queued Access</span>
+                    <span className="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded">
+                      Queued Access
+                      {typeof activeVoters[election.election_id] === 'number' && election.max_concurrent_voters ? (
+                        <span className="ml-2 text-gray-700">{activeVoters[election.election_id]}/{election.max_concurrent_voters} active</span>
+                      ) : null}
+                    </span>
                   )}
                   <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
                     <button 
                       className={`${
-                        election.election_status === 'Finished' 
+                        election.election_status === 'Finished' || (election.date_start && new Date(election.date_start) > new Date())
                           ? 'bg-gray-500 cursor-not-allowed' 
                           : 'bg-red-600 hover:bg-red-700'
                       } text-white px-4 py-2 rounded-lg transition flex items-center justify-center gap-2`}
-                      disabled={election.election_status === 'Finished'}
+                      disabled={Boolean(
+                        election.election_status === 'Finished' ||
+                        (election.date_start && new Date(election.date_start) > new Date())
+                      )}
                     >
-                      {election.election_status === 'Finished' ? 'Election Closed' : 'Cast Your Vote'} 
-                      {election.election_status !== 'Finished' && <ArrowRight size={16} />}
+                      {election.election_status === 'Finished'
+                        ? 'Election Closed'
+                        : election.date_start && new Date(election.date_start) > new Date()
+                          ? 'Voting Not Started'
+                          : 'Cast Your Vote'} 
+                      {election.election_status !== 'Finished' && (!election.date_start || new Date(election.date_start) <= new Date()) && <ArrowRight size={16} />}
                     </button>
                   </Link>
                 </div>

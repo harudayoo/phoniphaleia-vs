@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useRouter } from 'next/navigation';
 import AdminLayout from '@/layouts/AdminLayout';
 import { FaEdit, FaTrash, FaEye } from 'react-icons/fa';
 import { Filter, Calendar, Users, Award } from 'lucide-react';
@@ -10,7 +11,6 @@ import FilterSelect from '@/components/admin/FilterSelect';
 import DataView from '@/components/admin/DataView';
 import LoadingState from '@/components/admin/LoadingState';
 import NothingIcon from '@/components/NothingIcon';
-import CreateElectionModal from '@/components/admin/CreateElectionModal';
 import EntityDetailModal from '@/components/admin/EntityDetailModal';
 import EntityFormModal from '@/components/admin/EntityFormModal';
 import DeleteConfirmationModal from '@/components/admin/DeleteConfirmationModal';
@@ -28,6 +28,8 @@ type Election = {
   voters_count: number;
   participation_rate?: number;
   college_name?: string;
+  queued_access?: boolean; // <-- add this line
+  max_concurrent_voters?: number; // <-- add this line
 };
 
 type ElectionAPIResponse = {
@@ -37,9 +39,11 @@ type ElectionAPIResponse = {
   election_status: 'Ongoing' | 'Upcoming' | 'Finished' | 'Canceled';
   date_start: string | null;
   date_end: string | null;
-  organization?: { org_name: string | null };
+  organization?: { org_name: string | null; college_name?: string };
   voters_count: number;
   participation_rate?: number | null;
+  queued_access?: boolean;
+  max_concurrent_voters?: number;
 };
 
 const statusOptions = [
@@ -66,13 +70,14 @@ export default function AdminElectionsPage() {
   const [sort, setSort] = useState('date_end');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
   const [organizations, setOrganizations] = useState<{ id: number; name: string; college_name: string }[]>([]);
   const [selectedElection, setSelectedElection] = useState<Election | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Election> | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [editForm, setEditForm] = useState<Partial<Election> | null>(null);
+
+  const router = useRouter();
 
   // Add useForm for editing elections
   const {
@@ -85,9 +90,6 @@ export default function AdminElectionsPage() {
   } = useForm<Election & { queued_access?: boolean; max_concurrent_voters?: number }>({
     defaultValues: editForm ?? undefined
   });
-
-  // Watch for queued access toggle
-  const queuedAccess = watchEdit('queued_access') || false;
 
   // When editForm changes (i.e., when opening the edit modal), reset the form values
   useEffect(() => {
@@ -136,15 +138,7 @@ export default function AdminElectionsPage() {
             (typeof e.date_end === 'string' || e.date_end === null)
           )
           .map(e => {
-            let collegeName = 'None';
-            if (e.organization && e.organization.org_name) {
-              const org = organizations.find(
-                o => o.name === e.organization!.org_name
-              );
-              if (org && org.college_name) {
-                collegeName = org.college_name;
-              }
-            }
+            // Use the college_name directly from the API response
             return {
               election_id: e.election_id,
               election_name: e.election_name,
@@ -157,10 +151,11 @@ export default function AdminElectionsPage() {
                 : undefined,
               voters_count: e.voters_count ?? 0,
               participation_rate: e.participation_rate ?? undefined,
-              college_name: collegeName,
+              college_name: e.organization?.college_name || 'None',
+              queued_access: e.queued_access ?? false,
+              max_concurrent_voters: e.max_concurrent_voters ?? undefined,
             };
           });
-
         setElections(processedData);
         setError(null);
       } catch (err) {
@@ -294,13 +289,17 @@ export default function AdminElectionsPage() {
     const daysRemaining = getDaysRemaining(election.date_end);
     const isActive = election.election_status === 'Ongoing';
     const hasEnded = election.election_status === 'Finished' || election.election_status === 'Canceled';
-    
     return (
       <div key={election.election_id} className="border rounded-xl bg-white shadow overflow-hidden flex flex-col">
         <div className="p-6 flex-1">
           <div className="flex justify-between items-start mb-2">
             <span className="text-sm text-gray-600">{election.organization?.org_name}</span>
-            {getStatusBadge(election.election_status)}
+            <div className="flex flex-col items-end gap-1 min-h-[40px] justify-center">
+              {getStatusBadge(election.election_status)}
+              {election.queued_access && (
+                <span className="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded mt-1 align-middle">Queued Access</span>
+              )}
+            </div>
           </div>
           <h3 className="text-lg font-semibold text-gray-800 mb-2">{election.election_name}</h3>
           <p className="text-sm text-gray-500 mb-4">{election.election_desc}</p>
@@ -433,7 +432,7 @@ export default function AdminElectionsPage() {
         title="Election Management"
         description="Manage and view all elections."
         addButtonText="Create New Election"
-        onAdd={() => setModalOpen(true)}
+        onAdd={() => router.push('/admin/elections/make-new')}
       >
         {loading ? (
           <LoadingState message="Loading elections..." />
@@ -464,58 +463,6 @@ export default function AdminElectionsPage() {
           </div>
         )}
       </DataView>
-      <CreateElectionModal 
-        open={modalOpen} 
-        onClose={() => setModalOpen(false)}
-        onCreated={async () => {
-          setLoading(true);
-          try {
-            const response = await fetch(`${API_URL}/elections`);
-            if (!response.ok) throw new Error('Failed to fetch elections');
-            const data: ElectionAPIResponse[] = await response.json();
-            const processedData: Election[] = data
-              .filter(e =>
-                typeof e.election_id === 'number' &&
-                typeof e.election_name === 'string' &&
-                typeof e.election_desc === 'string' &&
-                typeof e.election_status === 'string' &&
-                (typeof e.date_start === 'string' || e.date_start === null) &&
-                (typeof e.date_end === 'string' || e.date_end === null)
-              )
-              .map(e => {
-                let collegeName = 'None';
-                if (e.organization && e.organization.org_name) {
-                  const org = organizations.find(
-                    o => o.name === e.organization!.org_name
-                  );
-                  if (org && org.college_name) {
-                    collegeName = org.college_name;
-                  }
-                }
-                return {
-                  election_id: e.election_id,
-                  election_name: e.election_name,
-                  election_desc: e.election_desc,
-                  election_status: e.election_status as 'Ongoing' | 'Upcoming' | 'Finished' | 'Canceled',
-                  date_start: e.date_start ?? '',
-                  date_end: e.date_end ?? '',
-                  organization: e.organization
-                    ? { org_name: e.organization.org_name ?? '' }
-                    : undefined,
-                  voters_count: e.voters_count ?? 0,
-                  participation_rate: e.participation_rate ?? undefined,
-                  college_name: collegeName,
-                };
-              });
-            setElections(processedData);
-            setError(null);
-          } catch {
-            setError('Failed to load elections. Please try again later.');
-          } finally {
-            setLoading(false);
-          }
-        }}
-      />
       <EntityDetailModal
         isOpen={showDetailModal}
         onClose={() => setShowDetailModal(false)}
@@ -542,27 +489,24 @@ export default function AdminElectionsPage() {
           { name: 'election_desc', label: 'Description', type: 'textarea' },
           { name: 'date_start', label: 'Start Date', type: 'text', required: true },
           { name: 'date_end', label: 'End Date', type: 'text', required: true },
-          // The following are handled as custom fields in EntityFormModal
         ]}
         onSubmit={handleEditSubmit((data) => {
-          // Ensure queued_access and max_concurrent_voters are sent
           saveEdit({
             ...data,
-            queued_access: data.queued_access || false,
-            max_concurrent_voters: data.queued_access ? (data.max_concurrent_voters ?? undefined) : undefined,
+            queued_access: watchEdit('queued_access') ?? false,
+            max_concurrent_voters: (watchEdit('queued_access') ? (watchEdit('max_concurrent_voters') ?? undefined) : undefined),
           });
         })}
         register={editRegister}
         errors={editErrors}
         isEdit={true}
-        // Pass custom props for toggle
         customFields={{
           queued_access: {
-            value: queuedAccess,
+            value: watchEdit('queued_access') ?? false,
             setValue: (v: boolean) => setEditValue('queued_access', v),
           },
           max_concurrent_voters: {
-            value: watchEdit('max_concurrent_voters') ?? '',
+            value: watchEdit('queued_access') ? (watchEdit('max_concurrent_voters') ?? '') : '',
             setValue: (v: number) => setEditValue('max_concurrent_voters', v),
           },
         }}

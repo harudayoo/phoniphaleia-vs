@@ -15,6 +15,7 @@ class PositionController:
                 'name': position.position_name,
                 'organization_id': position.org_id,
                 'organization_name': position.organization.org_name if position.organization else None,
+                'college_name': position.organization.college.college_name if position.organization and position.organization.college else None,
                 'description': position.description,
                 'created_at': position.created_at.isoformat() if position.created_at else None,
                 'updated_at': position.updated_at.isoformat() if position.updated_at else None
