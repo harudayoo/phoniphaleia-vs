@@ -57,6 +57,21 @@ def get_candidates_by_election(election_id):
     from app.controllers.election_controller import ElectionController
     return ElectionController.get_candidates_by_election(election_id)
 
+@election_bp.route('/elections/<int:election_id>/candidates', methods=['POST'])
+def add_candidate(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.add_candidate(election_id)
+
+@election_bp.route('/candidates/<int:candidate_id>', methods=['PUT'])
+def edit_candidate(candidate_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.edit_candidate(candidate_id)
+
+@election_bp.route('/candidates/<int:candidate_id>', methods=['DELETE'])
+def delete_candidate(candidate_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.delete_candidate(candidate_id)
+
 @election_bp.route('/elections/<int:election_id>/vote', methods=['POST'])
 def submit_vote(election_id):
     from app.controllers.election_controller import ElectionController

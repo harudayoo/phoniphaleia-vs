@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/admin/PageHeader';
 import { Download, Plus, ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
+import ArrowUpScrollToTop from '@/components/ArrowUpScrollToTop';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -44,6 +45,7 @@ export default function CreateElectionPage() {
   ]);
   const [showKeyWarning, setShowKeyWarning] = useState(false);
   const [keyModalOpen, setKeyModalOpen] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   // Fetch organizations on mount
   useEffect(() => {
@@ -66,6 +68,19 @@ export default function CreateElectionPage() {
       })
       .catch(() => setError('Failed to fetch positions'));
   }, [orgId]);
+
+  // Show "scroll to top" button when near bottom
+  useEffect(() => {
+    const onScroll = () => {
+      const scrollY = window.scrollY;
+      const windowHeight = window.innerHeight;
+      const docHeight = document.documentElement.scrollHeight;
+      // Show if scrolled down and near bottom (100px from bottom)
+      setShowScrollTop(scrollY > 100 && windowHeight + scrollY >= docHeight - 100);
+    };
+    window.addEventListener('scroll', onScroll);
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // Add candidate
   const addCandidate = () => {
@@ -126,6 +141,20 @@ export default function CreateElectionPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center py-8 relative">
+      {/* Back to Elections button (sticky/fixed at top-left) */}
+      <button
+        type="button"
+        className="top-8 left-8 z-50 flex self-start gap-2 px-10 py-2 bg-slate-100 border border-gray-300 rounded shadow transition-all duration-200 hover:-translate-x-1 hover:-translate-y-1 hover:shadow-lg hover:bg-yellow-50"
+        onClick={() => router.push('/admin/elections')}
+        style={{ backdropFilter: 'blur(2px)' }}
+      >
+        <ArrowLeft size={18} />
+        <span className="font-medium text-gray-700">Back to Elections</span>
+      </button>
+
+      {/* Scroll to Top Button */}
+      <ArrowUpScrollToTop show={showScrollTop} />
+
       {/* Background image with overlay and gradient */}
       <div className="absolute inset-0 z-0">
         {/* USEP background image with 0.6 opacity using next/image */}
@@ -146,10 +175,7 @@ export default function CreateElectionPage() {
           }}
         ></div>
       </div>
-      <div className="w-full max-w-6xl bg-white rounded-xl shadow p-8 border border-gray-200 relative z-10" style={{ width: '80%' }}>
-        <button className="mb-4 flex items-center gap-2 text-gray-600 hover:text-blue-700" onClick={() => router.push('/admin/elections')}>
-          <ArrowLeft /> Back to Elections
-        </button>
+      <div className="mt-20 w-full max-w-6xl bg-white rounded-xl shadow p-8 border border-gray-200 relative z-10" style={{ width: '80%' }}>
         <PageHeader title="Create New Election" description="Fill out all details to create a new election." />
         {error && <div className="bg-red-100 text-red-800 rounded p-3 mb-4 text-center">{error}</div>}
         {success && <div className="bg-green-100 text-green-800 rounded p-3 mb-4 text-center">{success}</div>}
@@ -186,7 +212,11 @@ export default function CreateElectionPage() {
             </div>
             <div className="flex items-center gap-2 mt-4 md:col-span-2">
               <label className="font-medium text-gray-700">Queued Access</label>
-              <button type="button" className={`px-3 py-1 rounded ${queuedAccess ? 'bg-green-600 text-white' : 'bg-red-200 text-gray-700'}`} onClick={() => setQueuedAccess(v => !v)}>
+              <button
+                type="button"
+                className={`px-3 py-1 rounded transition-all duration-200 ease-in-out ${queuedAccess ? 'bg-gradient-to-r from-green-700 to-green-900 hover:from-green-800 hover:to-green-950 text-white' : 'bg-gradient-to-r from-red-200 to-red-400 hover:from-red-300 hover:to-red-500 text-gray-700'}`}
+                onClick={() => setQueuedAccess(v => !v)}
+              >
                 {queuedAccess ? 'Enabled' : 'Disabled'}
               </button>
               {queuedAccess && (
@@ -218,7 +248,7 @@ export default function CreateElectionPage() {
           <div className="flex items-center gap-4 mb-4">
             <button
               type="button"
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-60"
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-800 hover:to-blue-950 disabled:opacity-60 text-white rounded transition-all duration-200 ease-in-out"
               onClick={() => {
                 setShowKeyWarning(true);
                 setKeyModalOpen(false);
@@ -238,7 +268,7 @@ export default function CreateElectionPage() {
           </div>
           {/* Key Generation Warning Notification */}
           {showKeyWarning && (
-            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full">
                 <div className="mb-4 text-yellow-700 bg-yellow-100 border border-yellow-300 rounded p-3 text-sm">
                   <b>Warning:</b> The private key shares that will be displayed are critically sensitive security information. <br />
@@ -283,7 +313,7 @@ export default function CreateElectionPage() {
           )}
           {/* Private Key Modal */}
           {keyModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-lg shadow-lg p-6 max-w-lg w-full relative">
                 <button className="absolute top-2 right-2 text-gray-500 hover:text-gray-700" onClick={() => { setKeyModalOpen(false); setPrivateShares([]); }}>&times;</button>
                 <div className="mb-4 text-yellow-700 bg-yellow-100 border border-yellow-300 rounded p-3 text-sm">
@@ -363,7 +393,11 @@ export default function CreateElectionPage() {
           </div>
         </div>
         <div className="flex justify-end">
-          <button className="px-6 py-2 bg-green-700 text-white rounded" onClick={handleFinish} disabled={generating || !publicKey || candidates.some(c => !c.fullname || !c.position_id)}>
+          <button
+            className="px-6 py-2 bg-gradient-to-r from-green-700 to-green-900 hover:from-green-800 hover:to-green-950 text-white rounded transition-all duration-200 ease-in-out"
+            onClick={handleFinish}
+            disabled={generating || !publicKey || candidates.some(c => !c.fullname || !c.position_id)}
+          >
             Create Election
           </button>
         </div>

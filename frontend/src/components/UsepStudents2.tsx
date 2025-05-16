@@ -24,7 +24,7 @@ const UsepStudent2: React.FC<UsepStudent2Props> = ({
         width={width}
         height={height}
         style={{
-            objectFit: 'cover',
+            objectFit: 'contain',
             width: '100%',
             height: '100%',
             ...style,

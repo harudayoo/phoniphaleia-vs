@@ -378,3 +378,64 @@ class ElectionController:
             db.session.rollback()
             print('Error in submit_vote:', ex)
             return jsonify({'error': 'Failed to submit vote'}), 500
+
+    @staticmethod
+    def add_candidate(election_id):
+        try:
+            data = request.json or {}
+            fullname = data.get('fullname')
+            position_id = data.get('position_id')
+            party = data.get('party')
+            candidate_desc = data.get('candidate_desc')
+            if not fullname or not position_id:
+                return jsonify({'error': 'fullname and position_id are required'}), 400
+            candidate = Candidate(
+                election_id=election_id,
+                fullname=fullname,
+                position_id=position_id,
+                party=party,
+                candidate_desc=candidate_desc
+            )
+            db.session.add(candidate)
+            db.session.commit()
+            return jsonify({'message': 'Candidate added', 'candidate_id': candidate.candidate_id}), 201
+        except Exception as ex:
+            db.session.rollback()
+            print('Error in add_candidate:', ex)
+            return jsonify({'error': 'Failed to add candidate'}), 500
+
+    @staticmethod
+    def edit_candidate(candidate_id):
+        try:
+            data = request.json or {}
+            candidate = Candidate.query.get(candidate_id)
+            if not candidate:
+                return jsonify({'error': 'Candidate not found'}), 404
+            if 'fullname' in data:
+                candidate.fullname = data['fullname']
+            if 'position_id' in data:
+                candidate.position_id = data['position_id']
+            if 'party' in data:
+                candidate.party = data['party']
+            if 'candidate_desc' in data:
+                candidate.candidate_desc = data['candidate_desc']
+            db.session.commit()
+            return jsonify({'message': 'Candidate updated'}), 200
+        except Exception as ex:
+            db.session.rollback()
+            print('Error in edit_candidate:', ex)
+            return jsonify({'error': 'Failed to update candidate'}), 500
+
+    @staticmethod
+    def delete_candidate(candidate_id):
+        try:
+            candidate = Candidate.query.get(candidate_id)
+            if not candidate:
+                return jsonify({'error': 'Candidate not found'}), 404
+            db.session.delete(candidate)
+            db.session.commit()
+            return jsonify({'message': 'Candidate deleted'}), 200
+        except Exception as ex:
+            db.session.rollback()
+            print('Error in delete_candidate:', ex)
+            return jsonify({'error': 'Failed to delete candidate'}), 500
