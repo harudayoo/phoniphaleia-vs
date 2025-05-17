@@ -46,6 +46,7 @@ type ElectionAPIResponse = {
   participation_rate?: number | null;
   queued_access?: boolean;
   max_concurrent_voters?: number;
+  org_id: number;
 };
 
 interface Candidate {
@@ -58,6 +59,8 @@ interface Candidate {
 interface Position {
   position_id: number;
   position_name: string;
+  organization_id?: number;
+  inUse?: boolean;
 }
 
 const statusOptions = [
@@ -161,8 +164,7 @@ export default function AdminElectionsPage() {
           )
           .map(e => {
             return {
-              election_id: e.election_id,
-              election_name: e.election_name,
+              election_id: e.election_id,              election_name: e.election_name,
               election_desc: e.election_desc,
               election_status: e.election_status as 'Ongoing' | 'Upcoming' | 'Finished' | 'Canceled',
               date_start: e.date_start ?? '',
@@ -175,6 +177,7 @@ export default function AdminElectionsPage() {
               college_name: e.organization?.college_name || 'None',
               queued_access: e.queued_access ?? false,
               max_concurrent_voters: e.max_concurrent_voters ?? undefined,
+              org_id: e.org_id,
             };
           });
         setElections(processedData);
@@ -188,7 +191,44 @@ export default function AdminElectionsPage() {
     }
 
     fetchElections();
-  }, [organizations]);
+  }, [organizations]);  useEffect(() => {
+    // This is now only needed to refresh position data when the modal is reopened
+    // (The main loading of positions is handled in handleManageCandidates)
+    if (!showCandidatesModal || !candidatesElection?.org_id || candidatesLoading) return;
+    
+    // This will only run if the modal is shown but positions aren't being loaded elsewhere
+    if (positions.length === 0) {
+      setCandidatesLoading(true);
+      setCandidatesError(null);
+      
+      // Get existing candidates first to know which positions are being used
+      fetch(`${API_URL}/elections/${candidatesElection.election_id}/candidates`)
+        .then(res => res.json())
+        .then(async (candidatesData: Array<{ position_id: number; position_name: string; candidates: Candidate[] }>) => {
+          // Track which positions are used by candidates
+          const candidatePositionIds = new Set<number>();
+          candidatesData.forEach((pos) => {
+            if (Array.isArray(pos.candidates) && pos.candidates.length > 0) {
+              candidatePositionIds.add(pos.position_id);
+            }
+          });
+          
+          // Now fetch positions
+          const posRes = await fetch(`${API_URL}/positions/by-election/${candidatesElection.election_id}`);
+          const posData: { id: number; name: string; organization_id: number }[] = await posRes.json();
+          
+          // Mark positions that are in use
+          setPositions(posData.map(p => ({ 
+            position_id: p.id, 
+            position_name: p.name,
+            organization_id: p.organization_id,
+            inUse: candidatePositionIds.has(p.id)
+          })));
+        })
+        .catch(() => setCandidatesError('Failed to load positions.'))
+        .finally(() => setCandidatesLoading(false));
+    }
+  }, [showCandidatesModal, candidatesElection, candidatesLoading, positions.length]);
 
   const handleShowInfo = (election: Election) => {
     setSelectedElection(election);
@@ -242,40 +282,56 @@ export default function AdminElectionsPage() {
       setLoading(false);
     }
   };
-
   const handleManageCandidates = async (election: Election) => {
     setCandidatesElection(election);
     setShowCandidatesModal(true);
     setCandidatesLoading(true);
     setCandidatesError(null);
-    try {
-      // Fetch all positions and filter by org_id of the selected election
-      const posRes = await fetch(`${API_URL}/positions`);
-      const posData: { id: number; name: string; organization_id: number }[] = await posRes.json();
-      const orgId = election.org_id;
-      // Fetch candidates for this election
-      const res = await fetch(`${API_URL}/elections/${election.election_id}/candidates`);
-      const data: Array<{ position_id: number; position_name: string; candidates: Candidate[] }> = await res.json();
-      let all: Candidate[] = [];
-      data.forEach((pos) => {
+    try {      
+      // Get the org_id of the selected election (will be used for position verification)
+      
+      // Fetch candidates for this election first
+      const candidatesRes = await fetch(`${API_URL}/elections/${election.election_id}/candidates`);
+      const candidatesData: Array<{ position_id: number; position_name: string; candidates: Candidate[] }> = await candidatesRes.json();
+      
+      // Extract all candidates and their positions
+      let allCandidates: Candidate[] = [];
+      const candidatePositionIds = new Set<number>();
+      
+      candidatesData.forEach((pos) => {
         if (Array.isArray(pos.candidates)) {
-          all = all.concat(pos.candidates.map((c) => ({ ...c, position_id: pos.position_id })));
+          // Add each candidate with its position ID
+          allCandidates = allCandidates.concat(pos.candidates.map((c) => ({ 
+            ...c, 
+            position_id: pos.position_id 
+          })));
+          
+          // Track which positions are used by candidates
+          candidatePositionIds.add(pos.position_id);
         }
       });
-      setCandidates(all);
-      // Build the dropdown positions: all positions for this org, plus any positions referenced by existing candidates (for legacy data)
-      const orgPositions = posData.filter((p) => p.organization_id === orgId);
-      // Add any positions referenced by candidates that are not in orgPositions
-      const candidatePositionIds = new Set(all.map(c => c.position_id));
-      const extraPositions = posData.filter(p => candidatePositionIds.has(p.id) && p.organization_id !== orgId);
-      // Compose the final list, deduped by id
-      const allPositions = [...orgPositions, ...extraPositions].reduce((acc, p) => {
-        if (!acc.some(x => x.id === p.id)) acc.push(p);
-        return acc;
-      }, [] as { id: number; name: string; organization_id: number }[]);
-      setPositions(allPositions.map(p => ({ position_id: p.id, position_name: p.name })));
+      
+      // Use the specialized endpoint that returns positions for this election
+      // This endpoint already sorts positions with candidate positions first, then other org positions
+      const posRes = await fetch(`${API_URL}/positions/by-election/${election.election_id}`);
+      const posData: { id: number; name: string; organization_id: number }[] = await posRes.json();
+      
+      // Convert positions from API to the format expected by the component
+      // Including verification that positions belong to the same org as the election
+      const formattedPositions = posData.map(p => ({
+        position_id: p.id,
+        position_name: p.name,
+        organization_id: p.organization_id,
+        inUse: candidatePositionIds.has(p.id)
+      }));
+      
+      setCandidates(allCandidates);
+      setPositions(formattedPositions);
+      
+      // Save original candidates for diff
+      originalCandidatesRef.current = allCandidates;
     } catch {
-      setCandidatesError('Failed to load candidates.');
+      setCandidatesError('Failed to load candidates or positions.');
     } finally {
       setCandidatesLoading(false);
     }
@@ -651,78 +707,125 @@ export default function AdminElectionsPage() {
         warningMessage="This will permanently delete the election and all related data."
       />
       {showCandidatesModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg w-full p-8 max-w-5xl relative">
-            <h2 className="text-xl text-gray-800 font-semibold mb-4">Manage Candidates</h2>
-            {candidatesError && <div className="bg-red-100 text-red-700 p-2 rounded mb-2">{candidatesError}</div>}
-            {candidatesLoading ? (
-              <div className="text-center py-8">Loading...</div>
-            ) : (
-              <>
-                <div className="flex justify-between mb-2">
-                  <button className="flex items-center gap-2 px-3 py-2 bg-blue-100 rounded hover:bg-blue-200 text-sm text-gray-700" onClick={handleAddCandidate}>
-                    + Add Candidate
-                  </button>
-                  <button className="px-3 py-2 bg-red-200 hover:bg-red-400 hover:text-slate-50 text-gray-700 rounded" onClick={() => setShowCandidatesModal(false)}>Close</button>
+        <Modal
+          isOpen={showCandidatesModal}
+          onClose={() => setShowCandidatesModal(false)}
+          title="Manage Candidates"
+          size="xxxxxl"
+          footer={null}
+        >
+          {candidatesError && <div className="bg-red-100 text-red-700 p-2 rounded mb-2">{candidatesError}</div>}
+          {candidatesLoading ? (
+            <div className="text-center py-8">Loading...</div>
+          ) : (
+            <>
+              <div className="flex justify-between mb-2">
+                <button
+                  className="flex items-center gap-2 px-3 py-2 bg-blue-100 rounded hover:bg-blue-200 text-sm text-gray-700"
+                  onClick={handleAddCandidate}
+                  disabled={candidatesLoading || positions.length === 0}
+                >
+                  + Add Candidate
+                </button>
+              </div>
+              {positions.length === 0 && !candidatesLoading && (
+                <div className="bg-yellow-50 text-yellow-800 p-3 rounded mb-4 text-center border border-yellow-200">
+                  No positions found for this organization. Please add positions first.
                 </div>
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {candidates.map((cand, idx) => (
+              )}
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {candidates.map((cand, idx) => {
+                  // Sort positions - with used positions (inUse=true) first, then others
+                  let dropdownPositions = [...positions].sort((a, b) => {
+                    // First sort by inUse (true first)
+                    if (a.inUse && !b.inUse) return -1;
+                    if (!a.inUse && b.inUse) return 1;
+                    // Then by name
+                    return a.position_name.localeCompare(b.position_name);
+                  });
+                  
+                  // If candidate has a position_id that's not in our positions list
+                  // (might happen if position was moved to another org)
+                  if (cand.position_id && !positions.some(p => p.position_id === cand.position_id)) {
+                    dropdownPositions = [
+                      { 
+                        position_id: cand.position_id as number, 
+                        position_name: `Current Position (ID: ${cand.position_id})` 
+                      },
+                      ...dropdownPositions
+                    ];
+                  }
+                  
+                  // Remove duplicates (should not happen with current implementation but keeping for safety)
+                  const seen = new Set();
+                  dropdownPositions = dropdownPositions.filter(p => {
+                    if (seen.has(p.position_id)) return false;
+                    seen.add(p.position_id);
+                    return true;
+                  });
+
+                  return (
                     <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end border-b pb-4 mb-2">
                       <div className="md:col-span-2">
                         <label className="block text-sm text-gray-700 font-medium mb-1">Full Name</label>
-                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.fullname} onChange={e => handleUpdateCandidate(idx, 'fullname', e.target.value)} placeholder="Candidate Name" />
+                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.fullname} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'fullname', e.target.value)} placeholder="Candidate Name" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 font-medium mb-1">Party</label>
-                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.party} onChange={e => handleUpdateCandidate(idx, 'party', e.target.value)} placeholder="Party" />
+                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.party} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'party', e.target.value)} placeholder="Party" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 font-medium mb-1">Position</label>
-                        <select className="w-full border text-gray-700 rounded px-3 py-2" value={cand.position_id} onChange={e => handleUpdateCandidate(idx, 'position_id', Number(e.target.value))}>
+                        <select
+                          className="w-full border text-gray-700 rounded px-3 py-2"
+                          value={cand.position_id}
+                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleUpdateCandidate(idx, 'position_id', Number(e.target.value))}
+                          disabled={candidatesLoading || positions.length === 0}
+                        >
                           <option value="">Select position</option>
-                          {positions.map(pos => (
+                          {dropdownPositions.map(pos => (
                             <option key={pos.position_id} value={pos.position_id}>{pos.position_name}</option>
                           ))}
                         </select>
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 font-medium mb-1">Description</label>
-                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.candidate_desc} onChange={e => handleUpdateCandidate(idx, 'candidate_desc', e.target.value)} placeholder="Description" />
+                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.candidate_desc} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'candidate_desc', e.target.value)} placeholder="Description" />
                       </div>
                       <div className="flex items-center gap-2">
                         <button type="button" className="text-red-600 hover:text-red-800" onClick={() => handleRemoveCandidate(idx)}>Remove</button>
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
+              </div>
+              <div className="flex justify-end mt-4 gap-2">
+                <button className="px-6 py-2 bg-gradient-to-r from-green-700 to-green-900 hover:from-green-800 hover:to-green-950 text-white rounded" onClick={handleSaveCandidates} disabled={candidates.some(c => !c.fullname || !c.position_id)}>
+                  Save Changes
+                </button>
+              </div>
+              <DeleteConfirmationModal
+                isOpen={showCandidateDeleteModal}
+                onClose={() => { setShowCandidateDeleteModal(false); setCandidateToDeleteIdx(null); }}
+                onDelete={confirmRemoveCandidate}
+                title="Delete Candidate"
+                entityName={candidateToDeleteIdx !== null ? candidates[candidateToDeleteIdx]?.fullname || 'Candidate' : 'Candidate'}
+                warningMessage="This will permanently delete the candidate."
+              />
+              <Modal
+                isOpen={showSuccessModal}
+                onClose={() => setShowSuccessModal(false)}
+                title="Success"
+                size="sm"
+                footer={null}
+              >
+                <div className="text-center py-4">
+                  Candidates updated successfully!
                 </div>
-                <div className="flex justify-end mt-4 gap-2">
-                  <button className="px-6 py-2 bg-gradient-to-r from-green-700 to-green-900 hover:from-green-800 hover:to-green-950 text-white rounded" onClick={handleSaveCandidates} disabled={candidates.some(c => !c.fullname || !c.position_id)}>
-                    Save Changes
-                  </button>
-                </div>
-                <DeleteConfirmationModal
-                  isOpen={showCandidateDeleteModal}
-                  onClose={() => { setShowCandidateDeleteModal(false); setCandidateToDeleteIdx(null); }}
-                  onDelete={confirmRemoveCandidate}
-                  title="Delete Candidate"
-                  entityName={candidateToDeleteIdx !== null ? candidates[candidateToDeleteIdx]?.fullname || 'Candidate' : 'Candidate'}
-                  warningMessage="This will permanently delete the candidate."
-                />
-                <Modal
-                  isOpen={showSuccessModal}
-                  onClose={() => setShowSuccessModal(false)}
-                  title="Success"
-                  size="sm"
-                  footer={null}
-                >
-                  <div className="text-center py-4">
-                    <div className="text-green-700 text-lg font-semibold mb-2">Changes applied successfully!</div>
-                  </div>
-                </Modal>
-              </>
-            )}
-          </div>
-        </div>
+              </Modal>
+            </>
+          )}
+        </Modal>
       )}
     </AdminLayout>
   );

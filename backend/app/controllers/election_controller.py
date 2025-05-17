@@ -35,8 +35,7 @@ class ElectionController:
                     if e.organization.college:
                         college_name = e.organization.college.college_name
                         college_id = e.organization.college.college_id
-                result.append({
-                    "election_id": e.election_id,
+                result.append({                    "election_id": e.election_id,
                     "election_name": e.election_name,
                     "election_desc": e.election_desc,
                     "election_status": status,
@@ -50,7 +49,8 @@ class ElectionController:
                     "voters_count": e.voters_count if hasattr(e, "voters_count") else 0,
                     "participation_rate": e.participation_rate if hasattr(e, "participation_rate") else None,
                     "queued_access": getattr(e, "queued_access", False),
-                    "max_concurrent_voters": getattr(e, "max_concurrent_voters", None)
+                    "max_concurrent_voters": getattr(e, "max_concurrent_voters", None),
+                    "org_id": e.org_id
                 })
             return jsonify(result)
         except Exception as ex:

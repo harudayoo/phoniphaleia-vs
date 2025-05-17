@@ -19,3 +19,8 @@ def update_position_route(position_id):
 def delete_position_route(position_id):
     return PositionController.delete_position(position_id)
 
+@position_bp.route('/positions/by-election/<int:election_id>', methods=['GET'])
+def get_positions_by_election_route(election_id):
+    from app.controllers.position_controller import PositionController
+    return PositionController.get_positions_by_election(election_id)
+

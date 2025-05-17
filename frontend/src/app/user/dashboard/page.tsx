@@ -176,9 +176,11 @@ export default function UserDashboard() {
                         </span>
                       </div>
                       <p className="text-sm text-gray-600 mt-1">{election.election_desc}</p>
-                      <Link href={`/user/vote/${election.election_id}`}>
-                        <button className="mt-3 text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded flex items-center gap-1">
-                          Vote Now <ArrowRight size={14} />
+                      <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
+                        <button
+                          className="mt-3 text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded flex items-center gap-1"
+                        >
+                          Cast Your Vote <ArrowRight size={14} />
                         </button>
                       </Link>
                     </div>

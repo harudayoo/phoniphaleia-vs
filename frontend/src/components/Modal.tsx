@@ -7,7 +7,7 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | 'xxxl' | 'xxxxl' | 'xxxxxl' | 'xxxxxxl' | 'xxxxxxxl' | 'xxxxxxxxl';
   footer?: ReactNode;
 }
 
@@ -43,6 +43,14 @@ const Modal = ({
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-xl',
+    xxl: 'max-w-2xl',
+    xxxl: 'max-w-3xl',
+    xxxxl: 'max-w-4xl',
+    xxxxxl: 'max-w-5xl',
+    xxxxxxl: 'max-w-6xl',
+    xxxxxxxl: 'max-w-7xl',
+    xxxxxxxxl: 'max-w-8xl',
+    xxxxxxxxxl: 'max-w-8xl', // alias for 8xl
   };
 
   return (

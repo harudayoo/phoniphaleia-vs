@@ -9,6 +9,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 interface Candidate {
   candidate_id: number;
   fullname: string;
+  position_id: number;
   party?: string;
   candidate_desc?: string;
 }
@@ -23,93 +24,74 @@ interface Position {
 export default function CastVotePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const electionId = Number(searchParams.get('election_id'));
+  const electionId = searchParams.get('election_id');
+
   const [positions, setPositions] = useState<Position[]>([]);
   const [selected, setSelected] = useState<{ [positionId: number]: number | null }>({});
-  const [showDetails, setShowDetails] = useState<{ [candidateId: number]: boolean }>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [showCandidate, setShowCandidate] = useState<Candidate | null>(null);
 
   useEffect(() => {
-    if (!electionId) return;
-    setLoading(true);
-    fetch(`${API_URL}/elections/${electionId}/candidates`)
-      .then(res => res.json())
-      .then((data: Position[]) => {
-        setPositions(data);
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Fetch all positions for the org of the election
+        const electionRes = await fetch(`${API_URL}/elections`);
+        const elections: { election_id: number; org_id: number }[] = await electionRes.json();
+        const election = elections.find((e) => String(e.election_id) === String(electionId));
+        if (!election) {
+          setError('Election not found.');
+          setLoading(false);
+          return;
+        }
+        const orgId = election.org_id;
+        // Fetch positions for this org
+        const posRes = await fetch(`${API_URL}/positions`);
+        const allPositions: { id: number; name: string; description?: string; organization_id: number }[] = await posRes.json();
+        const orgPositions = allPositions.filter((p) => p.organization_id === orgId);
+        // Fetch candidates for this election
+        const candRes = await fetch(`${API_URL}/elections/${electionId}/candidates`);
+        const candidates: Candidate[] = await candRes.json();
+        // Group candidates by position
+        const positionsWithCandidates: Position[] = orgPositions.map((pos: { id: number; name: string; description?: string }) => ({
+          position_id: pos.id,
+          position_name: pos.name,
+          description: pos.description,
+          candidates: candidates.filter((c: Candidate) => c.position_id === pos.id),
+        }));
+        setPositions(positionsWithCandidates);
         // Initialize selection state
-        const initial: { [positionId: number]: number | null } = {};
-        data.forEach(pos => { initial[pos.position_id] = null; });
-        setSelected(initial);
-        setLoading(false);
-      })
-      .catch(() => {
-        setError('Failed to load candidates.');
-        setLoading(false);
-      });
+        const initialSelected: { [positionId: number]: number | null } = {};
+        positionsWithCandidates.forEach(pos => {
+          initialSelected[pos.position_id] = null;
+        });
+        setSelected(initialSelected);
+      } catch {
+        setError('Failed to load election data.');
+      }
+      setLoading(false);
+    };
+    if (electionId) fetchData();
   }, [electionId]);
 
   const handleSelect = (positionId: number, candidateId: number) => {
     setSelected(prev => ({ ...prev, [positionId]: candidateId }));
   };
 
-  const handleShowDetails = (candidateId: number) => {
-    setShowDetails(prev => ({ ...prev, [candidateId]: !prev[candidateId] }));
-  };
-
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    setError(null);
-    setSuccess(null);
-    let user: { student_id?: string } = {};
-    try {
-      const userStr = localStorage.getItem('user');
-      if (userStr) {
-        user = JSON.parse(userStr);
+  const handleSubmit = () => {
+    // No DB submission yet, just validate
+    for (const pos of positions) {
+      if (!selected[pos.position_id]) {
+        setError(`Please select a candidate for ${pos.position_name}.`);
+        setSuccess(null);
+        return;
       }
-    } catch {
-      setError('User not found or invalid.');
-      setSubmitting(false);
-      return;
     }
-    if (!user.student_id) {
-      setError('User not found or invalid.');
-      setSubmitting(false);
-      return;
-    }
-    const votes = Object.entries(selected)
-      .filter(([, candidateId]) => candidateId !== null)
-      .map(([positionId, candidateId]) => ({
-        position_id: Number(positionId),
-        candidate_id: candidateId as number,
-        encrypted_vote: '', // Placeholder for encryption
-        zkp_proof: '', // Placeholder for ZKP
-        verification_receipt: '' // Placeholder for receipt
-      }));
-    if (votes.length !== positions.length) {
-      setError('Please select one candidate for each position.');
-      setSubmitting(false);
-      return;
-    }
-    try {
-      const res = await fetch(`${API_URL}/elections/${electionId}/vote`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_id: user.student_id, votes })
-      });
-      const data: { error?: string } = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to submit vote');
-      setSuccess('Your vote has been submitted successfully!');
-      setTimeout(() => router.push('/user/votes'), 2000);
-    } catch (e) {
-      let message = 'Failed to submit vote.';
-      if (e instanceof Error) message = e.message;
-      setError(message);
-    } finally {
-      setSubmitting(false);
-    }
+    setError(null);
+    setSuccess('Your selections are valid! (Not submitted yet)');
   };
 
   return (
@@ -146,69 +128,77 @@ export default function CastVotePage() {
           style={{ width: '85%' }}>
           <b>Voting Rules:</b> You may select <b>one candidate per position</b>. You can only vote <b>once per election</b>. Please review your selections before submitting.
         </div>
-        {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
-        {success && <div className="bg-green-100 text-green-700 p-3 rounded mb-4">{success}</div>}
+        {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 w-full text-center">{error}</div>}
+        {success && <div className="bg-green-100 text-green-700 p-3 rounded mb-4 w-full text-center">{success}</div>}
         {loading ? (
           <div className="text-center py-12 text-lg text-gray-600">Loading candidates...</div>
         ) : (
-          <form onSubmit={e => { e.preventDefault(); handleSubmit(); }}>
+          <form onSubmit={e => { e.preventDefault(); handleSubmit(); }} className="w-full">
             {positions.map(pos => (
               <div key={pos.position_id} className="mb-8">
                 <h3 className="font-semibold text-lg mb-2 text-gray-800">{pos.position_name}</h3>
                 {pos.description && <div className="text-gray-500 mb-2 text-sm">{pos.description}</div>}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {pos.candidates.map(cand => (
-                    <div
-                      key={cand.candidate_id}
-                      className={`border-2 rounded-lg p-4 bg-white shadow cursor-pointer transition-all duration-150 ${selected[pos.position_id] === cand.candidate_id ? 'border-yellow-500 ring-2 ring-yellow-300' : 'border-gray-200 hover:border-yellow-400'}`}
-                      onClick={() => handleSelect(pos.position_id, cand.candidate_id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-gray-900">{cand.fullname}</div>
-                          <div className="text-sm text-gray-600">{cand.party || 'Independent'}</div>
-                        </div>
-                        <div>
-                          <input
-                            type="checkbox"
-                            checked={selected[pos.position_id] === cand.candidate_id}
-                            onChange={() => handleSelect(pos.position_id, cand.candidate_id)}
-                            className="w-5 h-5 text-yellow-500 border-gray-300 rounded focus:ring-yellow-400"
-                            style={{ pointerEvents: 'none' }}
-                          />
-                        </div>
-                      </div>
-                      {showDetails[cand.candidate_id] || selected[pos.position_id] === cand.candidate_id ? (
-                        <div className="mt-3 text-gray-700">
-                          <div className="mb-1"><b>Description:</b> {cand.candidate_desc || 'No description provided.'}</div>
-                          <button
-                            type="button"
-                            className="text-blue-600 hover:underline text-sm mt-1"
-                            onClick={e => { e.stopPropagation(); handleShowDetails(cand.candidate_id); }}
-                          >Hide details</button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="text-blue-600 hover:underline text-sm mt-3"
-                          onClick={e => { e.stopPropagation(); handleShowDetails(cand.candidate_id); }}
-                        >View details</button>
-                      )}
-                    </div>
+                    <label key={cand.candidate_id} className={`flex items-center p-3 rounded border cursor-pointer transition bg-white hover:bg-yellow-50 shadow-sm ${selected[pos.position_id] === cand.candidate_id ? 'border-yellow-500 ring-2 ring-yellow-300' : 'border-gray-200'}`}
+                      style={{ minHeight: 60 }}>
+                      <input
+                        type="radio"
+                        name={`position-${pos.position_id}`}
+                        value={cand.candidate_id}
+                        checked={selected[pos.position_id] === cand.candidate_id}
+                        onChange={() => handleSelect(pos.position_id, cand.candidate_id)}
+                        className="mr-3 accent-yellow-500"
+                      />
+                      <span
+                        className="font-medium text-blue-900 underline hover:text-blue-700 cursor-pointer"
+                        onClick={e => { e.preventDefault(); setShowCandidate(cand); }}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`View details for ${cand.fullname}`}
+                      >
+                        {cand.fullname}
+                      </span>
+                      {cand.party && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{cand.party}</span>}
+                    </label>
                   ))}
                 </div>
               </div>
             ))}
-            <div className="flex justify-end mt-8">
+            <div className="flex justify-center mt-8">
               <button
                 type="submit"
-                className="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-6 py-3 rounded shadow disabled:opacity-60"
-                disabled={submitting}
+                className="bg-yellow-500 hover:bg-yellow-600 text-white font-semibold px-8 py-3 rounded shadow transition w-full md:w-auto"
               >
-                {submitting ? 'Submitting...' : 'Submit Vote'}
+                Review Vote
               </button>
             </div>
           </form>
+        )}
+        {/* Candidate details modal */}
+        {showCandidate && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+            <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full relative animate-fade-in">
+              <button
+                className="absolute top-2 right-2 text-gray-400 hover:text-gray-700 text-2xl font-bold"
+                onClick={() => setShowCandidate(null)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+              <h2 className="text-xl font-bold mb-2 text-gray-800">{showCandidate.fullname}</h2>
+              {showCandidate.party && <div className="mb-2 text-sm text-blue-700">Party: {showCandidate.party}</div>}
+              {showCandidate.candidate_desc && <div className="mb-2 text-gray-700">{showCandidate.candidate_desc}</div>}
+              <div className="mt-4 flex justify-end">
+                <button
+                  className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                  onClick={() => setShowCandidate(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
