@@ -17,6 +17,11 @@ interface Election {
   election_desc: string;
   date_start: string;
   date_end: string;
+  election_status: string;
+  organization?: {
+    org_id: number;
+    org_name: string;
+  };
 }
 
 export default function UserDashboard() {
@@ -26,98 +31,190 @@ export default function UserDashboard() {
     upcoming: 0,
     completed: 0
   });
-  const [elections, setElections] = useState<Election[]>([]);
+  const [ongoingElections, setOngoingElections] = useState<Election[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingOngoing, setLoadingOngoing] = useState(true);
 
+  // Function to calculate days remaining until an election ends
+  const calculateDaysRemaining = (endDateStr: string): number => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Handle different date formats (YYYY-MM-DD or ISO format)
+    let endDate: Date;
+    try {
+      if (endDateStr.includes('T')) {
+        // ISO format
+        endDate = new Date(endDateStr);
+      } else {
+        // YYYY-MM-DD format
+        const [year, month, day] = endDateStr.split('-').map(Number);
+        endDate = new Date(year, month - 1, day);
+      }
+      
+      endDate.setHours(23, 59, 59, 999);
+      const diffTime = endDate.getTime() - today.getTime();
+      return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    } catch (error) {
+      console.error("Error calculating days remaining:", error, endDateStr);
+      return 0; // Default to 0 days if there's an error
+    }
+  };
+  // Fetch all elections to calculate stats
   useEffect(() => {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
     const fetchElections = async () => {
       setLoading(true);
       try {
+        // Log the current date for debugging
+        const currentDate = new Date();
+        console.log("Current date for comparison:", currentDate.toISOString());
+        
         const res = await fetch(`${API_URL}/elections`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('voter_token')}` }
         });
-        const data = await res.json();
-        setElections(data);
+
+        if (!res.ok) {
+          throw new Error('Failed to fetch elections');
+        }
+
+        const data: Election[] = await res.json();
+        console.log("Fetched elections:", data);
+
         // Calculate stats
         let ongoing = 0, upcoming = 0, completed = 0;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        data.forEach((election: Election) => {
-          const [year, month, day] = election.date_end.split('-').map(Number);
-          const endDate = new Date(year, month - 1, day);
-          endDate.setHours(23, 59, 59, 999);
-          const diffTime = endDate.getTime() - today.getTime();
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-          if (diffDays < 0) completed++;
-          else if ((diffDays === 0 || diffDays > 0) && new Date(election.date_start) <= today) ongoing++;
-          else if (new Date(election.date_start) > today) upcoming++;
-        });
+
+        const ongoingElectionsList = [];
+
+        for (const election of data) {          // Parse start date - handle different date formats carefully
+          let startDate: Date;
+          try {
+            if (election.date_start.includes('T')) {
+              startDate = new Date(election.date_start);
+            } else {
+              const [startYear, startMonth, startDay] = election.date_start.split('-').map(Number);
+              startDate = new Date(startYear, startMonth - 1, startDay);
+              startDate.setHours(0, 0, 0, 0); // Start of day
+            }
+          } catch (error) {
+            console.error(`Error parsing start date for ${election.election_name}:`, error, election.date_start);
+            startDate = new Date(0); // Fallback to epoch
+          }
+
+          // Parse end date - handle different date formats carefully
+          let endDate: Date;
+          try {
+            if (election.date_end.includes('T')) {
+              endDate = new Date(election.date_end);
+            } else {
+              const [endYear, endMonth, endDay] = election.date_end.split('-').map(Number);
+              endDate = new Date(endYear, endMonth - 1, endDay);
+            }
+          } catch (error) {
+            console.error(`Error parsing end date for ${election.election_name}:`, error, election.date_end);
+            endDate = new Date(0); // Fallback to epoch
+          }
+
+          // Set end date to end of day for accurate comparison
+          endDate.setHours(23, 59, 59, 999);          // Log detailed information about date parsing and status detection
+          console.log(`Election ${election.election_name}:`, {
+            id: election.election_id,
+            status: election.election_status,
+            rawStartDate: election.date_start,
+            rawEndDate: election.date_end,
+            parsedStartDate: startDate.toISOString(),
+            parsedEndDate: endDate.toISOString(),
+            today: today.toISOString(),
+            isBeforeStart: today < startDate,
+            isAfterEnd: today > endDate,
+            isOngoing: startDate <= today && today <= endDate
+          });
+
+          // Determine election status based on dates AND the election_status field
+          if (election.election_status === 'Ongoing' || 
+             (startDate <= today && today <= endDate)) {
+            // Election is ongoing - either based on API status or our date calculation
+            console.log(`Election ${election.election_name} is ONGOING`);
+            ongoing++;
+            ongoingElectionsList.push(election);
+          } else if (election.election_status === 'Upcoming' || today < startDate) {
+            // Election hasn't started yet
+            console.log(`Election ${election.election_name} is UPCOMING`);
+            upcoming++;
+          } else if (election.election_status === 'Finished' || election.election_status === 'Canceled' || today > endDate) {
+            // Election has ended
+            console.log(`Election ${election.election_name} is COMPLETED`);
+            completed++;
+          } else {
+            // Fallback - if we can't determine the status, consider it upcoming
+            console.warn(`Could not determine status for election ${election.election_name}, defaulting to upcoming`);
+            upcoming++;
+          }
+        }
+
+        console.log("Stats:", { ongoing, upcoming, completed });
+        console.log("Ongoing elections:", ongoingElectionsList);
+
         setElectionStats({ ongoing, upcoming, completed });
-      } catch {
+        setOngoingElections(ongoingElectionsList);
+      } catch (error) {
+        console.error('Error fetching elections:', error);
         setElectionStats({ ongoing: 0, upcoming: 0, completed: 0 });
+        setOngoingElections([]);
       } finally {
         setLoading(false);
+        setLoadingOngoing(false);
       }
     };
+
     fetchElections();
   }, []);
-
-  // Helper function to check if an election is ongoing
-  const isOngoing = (election: Election): boolean => {
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const [year, month, day] = election.date_end.split('-').map(Number);
-      const endDate = new Date(year, month - 1, day);
-      endDate.setHours(23, 59, 59, 999);
-      const diffTime = endDate.getTime() - today.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && new Date(election.date_start) <= today;
-    } catch {
-      return false;
-    }
-  };
-
-  const ongoingElections = elections.filter(isOngoing);
 
   return (
     <UserLayout>
       <h1 className="text-2xl font-bold mb-8 text-gray-900">Student Dashboard</h1>
-      
+
       {/* Election Status Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white rounded-xl shadow p-6 border border-gray-200">
           <h2 className="text-lg font-semibold mb-2 text-gray-800">Ongoing Elections</h2>
           <div className="flex items-center">
-            <div className="text-3xl font-bold text-red-600">{electionStats.ongoing}</div>
+            <div className="text-3xl font-bold text-red-600">
+              {loading ? '...' : electionStats.ongoing}
+            </div>
             <div className="ml-4 text-sm text-gray-600">
               Elections you can currently participate in
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white rounded-xl shadow p-6 border border-gray-200">
           <h2 className="text-lg font-semibold mb-2 text-gray-800">Upcoming Elections</h2>
           <div className="flex items-center">
-            <div className="text-3xl font-bold text-blue-600">{electionStats.upcoming}</div>
+            <div className="text-3xl font-bold text-blue-600">
+              {loading ? '...' : electionStats.upcoming}
+            </div>
             <div className="ml-4 text-sm text-gray-600">
               Elections scheduled in the coming days
             </div>
           </div>
         </div>
-        
+
         <div className="bg-white rounded-xl shadow p-6 border border-gray-200">
           <h2 className="text-lg font-semibold mb-2 text-gray-800">Past Elections</h2>
           <div className="flex items-center">
-            <div className="text-3xl font-bold text-green-600">{electionStats.completed}</div>
+            <div className="text-3xl font-bold text-green-600">
+              {loading ? '...' : electionStats.completed}
+            </div>
             <div className="ml-4 text-sm text-gray-600">
               Elections you&apos;ve participated in
             </div>
           </div>
         </div>
       </div>
-      
+
       {/* Quick Access and Current Elections Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Quick Access Buttons */}
@@ -150,23 +247,19 @@ export default function UserDashboard() {
             </Link>
           </div>
         </div>
-        
+
         {/* Current Elections */}
         <div className="bg-white rounded-xl shadow p-6 border border-gray-200">
           <h2 className="text-lg font-semibold mb-4 text-gray-800">Current Elections</h2>
-          {loading ? (
-            <div className="text-gray-500">Loading...</div>
+          {loadingOngoing ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-pulse text-gray-500">Loading elections...</div>
+            </div>
           ) : (
             ongoingElections.length > 0 ? (
               <div className="space-y-4">
                 {ongoingElections.map((election: Election) => {
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  const [year, month, day] = election.date_end.split('-').map(Number);
-                  const endDate = new Date(year, month - 1, day);
-                  endDate.setHours(23, 59, 59, 999);
-                  const diffTime = endDate.getTime() - today.getTime();
-                  const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  const daysLeft = calculateDaysRemaining(election.date_end);
                   return (
                     <div key={election.election_id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
                       <div className="flex justify-between">
@@ -175,6 +268,11 @@ export default function UserDashboard() {
                           Ends in {daysLeft} days
                         </span>
                       </div>
+                      {election.organization && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {election.organization.org_name}
+                        </div>
+                      )}
                       <p className="text-sm text-gray-600 mt-1">{election.election_desc}</p>
                       <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
                         <button

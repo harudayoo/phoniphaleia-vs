@@ -55,6 +55,8 @@ interface Candidate {
   party?: string;
   candidate_desc?: string;
   position_id: number | '';
+  photo?: File;
+  photo_url?: string;
 }
 interface Position {
   position_id: number;
@@ -297,33 +299,51 @@ export default function AdminElectionsPage() {
       // Extract all candidates and their positions
       let allCandidates: Candidate[] = [];
       const candidatePositionIds = new Set<number>();
-      
-      candidatesData.forEach((pos) => {
-        if (Array.isArray(pos.candidates)) {
-          // Add each candidate with its position ID
-          allCandidates = allCandidates.concat(pos.candidates.map((c) => ({ 
-            ...c, 
-            position_id: pos.position_id 
-          })));
+        candidatesData.forEach((pos) => {
+        if (Array.isArray(pos.candidates)) {          // Add each candidate with its position ID
+          allCandidates = allCandidates.concat(pos.candidates.map((c) => {
+            // Ensure photo_url has the correct format
+            let photoUrl = c.photo_url;
+            
+            // Handle the photo URL properly
+            if (photoUrl) {
+              // If it's a relative path like '/api/uploads/filename.jpg'
+              if (photoUrl.startsWith('/api/')) {
+                photoUrl = photoUrl.replace('/api', API_URL);
+              }
+              // If it doesn't have http and doesn't include API_URL
+              else if (!photoUrl.startsWith('http') && !photoUrl.includes(API_URL)) {
+                photoUrl = `${API_URL}${photoUrl}`;
+              }
+            }
+            
+            const formattedCandidate = {
+              ...c,
+              position_id: pos.position_id,
+              photo_url: photoUrl
+            };
+            return formattedCandidate;
+          }));
           
           // Track which positions are used by candidates
           candidatePositionIds.add(pos.position_id);
         }
       });
       
-      // Use the specialized endpoint that returns positions for this election
-      // This endpoint already sorts positions with candidate positions first, then other org positions
       const posRes = await fetch(`${API_URL}/positions/by-election/${election.election_id}`);
       const posData: { id: number; name: string; organization_id: number }[] = await posRes.json();
       
-      // Convert positions from API to the format expected by the component
-      // Including verification that positions belong to the same org as the election
       const formattedPositions = posData.map(p => ({
         position_id: p.id,
         position_name: p.name,
         organization_id: p.organization_id,
         inUse: candidatePositionIds.has(p.id)
       }));
+        // Log the photo URLs for debugging
+      console.log('Candidate photo URLs:', allCandidates.map(c => ({
+        name: c.fullname,
+        photo_url: c.photo_url
+      })));
       
       setCandidates(allCandidates);
       setPositions(formattedPositions);
@@ -339,8 +359,7 @@ export default function AdminElectionsPage() {
 
   const handleAddCandidate = () => {
     setCandidates(c => [...c, { fullname: '', party: '', candidate_desc: '', position_id: '' }]);
-  };
-  const handleUpdateCandidate = (idx: number, field: keyof Candidate, value: string | number) => {
+  };  const handleUpdateCandidate = (idx: number, field: keyof Candidate, value: string | number | File) => {
     setCandidates(c => c.map((cand, i) => i === idx ? { ...cand, [field]: value } : cand));
   };
   const handleRemoveCandidate = (idx: number) => {
@@ -358,7 +377,6 @@ export default function AdminElectionsPage() {
     setShowCandidateDeleteModal(false);
     setCandidateToDeleteIdx(null);
   };
-
   const handleSaveCandidates = async () => {
     setCandidatesLoading(true);
     setCandidatesError(null);
@@ -375,20 +393,63 @@ export default function AdminElectionsPage() {
       // 2. Add or update candidates
       for (const cand of candidates) {
         if (!cand.fullname || !cand.position_id) continue;
+        
         if (cand.candidate_id) {
           // Update
-          await fetch(`${API_URL}/candidates/${cand.candidate_id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cand)
-          });
+          if (cand.photo) {
+            // If there's a new photo, use FormData
+            const formData = new FormData();
+            formData.append('fullname', cand.fullname);
+            formData.append('position_id', String(cand.position_id));
+            if (cand.party) formData.append('party', cand.party);
+            if (cand.candidate_desc) formData.append('candidate_desc', cand.candidate_desc);
+            formData.append('photo', cand.photo);
+            
+            await fetch(`${API_URL}/candidates/${cand.candidate_id}`, {
+              method: 'PUT',
+              body: formData
+            });
+          } else {
+            // No new photo, use JSON
+            await fetch(`${API_URL}/candidates/${cand.candidate_id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fullname: cand.fullname,
+                position_id: cand.position_id,
+                party: cand.party,
+                candidate_desc: cand.candidate_desc
+              })
+            });
+          }
         } else {
-          // Add
-          await fetch(`${API_URL}/elections/${candidatesElection?.election_id}/candidates`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cand)
-          });
+          // Add new candidate
+          if (cand.photo) {
+            // With photo
+            const formData = new FormData();
+            formData.append('fullname', cand.fullname);
+            formData.append('position_id', String(cand.position_id));
+            if (cand.party) formData.append('party', cand.party);
+            if (cand.candidate_desc) formData.append('candidate_desc', cand.candidate_desc);
+            formData.append('photo', cand.photo);
+            
+            await fetch(`${API_URL}/elections/${candidatesElection?.election_id}/candidates`, {
+              method: 'POST',
+              body: formData
+            });
+          } else {
+            // Without photo
+            await fetch(`${API_URL}/elections/${candidatesElection?.election_id}/candidates`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fullname: cand.fullname,
+                position_id: cand.position_id,
+                party: cand.party,
+                candidate_desc: cand.candidate_desc
+              })
+            });
+          }
         }
       }
       setShowSuccessModal(true);
@@ -705,13 +766,12 @@ export default function AdminElectionsPage() {
         title="Delete Election"
         entityName={selectedElection?.election_name || ''}
         warningMessage="This will permanently delete the election and all related data."
-      />
-      {showCandidatesModal && (
+      />      {showCandidatesModal && (
         <Modal
           isOpen={showCandidatesModal}
           onClose={() => setShowCandidatesModal(false)}
           title="Manage Candidates"
-          size="xxxxxl"
+          size="xxxxxxl"
           footer={null}
         >
           {candidatesError && <div className="bg-red-100 text-red-700 p-2 rounded mb-2">{candidatesError}</div>}
@@ -733,8 +793,7 @@ export default function AdminElectionsPage() {
                   No positions found for this organization. Please add positions first.
                 </div>
               )}
-              <div className="space-y-4 max-h-96 overflow-y-auto">
-                {candidates.map((cand, idx) => {
+              <div className="space-y-4 max-h-96 overflow-y-auto">                {candidates.map((cand, idx) => {
                   // Sort positions - with used positions (inUse=true) first, then others
                   let dropdownPositions = [...positions].sort((a, b) => {
                     // First sort by inUse (true first)
@@ -762,10 +821,30 @@ export default function AdminElectionsPage() {
                     if (seen.has(p.position_id)) return false;
                     seen.add(p.position_id);
                     return true;
-                  });
+                  });                  return (
+                    <div key={idx} className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end border-b pb-4 mb-4">
+                      {/* Photo Display (Left Side) */}                      <div className="flex items-center justify-center">                        <div className="w-20 h-20 rounded-md overflow-hidden bg-gray-100 border border-gray-200 relative">                          {(cand.photo_url || cand.photo) ? (                            cand.photo ? (
+                              <img 
+                                src={URL.createObjectURL(cand.photo)}
+                                alt={`Photo of ${cand.fullname || 'candidate'}`}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <img 
+                                src={cand.photo_url!}
+                                alt={`Photo of ${cand.fullname || 'candidate'}`}
+                                className="w-full h-full object-cover"
+                              />
+                            )
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-400">
+                              No Photo
+                            </div>
+                          )}
+                        </div>
+                      </div>
 
-                  return (
-                    <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end border-b pb-4 mb-2">
+                      {/* Candidate Details */}
                       <div className="md:col-span-2">
                         <label className="block text-sm text-gray-700 font-medium mb-1">Full Name</label>
                         <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.fullname} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'fullname', e.target.value)} placeholder="Candidate Name" />
@@ -788,12 +867,43 @@ export default function AdminElectionsPage() {
                           ))}
                         </select>
                       </div>
-                      <div>
+                      <div className="flex flex-col justify-end">
+                        {/* Upload Button */}
+                        <input 
+                          type="file" 
+                          id={`photo-upload-${idx}`}
+                          accept="image/jpeg,image/png,image/jpg"
+                          className="hidden" 
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleUpdateCandidate(idx, 'photo', e.target.files[0]);
+                            }
+                          }}
+                        />
+                        <label htmlFor={`photo-upload-${idx}`} className="flex-1 flex items-center justify-center gap-1 cursor-pointer px-3 py-2 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 border border-blue-200 text-sm mb-2">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-camera" viewBox="0 0 16 16">
+                            <path d="M15 12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h1.172a3 3 0 0 0 2.12-.879l.83-.828A1 1 0 0 1 6.827 3h2.344a1 1 0 0 1 .707.293l.828.828A3 3 0 0 0 12.828 5H14a1 1 0 0 1 1 1v6zM2 4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-1.172a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 9.172 2H6.828a2 2 0 0 0-1.414.586l-.828.828A2 2 0 0 1 3.172 4H2z"/>
+                            <path d="M8 11a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zm0 1a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 6.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0z"/>
+                          </svg>
+                          Upload Photo
+                        </label>
+                        
+                        {/* Remove Button */}
+                        <button 
+                          type="button" 
+                          className="flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-red-50 text-red-700 rounded hover:bg-red-100 border border-red-200 text-sm"
+                          onClick={() => handleRemoveCandidate(idx)}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-trash" viewBox="0 0 16 16">
+                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5Zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6Z"/>
+                            <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1ZM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118ZM2.5 3h11V2h-11v1Z"/>
+                          </svg>
+                          Remove
+                        </button>
+                      </div>
+                      <div className="md:col-span-5 mt-2">
                         <label className="block text-sm text-gray-700 font-medium mb-1">Description</label>
                         <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.candidate_desc} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'candidate_desc', e.target.value)} placeholder="Description" />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button type="button" className="text-red-600 hover:text-red-800" onClick={() => handleRemoveCandidate(idx)}>Remove</button>
                       </div>
                     </div>
                   );
@@ -819,7 +929,7 @@ export default function AdminElectionsPage() {
                 size="sm"
                 footer={null}
               >
-                <div className="text-center py-4">
+                <div className="text-center py-4 text-green-600">
                   Candidates updated successfully!
                 </div>
               </Modal>

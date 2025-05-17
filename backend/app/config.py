@@ -7,4 +7,6 @@ class Config:
         "DATABASE_URL",
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    # Other configuration options can go here       
+    # Upload folder for photos
+    UPLOAD_FOLDER = 'uploads/photos'
+    # Other configuration options can go here

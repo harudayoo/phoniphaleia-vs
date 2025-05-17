@@ -54,10 +54,8 @@ def create_app():
     migrate.init_app(app, db)
 
     with app.app_context():
-        db.create_all()
-
-    # Register blueprints
-    from app.routes import auth_bp, college_bp, admin_bp, election_bp, user_bp, position_bp, organization_bp, trusted_authority_bp, crypto_config_bp, key_share_bp, admin_search_bp
+        db.create_all()    # Register blueprints
+    from app.routes import auth_bp, college_bp, admin_bp, election_bp, user_bp, position_bp, organization_bp, trusted_authority_bp, crypto_config_bp, key_share_bp, admin_search_bp, upload_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(college_bp)
     app.register_blueprint(admin_bp)
@@ -69,6 +67,7 @@ def create_app():
     app.register_blueprint(crypto_config_bp)
     app.register_blueprint(key_share_bp)
     app.register_blueprint(admin_search_bp)
+    app.register_blueprint(upload_bp)
 
     # Simple test route
     @app.route('/direct-test')

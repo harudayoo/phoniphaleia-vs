@@ -11,6 +11,8 @@ class Candidate(db.Model):
     position_id = db.Column(db.Integer, db.ForeignKey('positions.position_id'), nullable=False)
     party = db.Column(db.String(100))
     candidate_desc = db.Column(db.String(255))
+    photo_path = db.Column(db.String(255))  # Path to stored candidate photo
+    photo_metadata = db.Column(db.Text)  # Store metadata about the photo
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

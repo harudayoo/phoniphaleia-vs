@@ -5,6 +5,10 @@ election_bp = Blueprint('election', __name__, url_prefix='/api')
 
 election_bp.route('/elections', methods=['GET'])(ElectionController.get_all)
 
+@election_bp.route('/elections/ongoing', methods=['GET'])
+def get_ongoing_elections():
+    return ElectionController.get_ongoing()
+
 @election_bp.route('/elections', methods=['POST'])
 def create_election():
     return ElectionController.create()

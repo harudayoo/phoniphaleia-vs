@@ -18,6 +18,7 @@ type Candidate = {
   party?: string;
   candidate_desc?: string;
   position_id: number | '';
+  photo?: File;
 };
 
 export default function CreateElectionPage() {
@@ -97,7 +98,7 @@ export default function CreateElectionPage() {
   };
 
   // Update candidate
-  const updateCandidate = (idx: number, field: keyof Candidate, value: string | number) => {
+  const updateCandidate = (idx: number, field: keyof Candidate, value: string | number | File) => {
     setCandidates(c => c.map((cand, i) => i === idx ? { ...cand, [field]: value } : cand));
   };
 
@@ -105,11 +106,10 @@ export default function CreateElectionPage() {
   const removeCandidate = (idx: number) => {
     setCandidates(c => c.length > 3 ? c.filter((_, i) => i !== idx) : c);
   };
-
   // Save all data
   const handleFinish = async () => {
     try {
-      // 1. Create election (with candidates)
+      // 1. Create election (without candidates with photos, we'll add those separately)
       const electionRes = await fetch(`${API_URL}/elections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -122,11 +122,33 @@ export default function CreateElectionPage() {
           date_end: endDate,
           queued_access: queuedAccess,
           max_concurrent_voters: queuedAccess ? (maxConcurrentVoters === '' ? null : maxConcurrentVoters) : null,
-          candidates: candidates.filter(c => c.fullname && c.position_id)
+          // Only include candidates without photos here
+          candidates: candidates
+            .filter(c => c.fullname && c.position_id && !c.photo)
         })
       });
       if (!electionRes.ok) throw new Error('Failed to create election');
       const election = await electionRes.json();
+      
+      // Handle candidates with photos separately
+      const candidatesWithPhotos = candidates.filter(c => c.fullname && c.position_id && c.photo);
+      for (const candidate of candidatesWithPhotos) {
+        const formData = new FormData();
+        formData.append('fullname', candidate.fullname);
+        formData.append('position_id', String(candidate.position_id));
+        if (candidate.party) formData.append('party', candidate.party);
+        if (candidate.candidate_desc) formData.append('candidate_desc', candidate.candidate_desc);
+        if (candidate.photo) formData.append('photo', candidate.photo);
+        
+        const candidateRes = await fetch(`${API_URL}/elections/${election.election_id}/candidates`, {
+          method: 'POST', 
+          body: formData // No Content-Type header for FormData
+        });
+        
+        if (!candidateRes.ok) {
+          console.error('Failed to add candidate with photo');
+        }
+      }
       // 2. Save public key
       const cryptoRes = await fetch(`${API_URL}/crypto_configs`, {
         method: 'POST',
@@ -413,8 +435,7 @@ export default function CreateElectionPage() {
               <Plus size={16} /> Add Candidate
             </button>
           </div>
-          <div className="space-y-4">
-            {candidates.map((cand, idx) => (
+          <div className="space-y-4">            {candidates.map((cand, idx) => (
               <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end border-b pb-4 mb-2">
                 <div className="md:col-span-2">
                   <label className="block text-sm text-gray-700 font-medium mb-1">Full Name</label>
@@ -440,6 +461,32 @@ export default function CreateElectionPage() {
                 <div className="flex items-center gap-2">
                   {candidates.length > 3 && (
                     <button type="button" className="text-red-600 hover:text-red-800" onClick={() => removeCandidate(idx)}>Remove</button>
+                  )}
+                </div>
+                <div className="md:col-span-5 mt-2">
+                  <label className="block text-sm text-gray-700 font-medium mb-1">Photo (optional)</label>
+                  <input 
+                    type="file" 
+                    accept="image/jpeg,image/png,image/jpg"
+                    className="w-full border text-gray-700 rounded px-3 py-2" 
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        // Store the file in the candidates array
+                        updateCandidate(idx, 'photo', file);
+                      }
+                    }}
+                  />                  {cand.photo && (
+                    <div className="mt-2">
+                      <Image 
+                        src={URL.createObjectURL(cand.photo)} 
+                        alt={`Preview of ${cand.fullname}`} 
+                        height={96}
+                        width={96}
+                        className="h-24 w-24 object-cover rounded"
+                        style={{ objectFit: 'cover' }}
+                      />
+                    </div>
                   )}
                 </div>
               </div>

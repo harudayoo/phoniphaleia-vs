@@ -8,6 +8,11 @@ from app.models.election_waitlist import ElectionWaitlist
 from app.models.voter import Voter
 from app.models.position import Position
 from app.models.vote import Vote
+from app.controllers.auth_controller import AuthController
+import os
+import uuid
+import json
+from werkzeug.utils import secure_filename
 
 class ElectionController:
     @staticmethod
@@ -56,6 +61,45 @@ class ElectionController:
         except Exception as ex:
             print("Error in get_all elections:", ex)
             return jsonify({"error": str(ex)}), 500
+
+    @staticmethod
+    def get_ongoing():
+        try:
+            now = datetime.utcnow().date()
+            # Get elections where start_date <= today <= end_date
+            ongoing_elections = Election.query.filter(
+                Election.date_start <= now,
+                Election.date_end >= now,
+                Election.election_status == 'Ongoing'
+            ).all()
+            
+            result = []
+            for e in ongoing_elections:
+                election_data = {
+                    'election_id': e.election_id,
+                    'election_name': e.election_name,
+                    'election_desc': e.election_desc,
+                    'date_start': e.date_start.isoformat() if e.date_start else None,
+                    'date_end': e.date_end.isoformat() if e.date_end else None,
+                    'election_status': e.election_status,
+                    'queued_access': e.queued_access,
+                    'max_concurrent_voters': e.max_concurrent_voters
+                }
+                
+                # Add organization info if available
+                if e.organization:
+                    election_data['organization'] = {
+                        'org_id': e.organization.org_id,
+                        'org_name': e.organization.org_name,
+                        'college_name': e.organization.college.college_name if e.organization.college else None
+                    }
+                
+                result.append(election_data)
+            
+            return jsonify(result)
+        except Exception as ex:
+            print("Error in get_ongoing elections:", ex)
+            return jsonify([]), 500
 
     @staticmethod
     def create():
@@ -329,11 +373,18 @@ class ElectionController:
             for cand in candidates:
                 pos_id = cand.position_id
                 if pos_id in grouped:
+                    # Create URL for photo based on photo_path
+                    photo_url = None
+                    if cand.photo_path:
+                        # Use relative path as URL
+                        photo_url = f"/api/uploads/{os.path.basename(cand.photo_path)}"
+                    
                     grouped[pos_id]['candidates'].append({
                         'candidate_id': cand.candidate_id,
                         'fullname': cand.fullname,
                         'party': cand.party,
-                        'candidate_desc': cand.candidate_desc
+                        'candidate_desc': cand.candidate_desc,
+                        'photo_url': photo_url
                     })
             return jsonify(list(grouped.values()))
         except Exception as ex:
@@ -382,19 +433,43 @@ class ElectionController:
     @staticmethod
     def add_candidate(election_id):
         try:
-            data = request.json or {}
+            # Handle form data for file upload
+            data = request.form.to_dict() if request.form else request.json or {}
+            photo = request.files.get('photo')
+            photo_metadata = json.loads(request.form.get('photo_metadata', '{}'))
+
             fullname = data.get('fullname')
             position_id = data.get('position_id')
             party = data.get('party')
             candidate_desc = data.get('candidate_desc')
+            
             if not fullname or not position_id:
                 return jsonify({'error': 'fullname and position_id are required'}), 400
+            
+            # Handle photo upload if provided
+            photo_path = None
+            if photo and AuthController.allowed_file(photo.filename):
+                unique_filename = f"{uuid.uuid4().hex}_{secure_filename(photo.filename)}"
+                photo_path = os.path.join(AuthController.UPLOAD_FOLDER, unique_filename)
+                os.makedirs(AuthController.UPLOAD_FOLDER, exist_ok=True)
+                photo.save(photo_path)
+                
+                # Fallback for missing metadata
+                if not photo_metadata:
+                    photo_metadata = {
+                        "name": photo.filename,
+                        "size": os.path.getsize(photo_path),
+                        "type": photo.mimetype
+                    }
+            
             candidate = Candidate(
                 election_id=election_id,
                 fullname=fullname,
                 position_id=position_id,
                 party=party,
-                candidate_desc=candidate_desc
+                candidate_desc=candidate_desc,
+                photo_path=photo_path,
+                photo_metadata=json.dumps(photo_metadata) if photo_metadata else None
             )
             db.session.add(candidate)
             db.session.commit()
@@ -407,10 +482,16 @@ class ElectionController:
     @staticmethod
     def edit_candidate(candidate_id):
         try:
-            data = request.json or {}
+            # Handle form data for file upload
+            data = request.form.to_dict() if request.form else request.json or {}
+            photo = request.files.get('photo')
+            photo_metadata = json.loads(request.form.get('photo_metadata', '{}'))
+            
             candidate = Candidate.query.get(candidate_id)
             if not candidate:
                 return jsonify({'error': 'Candidate not found'}), 404
+                
+            # Update candidate details
             if 'fullname' in data:
                 candidate.fullname = data['fullname']
             if 'position_id' in data:
@@ -419,6 +500,34 @@ class ElectionController:
                 candidate.party = data['party']
             if 'candidate_desc' in data:
                 candidate.candidate_desc = data['candidate_desc']
+                
+            # Handle photo upload if provided
+            if photo and AuthController.allowed_file(photo.filename):
+                # Remove old photo if it exists
+                if candidate.photo_path and os.path.exists(candidate.photo_path):
+                    try:
+                        os.remove(candidate.photo_path)
+                    except Exception as e:
+                        print(f"Failed to remove old photo: {e}")
+                
+                # Save new photo
+                unique_filename = f"{uuid.uuid4().hex}_{secure_filename(photo.filename)}"
+                photo_path = os.path.join(AuthController.UPLOAD_FOLDER, unique_filename)
+                os.makedirs(AuthController.UPLOAD_FOLDER, exist_ok=True)
+                photo.save(photo_path)
+                
+                # Update candidate record
+                candidate.photo_path = photo_path
+                
+                # Fallback for missing metadata
+                if not photo_metadata:
+                    photo_metadata = {
+                        "name": photo.filename,
+                        "size": os.path.getsize(photo_path),
+                        "type": photo.mimetype
+                    }
+                candidate.photo_metadata = json.dumps(photo_metadata)
+                
             db.session.commit()
             return jsonify({'message': 'Candidate updated'}), 200
         except Exception as ex:

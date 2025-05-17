@@ -12,6 +12,7 @@ from .trusted_authority_routes import trusted_authority_bp
 from .crypto_config_routes import crypto_config_bp
 from .key_share_routes import key_share_bp
 from .admin_search_routes import admin_search_bp
+from .upload_routes import upload_bp
 
 # Define __all__ for clarity
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "position_bp",
     "trusted_authority_bp",
     "crypto_config_bp",
+    "upload_bp",
     "key_share_bp",
     "admin_search_bp",
 ]
