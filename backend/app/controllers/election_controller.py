@@ -629,3 +629,98 @@ class ElectionController:
         except Exception as ex:
             print('Error in check_voter_voted:', ex)
             return jsonify({"error": "Failed to check voting status"}), 500
+
+    @staticmethod
+    def get_votes_by_voter(election_id, student_id):
+        try:
+            # Get all votes for this election and student
+            votes = (
+                db.session.query(Vote, Candidate, Position)
+                .join(Candidate, Vote.candidate_id == Candidate.candidate_id)
+                .join(Position, Candidate.position_id == Position.position_id)
+                .filter(Vote.election_id == election_id, Vote.student_id == student_id)
+                .all()
+            )
+            result = [
+                {
+                    'candidate_id': v[0].candidate_id,
+                    'position_id': v[1].position_id,
+                    'candidate_name': v[1].fullname,
+                    'party': v[1].party,
+                    'position_name': v[2].position_name
+                }
+                for v in votes
+            ]
+            return jsonify({'votes': result})
+        except Exception as ex:
+            print('Error in get_votes_by_voter:', ex)
+            return jsonify({'error': 'Failed to fetch votes'}), 500
+
+    @staticmethod
+    def send_vote_receipt(election_id):
+        try:
+            data = request.json or {}
+            student_id = data.get('student_id')
+            if not student_id:
+                return jsonify({'error': 'student_id required'}), 400
+            # Get voter
+            voter = Voter.query.get(student_id)
+            if not voter:
+                return jsonify({'error': 'Voter not found'}), 404
+            # Get election
+            election = Election.query.get(election_id)
+            if not election:
+                return jsonify({'error': 'Election not found'}), 404
+            # Get votes
+            votes = (
+                db.session.query(Vote, Candidate, Position)
+                .join(Candidate, Vote.candidate_id == Candidate.candidate_id)
+                .join(Position, Candidate.position_id == Position.position_id)
+                .filter(Vote.election_id == election_id, Vote.student_id == student_id)
+                .all()
+            )
+            if not votes:
+                return jsonify({'error': 'No votes found for this voter in this election'}), 404
+            # Compose email
+            from flask_mail import Message
+            vote_rows = "".join([
+                f"<tr><td style='padding:8px;border:1px solid #eee'>{v[2].position_name}</td>"
+                f"<td style='padding:8px;border:1px solid #eee'>{v[1].fullname}</td>"
+                f"<td style='padding:8px;border:1px solid #eee'>{v[1].party or ''}</td></tr>"
+                for v in votes
+            ])
+            html = f"""
+            <div style='font-family:sans-serif;background:#f9fafb;padding:32px;'>
+              <div style='max-width:480px;margin:auto;background:#fff;border-radius:12px;box-shadow:0 2px 8px #0001;padding:32px;'>
+                <h2 style='color:#1a202c;text-align:center;margin-bottom:24px;'>Your Vote Receipt</h2>
+                <p style='color:#333;text-align:center;'>Thank you for voting in <b>{election.election_name}</b>!</p>
+                <table style='width:100%;border-collapse:collapse;margin:24px 0;'>
+                  <thead>
+                    <tr style='background:#fef9c3;'>
+                      <th style='padding:8px;border:1px solid #eee;text-align:left;'>Position</th>
+                      <th style='padding:8px;border:1px solid #eee;text-align:left;'>Candidate</th>
+                      <th style='padding:8px;border:1px solid #eee;text-align:left;'>Party</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vote_rows}
+                  </tbody>
+                </table>
+                <p style='color:#666;font-size:13px;text-align:center;'>This is your official vote receipt. Please keep it for your records.<br/>If you did not cast this vote, contact the election administrator immediately.</p>
+                <div style='text-align:center;margin-top:24px;'>
+                  <img src='https://www.usep.edu.ph/wp-content/uploads/2022/09/USEP-Logo-Profile-1.png' alt='USEP Logo' style='width:80px;opacity:0.7;margin:auto;' />
+                </div>
+              </div>
+            </div>
+            """
+            msg = Message(
+                subject=f"Vote Receipt for {election.election_name}",
+                recipients=[voter.student_email],
+                html=html
+            )
+            from app import mail
+            mail.send(msg)
+            return jsonify({'message': 'Vote receipt sent successfully'})
+        except Exception as ex:
+            print('Error in send_vote_receipt:', ex)
+            return jsonify({'error': 'Failed to send vote receipt'}), 500

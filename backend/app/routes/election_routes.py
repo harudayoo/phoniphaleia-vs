@@ -88,3 +88,13 @@ def check_voter_voted(election_id):
     else:  # POST
         voter_id = request.json.get('voter_id') if request.json else None
     return ElectionController.check_voter_voted(election_id, voter_id)
+
+@election_bp.route('/elections/<int:election_id>/votes/by-voter/<student_id>', methods=['GET'])
+def get_votes_by_voter(election_id, student_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.get_votes_by_voter(election_id, student_id)
+
+@election_bp.route('/elections/<int:election_id>/votes/send-receipt', methods=['POST'])
+def send_vote_receipt(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.send_vote_receipt(election_id)

@@ -193,6 +193,10 @@ export default function VoteVerifyPage() {
       }
       setOverallStatus('success');
       setError(null);
+      // Redirect to vote review page after a short delay
+      setTimeout(() => {
+        router.push(`/user/votes/vote-review?election_id=${eId}&student_id=${user?.student_id}`);
+      }, 1800);
     } catch {
       setOverallStatus('failed');
       setError('An error occurred during vote verification or encryption.');
