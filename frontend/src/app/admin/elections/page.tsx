@@ -57,6 +57,7 @@ interface Candidate {
   position_id: number | '';
   photo?: File;
   photo_url?: string;
+  photo_path?: string; // Add this line to match backend and fix TS error
 }
 interface Position {
   position_id: number;
@@ -303,7 +304,7 @@ export default function AdminElectionsPage() {
         if (Array.isArray(pos.candidates)) {
           if (pos.candidates.length > 0) candidatePositionIds.add(pos.position_id);
           allCandidates = allCandidates.concat(
-            pos.candidates.map((c: any) => {
+            pos.candidates.map((c: Candidate) => {
               let photoUrl = c.photo_url;
               if (!photoUrl && c.photo_path) photoUrl = c.photo_path;
               if (photoUrl) {
