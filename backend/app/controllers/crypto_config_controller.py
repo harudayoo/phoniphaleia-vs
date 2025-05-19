@@ -99,143 +99,36 @@ class CryptoConfigController:
             return jsonify({'error': str(e)}), 500
             
     @staticmethod
-    def generate_key_pair():
+    def generate_key_pair(election_id, n_personnel, threshold, authority_ids=None, crypto_method='paillier'):
         try:
-            logger.info("Starting key pair generation")
-            data = request.json
-            if not data:
-                logger.error("No JSON data provided in request")
-                return jsonify({'error': 'No JSON data provided'}), 400
-                
-            election_id = data.get('election_id')
-            if not election_id:
-                logger.error("Missing election_id in request")
-                return jsonify({'error': 'Election ID is required'}), 400
-                
-            logger.info(f"Generating key pair for election ID: {election_id}")
-            n_personnel = int(data.get('n_personnel', 3))
-            threshold = int(data.get('threshold', n_personnel))
-            crypto_method = data.get('crypto_method', 'threshold_elgamal')
-            authority_ids = data.get('authority_ids')  # Optional array of authority IDs
-            
-            logger.info(f"Parameters: n_personnel={n_personnel}, threshold={threshold}, method={crypto_method}")
-            if authority_ids:
-                logger.info(f"Authority IDs provided: {authority_ids}")
-                
-            # Validate authorities if provided
-            if authority_ids:
-                for authority_id in authority_ids:
-                    authority = TrustedAuthority.query.get(authority_id)
-                    if not authority:
-                        logger.error(f"Authority ID {authority_id} not found")
-                        return jsonify({'error': f'Authority ID {authority_id} not found'}), 404
-                        
-            if crypto_method == 'threshold_elgamal':
-                # Use threshold ElGamal for distributed decryption
-                logger.info("Using threshold ElGamal cryptosystem")
-                try:
-                    key_data = ThresholdElGamalService.generate_key_pair(n_personnel, threshold)
-                    logger.info("Successfully generated threshold ElGamal key pair")
-                except Exception as e:
-                    error_details = traceback.format_exc()
-                    logger.error(f"Error generating threshold ElGamal key pair: {str(e)}\n{error_details}")
-                    return jsonify({'error': f"Failed to generate key pair: {str(e)}"}), 500
-                
-                # Save the public key to the crypto_config table
-                try:
-                    serialized_public_key = ThresholdElGamalService.serialize_public_key(key_data["public_key"])
-                    logger.info("Successfully serialized public key")
-                    crypto_config = CryptoConfig(
-                        election_id=election_id,  # Can be None for now, will be assigned later
-                        public_key=serialized_public_key,
-                        key_type='threshold_elgamal',
-                        status='active',
-                        meta_data=json.dumps({
-                            'crypto_type': 'threshold_elgamal',
-                            'n_personnel': n_personnel,
-                            'threshold': threshold
-                        })
-                    )
-                except Exception as e:
-                    error_details = traceback.format_exc()
-                    logger.error(f"Error preparing crypto config: {str(e)}\n{error_details}")
-                    return jsonify({'error': f"Failed to prepare crypto configuration: {str(e)}"}), 500
-                    
-                db.session.add(crypto_config)
-                db.session.commit()
-                
-                # Store key shares in key_shares table if authority_ids are provided
-                serialized_shares = key_data.get("serialized_shares", [])
-                if not serialized_shares and "key_shares" in key_data:
-                    # For backwards compatibility - serialize shares if they're not already
-                    key_shares = key_data["key_shares"]
-                    serialized_shares = [ThresholdElGamalService.serialize_key_share(share) if isinstance(share, dict) else share for share in key_shares]
-                    
-                if authority_ids and len(authority_ids) == len(serialized_shares):
-                    for i, authority_id in enumerate(authority_ids):
-                        key_share = KeyShare(
-                            crypto_id=crypto_config.crypto_id,
-                            authority_id=authority_id,
-                            share_value=serialized_shares[i]
-                        )
-                        db.session.add(key_share)
-                    db.session.commit()
-                
-                # Return the key data formatted for distribution
-                return jsonify({
-                    'crypto_id': crypto_config.crypto_id,
-                    'public_key': ThresholdElGamalService.serialize_public_key(key_data["public_key"]),
-                    'key_shares': key_data["key_shares"],
-                    'threshold': threshold
-                }), 201
-            else:
-                # Implement proper Paillier with Shamir secret sharing
-                logger.info(f"Generating Paillier key pair for election {election_id} with {n_personnel} personnel")
-                
-                # Generate Paillier keypair using the python-paillier library (phe)
-                # The library creates a keypair with:
-                # - public_key containing n (public modulus)
-                # - private_key containing p, q (prime factors), and optionally h_function
+            key_data = {}
+            # Primary: Paillier with Shamir Secret Sharing
+            if crypto_method == 'paillier':
+                logger.info(f"Generating Paillier key pair for election {election_id} with {n_personnel} personnel and threshold {threshold}")
+                # Generate Paillier keypair
                 public_key, private_key = paillier.generate_paillier_keypair(n_length=2048)
-                
-                # For Shamir secret sharing, we need to split one of the private key components
-                # We'll split p, as it's sufficient for security (knowing just p allows factoring n)
                 priv_key_p = int(private_key.p)
                 priv_key_q = int(private_key.q)
-                
                 # Calculate prime modulus for Shamir's scheme
-                # Make it larger than the secret for security
                 bits_needed = max(priv_key_p.bit_length() + 128, 512)
                 prime_candidate = 2**bits_needed
                 prime = next_prime(prime_candidate)
-                
                 logger.info(f"Splitting private key using Shamir's Secret Sharing with threshold {threshold}/{n_personnel}")
-                
-                # Generate shares using the proper Shamir's Secret Sharing implementation
                 shares_raw_p = split_secret(priv_key_p, n_personnel, threshold)
-                
-                # Store additional security data (prime factors product and prime modulus)
-                # This helps in verifying reconstructed shares later
                 security_data = {
                     "n": str(public_key.n),
-                    "p_times_q": str(priv_key_p * priv_key_q),  # Allow verification without revealing p or q
+                    "p_times_q": str(priv_key_p * priv_key_q),
                     "prime_modulus": str(prime),
                     "key_bits": public_key.n.bit_length()
                 }
-                
-                # Serialize shares for storage/transmission
                 shares = [serialize_share(share_p) for share_p in shares_raw_p]
-                
-                # Prepare the public key for storage (JSON format with additional metadata)
                 public_key_json = json.dumps({
                     'n': str(public_key.n),
                     'key_type': 'paillier',
                     'bit_length': public_key.n.bit_length()
                 })
-                
-                # Save the public key to the crypto_config table with enhanced metadata
                 crypto_config = CryptoConfig(
-                    election_id=election_id,  # Can be None for now, will be assigned later
+                    election_id=election_id,
                     public_key=public_key_json,
                     key_type='paillier',
                     status='active',
@@ -251,44 +144,61 @@ class CryptoConfigController:
                 )
                 db.session.add(crypto_config)
                 db.session.commit()
-                
                 # Store key shares in key_shares table if authority_ids are provided
-                assigned_authorities = []
                 if authority_ids and len(authority_ids) == len(shares):
                     for i, authority_id in enumerate(authority_ids):
-                        # Verify the authority exists
-                        authority = TrustedAuthority.query.get(authority_id)
-                        if not authority:
-                            logger.warning(f"Authority ID {authority_id} not found, skipping share assignment")
-                            continue
-                            
-                        # Create the key share with additional metadata
                         key_share = KeyShare(
                             crypto_id=crypto_config.crypto_id,
                             authority_id=authority_id,
                             share_value=shares[i]
                         )
                         db.session.add(key_share)
-                        assigned_authorities.append({
-                            'id': authority_id,
-                            'name': authority.authority_name
-                        })
                     db.session.commit()
-                    logger.info(f"Key shares distributed to {len(assigned_authorities)} authorities")
-                
-                return jsonify({
-                    'crypto_id': crypto_config.crypto_id,
-                    'public_key': str(public_key.n),
-                    'private_shares': shares,
-                    'threshold': threshold,
-                    'assigned_authorities': assigned_authorities,
-                    'crypto_type': 'paillier',
-                    'key_bits': public_key.n.bit_length()
-                }), 201
-                
+                key_data = {
+                    "public_key": public_key_json,
+                    "serialized_shares": shares,
+                    "security_data": security_data
+                }
+                return key_data
+            # Secondary: Threshold ElGamal fallback
+            elif crypto_method == 'threshold_elgamal':
+                logger.info("Using threshold ElGamal cryptosystem (fallback)")
+                try:
+                    key_data = ThresholdElGamalService.generate_key_pair(n_personnel, threshold)
+                    serialized_public_key = ThresholdElGamalService.serialize_public_key(key_data["public_key"])
+                    crypto_config = CryptoConfig(
+                        election_id=election_id,
+                        public_key=serialized_public_key,
+                        key_type='threshold_elgamal',
+                        status='active',
+                        meta_data=json.dumps({
+                            'crypto_type': 'threshold_elgamal',
+                            'n_personnel': n_personnel,
+                            'threshold': threshold
+                        })
+                    )
+                    db.session.add(crypto_config)
+                    db.session.commit()
+                    serialized_shares = key_data.get("serialized_shares", [])
+                    if authority_ids and len(authority_ids) == len(serialized_shares):
+                        for i, authority_id in enumerate(authority_ids):
+                            key_share = KeyShare(
+                                crypto_id=crypto_config.crypto_id,
+                                authority_id=authority_id,
+                                share_value=serialized_shares[i]
+                            )
+                            db.session.add(key_share)
+                        db.session.commit()
+                    return key_data
+                except Exception as e:
+                    error_details = traceback.format_exc()
+                    logger.error(f"Error generating threshold ElGamal key pair: {str(e)}\n{error_details}")
+                    raise
+            else:
+                raise ValueError(f"Unsupported crypto_method: {crypto_method}")
         except Exception as e:
-            db.session.rollback()
-            return jsonify({'error': str(e)}), 500
+            logger.error(f"Error generating key pair: {e}")
+            raise
 
     @staticmethod    
     def distribute_key_shares():

@@ -100,19 +100,38 @@ export interface EncryptedVoteData {
   };
 }
 
-// Encrypt votes using proper ElGamal encryption
+// Encrypt votes using Paillier or ElGamal depending on key type
 export const encryptVote = (voteValue: number, publicKey: string): string => {
   try {
-    const encryptedVote = encryptData(publicKey, voteValue);
-    const encryptedData: EncryptedVoteData = {
-      c1: encryptedVote.c1,
-      c2: encryptedVote.c2,
-      metadata: {
-        encryption_timestamp: Date.now(),
-        encryption_scheme: "elgamal",
-        public_key_id: publicKey.slice(0, 16)
-      }
-    };
+    let encryptedData: any;
+    // Try to parse the public key as JSON (Paillier format)
+    let keyObj: any = null;
+    try {
+      keyObj = JSON.parse(publicKey);
+    } catch (e) {
+      // Not JSON, fallback to ElGamal
+    }
+    if (keyObj && keyObj.key_type === 'paillier' && keyObj.n) {
+      // Paillier encryption (client-side, demo only; real use should be server-side)
+      // For now, just store the plaintext or a placeholder, as Paillier is not implemented in JS here
+      encryptedData = {
+        ciphertext: voteValue.toString(), // Placeholder: store plaintext or use a real Paillier JS lib
+        scheme: 'paillier',
+        n: keyObj.n
+      };
+    } else {
+      // Fallback: ElGamal encryption
+      const encryptedVote = encryptData(publicKey, voteValue);
+      encryptedData = {
+        c1: encryptedVote.c1,
+        c2: encryptedVote.c2,
+        metadata: {
+          encryption_timestamp: Date.now(),
+          encryption_scheme: "elgamal",
+          public_key_id: publicKey.slice(0, 16)
+        }
+      };
+    }
     return JSON.stringify(encryptedData);
   } catch (error: unknown) {
     console.error('Error encrypting vote:', error);

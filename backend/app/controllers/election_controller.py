@@ -40,7 +40,8 @@ class ElectionController:
                     if e.organization.college:
                         college_name = e.organization.college.college_name
                         college_id = e.organization.college.college_id
-                result.append({                    "election_id": e.election_id,
+                result.append({
+                    "election_id": e.election_id,
                     "election_name": e.election_name,
                     "election_desc": e.election_desc,
                     "election_status": status,
@@ -118,7 +119,8 @@ class ElectionController:
                 status = 'Upcoming'
             elif date_start <= now <= date_end:
                 status = 'Ongoing'
-            elif now > date_end:                status = 'Finished'
+            elif now > date_end:
+                status = 'Finished'
             else:
                 status = data.get('election_status', 'Upcoming')
                 
@@ -229,7 +231,9 @@ class ElectionController:
         except Exception as ex:
             db.session.rollback()
             print('Error in update election:', ex)
-            return jsonify({'error': f'Failed to update election: {str(ex)}'}), 500    @staticmethod
+            return jsonify({'error': f'Failed to update election: {str(ex)}'}), 500
+
+    @staticmethod
     def delete(election_id):
         try:
             election = Election.query.get(election_id)
@@ -239,30 +243,47 @@ class ElectionController:
             # 1. Delete all votes cast in this election
             from app.models.vote import Vote
             Vote.query.filter_by(election_id=election_id).delete()
-            
-            # 2. Delete all candidates linked to this election
+
+            # 2. Delete all candidates linked to this election (and their photos)
             from app.models.candidate import Candidate
-            Candidate.query.filter_by(election_id=election_id).delete()
+            candidates = Candidate.query.filter_by(election_id=election_id).all()
+            for cand in candidates:
+                if cand.photo_path:
+                    uploads_dir = os.path.join(os.getcwd(), 'uploads')
+                    abs_photo_path = os.path.join(uploads_dir, cand.photo_path)
+                    if os.path.exists(abs_photo_path):
+                        try:
+                            os.remove(abs_photo_path)
+                        except Exception as e:
+                            print(f"Failed to remove candidate photo {abs_photo_path}: {e}")
+                db.session.delete(cand)
 
             # 3. Delete all key shares and crypto configs linked to this election
             from app.models.crypto_config import CryptoConfig
             from app.models.key_share import KeyShare
             from app.models.trusted_authority import TrustedAuthority
-            
             crypto_configs = CryptoConfig.query.filter_by(election_id=election_id).all()
+            authority_ids_to_delete = set()
             for crypto in crypto_configs:
+                key_shares = KeyShare.query.filter_by(crypto_id=crypto.crypto_id).all()
+                for ks in key_shares:
+                    authority_ids_to_delete.add(ks.authority_id)
                 KeyShare.query.filter_by(crypto_id=crypto.crypto_id).delete()
                 db.session.delete(crypto)
-                
-            # 4. Delete all waitlist entries for this election
+
+            for authority_id in authority_ids_to_delete:
+                other_shares = KeyShare.query.filter_by(authority_id=authority_id).count()
+                if other_shares == 0:
+                    ta = TrustedAuthority.query.get(authority_id)
+                    if ta:
+                        db.session.delete(ta)
+
             from app.models.election_waitlist import ElectionWaitlist
             ElectionWaitlist.query.filter_by(election_id=election_id).delete()
-            
-            # 5. Delete election results
+
             from app.models.election_result import ElectionResult
             ElectionResult.query.filter_by(election_id=election_id).delete()
 
-            # 6. Finally, delete the election itself
             db.session.delete(election)
             db.session.commit()
             return jsonify({'message': 'Election and all related data deleted successfully'})
@@ -465,36 +486,34 @@ class ElectionController:
             # Handle form data for file upload
             data = request.form.to_dict() if request.form else request.json or {}
             photo = request.files.get('photo')
-            photo_metadata = json.loads(request.form.get('photo_metadata', '{}'))
+            photo_metadata = json.loads(request.form.get('photo_metadata', '{}')) if request.form and request.form.get('photo_metadata') else {}
 
             fullname = data.get('fullname')
             position_id = data.get('position_id')
             party = data.get('party')
             candidate_desc = data.get('candidate_desc')
-            
             if not fullname or not position_id:
                 return jsonify({'error': 'fullname and position_id are required'}), 400
-            
-            # Handle photo upload if provided            photo_path = None
+
+            photo_path = None
             if photo and AuthController.allowed_file(photo.filename):
-                unique_filename = f"{uuid.uuid4().hex}_{secure_filename(photo.filename)}"
-                # Create absolute path for storage
-                uploads_dir = current_app.config.get('UPLOADS_FOLDER')
+                # Ensure the uploads/photos directory exists at the project root
+                uploads_dir = os.path.join(os.getcwd(), 'uploads')
                 photos_dir = os.path.join(uploads_dir, 'photos')
                 os.makedirs(photos_dir, exist_ok=True)
+                unique_filename = f"{uuid.uuid4().hex}_{secure_filename(photo.filename)}"
                 abs_photo_path = os.path.join(photos_dir, unique_filename)
                 photo.save(abs_photo_path)
                 # Store relative path in the database for URL generation
                 photo_path = f"photos/{unique_filename}"
-                
                 # Fallback for missing metadata
                 if not photo_metadata:
                     photo_metadata = {
                         "name": photo.filename,
-                        "size": os.path.getsize(photo_path),
+                        "size": os.path.getsize(abs_photo_path),
                         "type": photo.mimetype
                     }
-            
+
             candidate = Candidate(
                 election_id=election_id,
                 fullname=fullname,

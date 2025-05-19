@@ -12,6 +12,7 @@ import {
   getErrorMessage 
 } from '@/services/voteVerificationErrors';
 import { formatElGamalPublicKey } from '@/services/cryptoConfigService';
+import { encryptPaillierVote } from '@/services/paillierService';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -170,67 +171,13 @@ export default function VoteVerifyPage() {
       }
       
       // All checks passed, encrypt and submit the vote
-      // Import the encryption function from our service
-      const { encryptVote } = await import('@/services/voteVerificationService');
-      
-      // Prepare votes for encryption
-      let verificationResult;
-      
-      try {
-        const { generateVoteProof } = await import('@/services/voteVerificationService');
-        
-        // Prepare input for ZK proof generation
-        const zkpInput = {
-          voterId: user?.student_id || '',
-          electionId: parseInt(eId || '0'),
-          candidateIds: votesToVerify.map(v => v.candidate_id),
-          positionIds: votesToVerify.map(v => v.position_id),
-          nonce: Math.random().toString(36).substring(2, 15) // Random nonce for security
-        };
-        
-        // Generate proofs for all votes
-        verificationResult = await generateVoteProof(zkpInput);
-      } catch (err) {
-        console.error('Error generating proofs for encryption:', err);
-        throw handleVerificationError(err, VoteVerificationErrorType.ENCRYPTION_FAILED);
-      }
-      
-      if (!verificationResult?.isValid || !verificationResult.proof) {
-        throw handleVerificationError(
-          new Error('Failed to generate valid proofs for votes'),
-          VoteVerificationErrorType.ENCRYPTION_FAILED
-        );
-      }
-      
-      // Format proof for submission
-      const formattedProof = JSON.stringify({
-        proof_type: "groth16",
-        pi_a: verificationResult.proof.pi_a,
-        pi_b: verificationResult.proof.pi_b,
-        pi_c: verificationResult.proof.pi_c,
-        protocol: verificationResult.proof.protocol,
-        curve: verificationResult.proof.curve
-      });
-      
-      // Encrypt each vote using the public key
-      const encryptedVotes = votesToVerify.map(vote => {
-        // Encrypt using the frontend service with ElGamal encryption
-        const encryptedVoteData = encryptVote(vote.candidate_id, key || '');
-        
-        // Generate a verification receipt for the voter
-        const verificationReceipt = `receipt-${Date.now()}-${user?.student_id}-${vote.position_id}-${
-          Math.random().toString(36).substring(2, 15)
-        }`;
-        
-        return {
-          ...vote,
-          encrypted_vote: encryptedVoteData,
-          zkp_proof: formattedProof,
-          verification_receipt: verificationReceipt
-        };
-      });
-
-      // Submit the verified and encrypted votes
+      // Encrypt each vote using the Paillier public key
+      const encryptedVotes = votesToVerify.map(vote => ({
+        position_id: vote.position_id,
+        candidate_id: vote.candidate_id,
+        encrypted_vote: encryptPaillierVote(key, vote.candidate_id)
+      }));
+      // Submit the verified and encrypted votes to the backend
       const submitRes = await fetch(`${API_URL}/elections/${eId}/vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -239,31 +186,18 @@ export default function VoteVerifyPage() {
           votes: encryptedVotes
         })
       });
-      
       if (!submitRes.ok) {
-        const errorData = await submitRes.json() as { error?: string };
-        throw handleVerificationError(
-          new Error(errorData.error || 'Failed to submit vote'),
-          VoteVerificationErrorType.SUBMISSION_FAILED
-        );
+        setOverallStatus('failed');
+        setError('Failed to submit encrypted votes.');
+        return;
       }
-
-      // Success! All verification passed and vote submitted
       setOverallStatus('success');
-      setLoading(false);
-      
-      // Redirect to results page after successful vote
-      setTimeout((): void => {
-        router.push('/user/votes?success=true');
-      }, 3000);
+      setError(null);
     } catch (err: unknown) {
-      console.error('Vote verification error:', err);
-      const verificationError = handleVerificationError(err);
-      setError(getErrorMessage(verificationError));
-      setLoading(false);
       setOverallStatus('failed');
+      setError('An error occurred during vote verification or encryption.');
     }
-  }, [user, router]);
+  }, [user]);
   
   useEffect(() => {
     const initVerification = async () => {
@@ -396,7 +330,7 @@ export default function VoteVerifyPage() {
                 transition={{ type: "spring" as const, damping: 10, stiffness: 100 }}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
               </motion.div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">Verification Failed</h3>
@@ -430,7 +364,7 @@ function VerificationStep({ title, status }: { title: string, status: 'pending' 
           </svg>
         ) : (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-white" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
           </svg>
         )}
       </div>
