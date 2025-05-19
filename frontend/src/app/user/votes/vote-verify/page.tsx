@@ -193,7 +193,7 @@ export default function VoteVerifyPage() {
       }
       setOverallStatus('success');
       setError(null);
-    } catch (err: unknown) {
+    } catch {
       setOverallStatus('failed');
       setError('An error occurred during vote verification or encryption.');
     }

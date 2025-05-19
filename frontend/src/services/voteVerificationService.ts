@@ -103,21 +103,26 @@ export interface EncryptedVoteData {
 // Encrypt votes using Paillier or ElGamal depending on key type
 export const encryptVote = (voteValue: number, publicKey: string): string => {
   try {
-    let encryptedData: any;
+    let encryptedData: Record<string, unknown>;
     // Try to parse the public key as JSON (Paillier format)
-    let keyObj: any = null;
+    let keyObj: unknown = null;
     try {
       keyObj = JSON.parse(publicKey);
-    } catch (e) {
+    } catch {
       // Not JSON, fallback to ElGamal
     }
-    if (keyObj && keyObj.key_type === 'paillier' && keyObj.n) {
+    if (
+      keyObj &&
+      typeof keyObj === 'object' &&
+      'key_type' in keyObj &&
+      (keyObj as { key_type: string }).key_type === 'paillier' &&
+      'n' in keyObj
+    ) {
       // Paillier encryption (client-side, demo only; real use should be server-side)
-      // For now, just store the plaintext or a placeholder, as Paillier is not implemented in JS here
       encryptedData = {
         ciphertext: voteValue.toString(), // Placeholder: store plaintext or use a real Paillier JS lib
         scheme: 'paillier',
-        n: keyObj.n
+        n: (keyObj as { n: string }).n
       };
     } else {
       // Fallback: ElGamal encryption
@@ -133,9 +138,9 @@ export const encryptVote = (voteValue: number, publicKey: string): string => {
       };
     }
     return JSON.stringify(encryptedData);
-  } catch (error: unknown) {
-    console.error('Error encrypting vote:', error);
-    throw error instanceof Error ? error : new Error(String(error));
+  } catch {
+    console.error('Error encrypting vote');
+    throw new Error('Error encrypting vote');
   }
 };
 
