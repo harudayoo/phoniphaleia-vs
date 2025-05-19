@@ -36,32 +36,22 @@ export interface VerificationResult {
 export const generateVoteProof = async (input: VoteZKProofInput): Promise<VerificationResult> => {
   try {
     console.log('Generating ZK proof with inputs:', input);
-    const proofs = await Promise.all(input.candidateIds.map(async (candidateId, index) => {
-      const positionId = input.positionIds[index];
-      const circuitInput: CircuitInputs = {
-        voterId: parseInt(input.voterId.replace(/\D/g, '') || '0'),
-        candidateId: candidateId,
-        positionId: positionId,
-        nonce: Date.now() + Math.floor(Math.random() * 1000000)
-      };
-      const { proof, publicSignals } = await generateProof(
-        circuitInput,
-        "/circuits/vote.wasm",
-        "/circuits/vote.zkey"
-      );
-      return {
-        proof,
-        publicSignals,
-        isValid: true,
-        vote: { position_id: positionId, candidate_id: candidateId }
-      };
-    }));
-    const combinedProof = proofs[0].proof;
-    const allPublicSignals = proofs.flatMap(p => p.publicSignals);
+    // Only support one candidate/position per proof (matching circuit)
+    const circuitInput: CircuitInputs = {
+      voterId: parseInt(input.voterId.replace(/\D/g, '') || '0'),
+      candidateId: input.candidateIds[0],
+      positionId: input.positionIds[0],
+      nonce: Date.now() + Math.floor(Math.random() * 1000000)
+    };
+    const { proof, publicSignals } = await generateProof(
+      circuitInput,
+      "/circuits/vote.wasm",
+      "/circuits/vote.zkey"
+    );
     return {
       isValid: true,
-      proof: combinedProof,
-      publicSignals: allPublicSignals
+      proof,
+      publicSignals
     };
   } catch (error) {
     console.error('Error generating proof:', error);
@@ -76,6 +66,12 @@ export const verifyVoteProof = async (
 ): Promise<boolean> => {
   try {
     console.log('Verifying ZK proof');
+    console.log('Public signals:', publicSignals);
+    console.log('Proof object:', proof);
+    // Check for correct number of public signals
+    if (!Array.isArray(publicSignals) || publicSignals.length !== 2) {
+      throw new Error(`Expected 2 public signals, got ${publicSignals.length}: ${JSON.stringify(publicSignals)}`);
+    }
     // Always use the static verification key file for now
     const response = await fetch("/circuits/verification_key.json");
     if (!response.ok) {

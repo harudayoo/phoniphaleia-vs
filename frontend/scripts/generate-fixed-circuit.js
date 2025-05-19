@@ -45,65 +45,19 @@ async function generateRealCircuit() {
     // Download or verify Powers of Tau file
     const ptauPath = await downloadPTauFile();
     
-    // Import circom2 dynamically
-    const { default: circom2 } = await import('circom2');
-    
-    // Read the circuit file
-    console.log('Reading circuit file...');
-    const circuitCode = fs.readFileSync(circuitPath, 'utf8');
-    
-    // Compile the circuit
-    console.log('Compiling circuit with circom2 WASM...');
-    console.log('Using CircomRunner class...');
-    
-    // Set up search paths for includes
-    const includesPath = [
-      path.join(__dirname, 'node_modules'),
-      path.join(circuitsDir, 'node_modules')
-    ];
-    
-    // Create a CircomRunner instance with fs bindings
-    const runner = new circom2.CircomRunner({
-      fs: fs,
-      bindings: circom2.bindings
-    });
-    
-    // Set output paths
+    // Compile the circuit using circom CLI
+    console.log('Compiling circuit using circom CLI...');
+    const circomBin = 'circom'; // Assumes circom is installed globally or in PATH
     const r1csPath = path.join(buildDir, `${circuitName}.r1cs`);
     const wasmPath = path.join(buildDir, `${circuitName}.wasm`);
-    
-    // Compile the circuit using CircomRunner
-    console.log('Starting circuit compilation...');
-    const result = await runner.compile(circuitCode, {
-      includes: includesPath,
-      output: {
-        r1cs: r1csPath,
-        wasm: wasmPath
-      }
-    });
-    
-    console.log('Compilation result:', result);
-    
-    // CircomRunner already writes the files, we just need to check they exist
-    console.log('Checking compiled files...');
-    
-    // Check R1CS file
-    if (!fs.existsSync(r1csPath)) {
-      console.error('Failed to generate R1CS file');
-      return false;
+    const symPath = path.join(buildDir, `${circuitName}.sym`);
+    try {
+      execSync(`${circomBin} ${circuitPath} --r1cs --wasm --sym -o ${buildDir}`);
+      console.log('Circuit compiled successfully using circom CLI.');
+    } catch (err) {
+      console.error('Error running circom CLI:', err.message);
+      process.exit(1);
     }
-    console.log(`R1CS file generated at ${r1csPath}`);
-    
-    // Check WASM file
-    if (!fs.existsSync(wasmPath)) {
-      console.error('Failed to generate WASM file');
-      return false;
-    }
-    console.log(`WASM file generated at ${wasmPath}`);
-    
-    // Create a directory for JavaScript files if needed
-    const wasmDir = path.dirname(wasmPath);
-    
     // Copy the WASM file to the circuits directory for easier access
     const wasmCircuitsPath = path.join(circuitsDir, `${circuitName}.wasm`);
     fs.copyFileSync(wasmPath, wasmCircuitsPath);
