@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/admin/PageHeader';
-import { Download, Plus, ArrowLeft } from 'lucide-react';
+import { Plus, ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
 import ArrowUpScrollToTop from '@/components/ArrowUpScrollToTop';
 import Modal from '@/components/Modal';
@@ -134,23 +134,26 @@ export default function CreateElectionPage() {
   const [endDate, setEndDate] = useState('');
   const [dateStart, setDateStart] = useState('');
   const [queuedAccess, setQueuedAccess] = useState(false);
-  const [maxConcurrentVoters, setMaxConcurrentVoters] = useState<number | ''>('');  const [personnel, setPersonnel] = useState<{ name: string; id?: number }[]>([
+  const [maxConcurrentVoters, setMaxConcurrentVoters] = useState<number | ''>('');
+  const [personnel, setPersonnel] = useState<{ name: string; id?: number }[]>([
     { name: '' }, { name: '' }, { name: '' }
   ]);
   const [publicKey, setPublicKey] = useState('');
-  const [privateShares, setPrivateShares] = useState<string[]>([]);
+  const [, setPrivateShares] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [candidates, setCandidates] = useState<Candidate[]>([
     { fullname: '', party: '', candidate_desc: '', position_id: '' },
     { fullname: '', party: '', candidate_desc: '', position_id: '' },
     { fullname: '', party: '', candidate_desc: '', position_id: '' },
   ]);
-  const [showKeyWarning, setShowKeyWarning] = useState(false);
-  const [keyModalOpen, setKeyModalOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [step, setStep] = useState(0); // 0: General, 1: Authorities, 2: Candidates
   const [showModal, setShowModal] = useState(false);
   const [modalContent, setModalContent] = useState<{ title: string; message: string; type: 'success' | 'error' }>({ title: '', message: '', type: 'success' });
+  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [keySharesForModal, setKeySharesForModal] = useState<string[]>([]);
+  const [keyGenAuthorityNames, setKeyGenAuthorityNames] = useState<string[]>([]);
+  const [showKeyWarning, setShowKeyWarning] = useState(false);
 
   // Validation for each step
   const isGeneralValid = orgId && electionName.trim() && description.trim() && dateStart && endDate;
@@ -208,10 +211,11 @@ export default function CreateElectionPage() {
   const removeCandidate = (idx: number) => {
     setCandidates(c => c.length > 3 ? c.filter((_, i) => i !== idx) : c);
   };
+
   // Save all data
   const handleFinish = async () => {
     try {
-      // 1. Create election (without candidates with photos, we'll add those separately)
+      // 1. Create the election (without candidates with photos)
       const electionRes = await fetch(`${API_URL}/elections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -224,15 +228,87 @@ export default function CreateElectionPage() {
           date_end: endDate,
           queued_access: queuedAccess,
           max_concurrent_voters: queuedAccess ? (maxConcurrentVoters === '' ? null : maxConcurrentVoters) : null,
-          // Only include candidates without photos here
-          candidates: candidates
-            .filter(c => c.fullname && c.position_id && !c.photo)
+          candidates: candidates.filter(c => c.fullname && c.position_id && !c.photo)
         })
       });
       if (!electionRes.ok) throw new Error('Failed to create election');
       const election = await electionRes.json();
-      
-      // Handle candidates with photos separately
+
+      // 2. Create trusted authorities for each personnel
+      const adminToken = localStorage.getItem('admin_token');
+      if (!adminToken) throw new Error('You are not logged in. Please log in as an administrator.');
+      const validPersonnel = personnel.filter(p => p.name.trim());
+      const newAuthorityIds: number[] = [];
+      for (const person of validPersonnel) {
+        const authorityRes = await fetch(`${API_URL}/trusted_authorities`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${adminToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            authority_name: person.name,
+            contact_info: ''
+          })
+        });
+        if (!authorityRes.ok) {
+          const err = await authorityRes.json();
+          throw new Error(err.error || 'Failed to create trusted authority');
+        }
+        const authority = await authorityRes.json();
+        newAuthorityIds.push(authority.authority_id);
+      }
+      if (newAuthorityIds.length === 0) throw new Error('Failed to create trusted authorities for this election.');
+
+      // 3. Generate key pair and private shares for the real authorities
+      let keyGenResult;
+      try {
+        keyGenResult = await handleGenerateKeyPair({
+          electionId: election.election_id,
+          nPersonnel: newAuthorityIds.length,
+          threshold: Math.ceil(newAuthorityIds.length / 2) + 1,
+          authorityIds: newAuthorityIds,
+        });
+      } catch (error) {
+        throw new Error('Failed to generate cryptographic key shares: ' + (error as Error).message);
+      }
+      if (!keyGenResult || !keyGenResult.public_key || !keyGenResult.private_shares) {
+        throw new Error('Key generation failed. No key shares or public key returned.');
+      }
+      setPublicKey(keyGenResult.public_key);
+      setPrivateShares(keyGenResult.private_shares);
+
+      // 4. Store crypto configuration and key shares
+      const authorityShares: AuthorityShare[] = newAuthorityIds.map((authority_id, idx) => ({
+        authority_id,
+        share_value: keyGenResult.private_shares[idx] || ''
+      }));
+      const metaData = JSON.stringify({
+        crypto_type: 'paillier',
+        n_personnel: newAuthorityIds.length,
+        threshold: Math.ceil(newAuthorityIds.length / 2) + 1,
+        creation_timestamp: new Date().toISOString()
+      });
+      const storeRes = await fetch(`${API_URL}/crypto_configs/store-with-shares`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          election_id: election.election_id,
+          public_key: keyGenResult.public_key,
+          key_type: 'paillier',
+          meta_data: metaData,
+          authority_shares: authorityShares
+        })
+      });
+      if (!storeRes.ok) {
+        const err = await storeRes.json();
+        throw new Error(err.error || 'Failed to store crypto configuration');
+      }
+
+      // 5. Add candidates with photos
       const candidatesWithPhotos = candidates.filter(c => c.fullname && c.position_id && c.photo);
       for (const candidate of candidatesWithPhotos) {
         const formData = new FormData();
@@ -241,339 +317,19 @@ export default function CreateElectionPage() {
         if (candidate.party) formData.append('party', candidate.party);
         if (candidate.candidate_desc) formData.append('candidate_desc', candidate.candidate_desc);
         if (candidate.photo) formData.append('photo', candidate.photo);
-        
         const candidateRes = await fetch(`${API_URL}/elections/${election.election_id}/candidates`, {
-          method: 'POST', 
-          body: formData // No Content-Type header for FormData
+          method: 'POST',
+          body: formData
         });
-        
         if (!candidateRes.ok) {
-          console.error('Failed to add candidate with photo');
-        }
-      }      // 2. Use the already generated key pair and create trusted authorities for the real election
-      const adminToken = localStorage.getItem('admin_token');
-      if (!adminToken) {
-        throw new Error('You are not logged in. Please log in as an administrator.');
-      }
-      
-      // Get valid personnel with names
-      const validPersonnel = personnel.filter(p => p.name.trim());
-      
-      // Step 1: Create real trusted authorities for each personnel
-      const newAuthorityIds: number[] = [];
-      for (const person of validPersonnel) {
-        try {
-          const authorityRes = await fetch(`${API_URL}/trusted_authorities`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${adminToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              authority_name: person.name,
-              contact_info: ''
-            })
-          });
-          
-          if (!authorityRes.ok) {
-            console.error('Failed to create trusted authority:', await authorityRes.text());
-            continue;
-          }
-          
-          const authority = await authorityRes.json();
-          newAuthorityIds.push(authority.authority_id);
-          console.log(`Successfully created trusted authority ID: ${authority.authority_id} for ${person.name}`);
-        } catch (error) {
-          console.error('Error creating trusted authority:', error);
+          const err = await candidateRes.json();
+          throw new Error(err.error || 'Failed to add candidate with photo');
         }
       }
-      
-      if (newAuthorityIds.length === 0) {
-        throw new Error('Failed to create trusted authorities for this election.');
-      }
-      
-      // Log the created authority IDs for debugging
-      console.log(`Created ${newAuthorityIds.length} trusted authorities with IDs:`, newAuthorityIds);// Generate key shares if they don't exist yet
-      if (privateShares.length === 0 && publicKey === '') {
-        try {
-          console.log('Generating new key shares for trusted authorities...');
-          const keyGenResult = await handleGenerateKeyPair({
-            electionId: election.election_id,
-            nPersonnel: validPersonnel.length,
-            threshold: Math.ceil(validPersonnel.length / 2) + 1,
-            authorityIds: newAuthorityIds,
-          });
-          
-          // Set the public key and private shares from generation
-          setPublicKey(keyGenResult.public_key);
-          setPrivateShares(keyGenResult.private_shares || []);
-          
-          console.log(`Generated ${keyGenResult.private_shares?.length || 0} private key shares`);
-        } catch (error) {
-          console.error('Error generating key shares:', error);
-          throw new Error('Failed to generate cryptographic key shares: ' + (error as Error).message);
-        }
-      }
-        
-      // Step 2: Store crypto configuration and key shares for the real election
-      
-      if (!publicKey) {
-        throw new Error('No public key available. Please generate a key pair first.');
-      }      // Create authority shares with the newly created authority IDs
-      let authorityShares: AuthorityShare[] = [];
-      
-      // Check if we have private shares and authority IDs
-      console.log(`Creating authority shares mapping with ${privateShares.length} shares and ${newAuthorityIds.length} authorities`);
-      
-      if (privateShares.length === 0) {
-        throw new Error('No private key shares available. Please generate keys before creating the election.');
-      }
-      
-      if (newAuthorityIds.length === 0) {
-        throw new Error('No trusted authorities available. Please add at least one authority.');
-      }
-      
-      // Make sure we have the same number of shares as authorities, or at least distribute evenly
-      if (privateShares.length < newAuthorityIds.length) {
-        console.warn(`Warning: More authorities (${newAuthorityIds.length}) than shares (${privateShares.length})`);
-      } else if (privateShares.length > newAuthorityIds.length) {
-        console.warn(`Warning: More shares (${privateShares.length}) than authorities (${newAuthorityIds.length})`);
-      }
-        // Create direct mapping between private shares and newly created authorities
-      authorityShares = [];
-      for (let i = 0; i < Math.min(privateShares.length, newAuthorityIds.length); i++) {
-        const authorityId = newAuthorityIds[i];
-        const shareValue = privateShares[i];
-        
-        // Make sure both authority ID and share value exist
-        if (authorityId && shareValue) {
-          console.log(`Mapping share ${i} to authority ID ${authorityId}`);
-          authorityShares.push({
-            authority_id: authorityId, 
-            share_value: shareValue
-          });
-        } else {
-          console.error(`Invalid mapping for share ${i}: authorityId=${authorityId}, shareValue=${!!shareValue}`);
-        }
-      }
-      
-      // If there are extra shares, distribute them to the existing authorities
-      if (privateShares.length > newAuthorityIds.length) {
-        for (let i = newAuthorityIds.length; i < privateShares.length; i++) {
-          const authorityId = newAuthorityIds[i % newAuthorityIds.length];
-          const shareValue = privateShares[i];
-          
-          if (authorityId && shareValue) {
-            console.log(`Mapping extra share ${i} to authority ID ${authorityId}`);
-            authorityShares.push({
-              authority_id: authorityId, 
-              share_value: shareValue
-            });
-          }
-        }
-      }
-      
-      console.log(`Successfully mapped ${authorityShares.length} shares to ${newAuthorityIds.length} authorities`);
-      
-      // Debug log to verify share values
-      authorityShares.forEach((share, index) => {
-        console.log(`Share ${index}: Authority ID ${share.authority_id}, share value length: ${share.share_value.length} chars`);
-      });        // Store crypto configuration and shares in one atomic operation
-      console.log('Storing crypto configuration and key shares...');      try {
-        // Final validation of authority shares
-        if (!authorityShares || authorityShares.length === 0) {
-          console.error('No authority shares available to store');
-          
-          // Create authority shares directly from private shares and authority IDs
-          if (privateShares.length > 0 && newAuthorityIds.length > 0) {
-            console.log('Creating authority shares from existing private shares and authority IDs');
-            
-            // Filter out any invalid combinations
-            authorityShares = privateShares
-              .map((shareValue, index) => {
-                // Use modulo to wrap around if more shares than authorities
-                const authorityId = newAuthorityIds[index % newAuthorityIds.length];
-                if (!shareValue || !authorityId) {
-                  console.error(`Invalid share mapping at index ${index}`);
-                  return null;
-                }
-                return {
-                  authority_id: authorityId,
-                  share_value: shareValue
-                };
-              })
-              .filter(share => share !== null); // Remove invalid entries
-          } else {
-            throw new Error('No key shares available for trusted authorities');
-          }
-        }
-        
-        // Extra validation to ensure we have valid shares to proceed
-        if (!authorityShares || authorityShares.length === 0) {
-          throw new Error('Failed to create valid key share mappings for trusted authorities');
-        }
 
-        // Log what we're sending
-        console.log(`Sending ${authorityShares.length} authority shares for election ${election.election_id}`);
-        
-        // Ensure private shares and authority IDs are still valid
-        if (privateShares.length === 0) {
-          console.error('Private shares are missing. Regenerating key shares...');
-            // Regenerate key shares if they're somehow missing
-          const keyGenResult = await handleGenerateKeyPair({
-            electionId: election.election_id,
-            nPersonnel: validPersonnel.length,
-            threshold: Math.ceil(validPersonnel.length / 2) + 1,
-            authorityIds: newAuthorityIds,
-          });
-          
-          // Update the private shares and public key
-          const regeneratedShares = keyGenResult.private_shares || [];
-          setPrivateShares(regeneratedShares);
-          setPublicKey(keyGenResult.public_key);
-          console.log(`Regenerated ${regeneratedShares.length} private key shares`);
-          
-          // Recreate authority shares mapping
-          authorityShares = regeneratedShares.map((shareValue: string, index: number) => {
-            const authorityId = index < newAuthorityIds.length ? 
-              newAuthorityIds[index] : 
-              newAuthorityIds[newAuthorityIds.length - 1];
-              
-            console.log(`Remapping share ${index} to authority ID ${authorityId}`);
-            return {
-              authority_id: authorityId, 
-              share_value: shareValue
-            };
-          });
-        }
-          // Prepare metadata with threshold information
-        const metaData = JSON.stringify({
-          crypto_type: 'paillier',
-          n_personnel: newAuthorityIds.length,
-          threshold: Math.ceil(newAuthorityIds.length / 2) + 1,
-          creation_timestamp: new Date().toISOString()
-        });
-        
-        console.log('Prepared metadata:', metaData);
-        console.log('Public key length:', publicKey.length);
-        console.log('Authority shares count:', authorityShares.length);
-        
-        // Make the API call to store crypto config with shares
-        const requestBody = {
-          election_id: election.election_id,
-          public_key: publicKey,
-          key_type: 'paillier',
-          meta_data: metaData,
-          authority_shares: authorityShares
-        };
-          console.log('Request body prepared, sending to backend...');
-        console.log('Making API request to store crypto configuration and shares...');
-        
-        // Log the request body for debugging (excluding sensitive data)
-        const debugRequestBody = {
-          ...requestBody,
-          public_key: requestBody.public_key ? `[${requestBody.public_key.length} chars]` : null,
-          authority_shares: requestBody.authority_shares ? 
-            `[${requestBody.authority_shares.length} shares]` : null
-        };
-        console.log('Debug request body:', debugRequestBody);
-        
-        try {
-          const storeRes = await fetch(`${API_URL}/crypto_configs/store-with-shares`, {
-            method: 'POST',
-            headers: { 
-              'Authorization': `Bearer ${adminToken}`,
-              'Content-Type': 'application/json' 
-            },
-            body: JSON.stringify(requestBody)
-          });
-          
-          const responseText = await storeRes.text();
-          let responseData;
-          
-          try {
-            responseData = JSON.parse(responseText);
-            console.log('Response data:', responseData);
-          } catch (parseError) {
-            console.error('Error parsing JSON response:', parseError);
-            console.log('Raw response text:', responseText);
-            throw new Error('Invalid response from server when storing crypto configuration');
-          }
-          
-          if (!storeRes.ok) {
-            console.error('Failed to store crypto configuration. Server returned:', storeRes.status, storeRes.statusText);
-            console.error('Response data:', responseData);
-            throw new Error(responseData.error || 'Failed to store crypto configuration');
-          }
-        } catch (apiError) {
-          console.error('API error during crypto config storage:', apiError);
-          
-          // Attempt to diagnose the problem
-          console.log('Verifying trusted authorities...');
-          const authoritiesRes = await fetch(`${API_URL}/trusted_authorities`, {
-            headers: { 'Authorization': `Bearer ${adminToken}` }
-          });
-          
-          if (authoritiesRes.ok) {
-            const authoritiesData = await authoritiesRes.json();
-            console.log(`Found ${authoritiesData.length} trusted authorities in system`);
-          }
-          
-          throw apiError; // Re-throw the original error after diagnostics
-        }
-          // Use responseData instead of Response (fixes incorrect usage)
-          console.log('Successfully stored crypto configuration with ID:', responseData?.crypto_id);
-
-        // Verify key shares were created
-        if (responseData?.key_shares && responseData.key_shares.length > 0) {
-          console.log('Key shares created successfully:', responseData.key_shares);
-
-          // Verify with a separate API call if the key shares are in the database
-          try {
-            console.log(`Verifying key shares for election ID ${election.election_id}...`);
-            const verifyRes = await fetch(`${API_URL}/crypto_configs/check-key-shares-status?election_id=${election.election_id}`, {
-              method: 'GET',
-              headers: { 'Authorization': `Bearer ${adminToken}` }
-            });
-
-            const verifyText = await verifyRes.text();
-            try {
-              const verifyData = JSON.parse(verifyText);
-              console.log('Key shares verification:', verifyData);
-
-              if (verifyRes.ok) {
-                if (verifyData.key_shares && verifyData.key_shares.length > 0) {
-                  console.log(`✓ Verified ${verifyData.key_shares.length} key shares in database`);
-
-                  // Display details about each key share for debugging
-                  verifyData.key_shares.forEach((share: any, idx: number) => {
-                    console.log(`Share #${idx}: Authority ID ${share.authority_id}, Share Length: ${share.share_value_length}`);
-                  });
-                } else {
-                  console.warn('⚠️ No key shares found in database during verification');
-                }
-              } else {
-                console.error(`✗ Verification API call failed: ${verifyRes.status} ${verifyRes.statusText}`);
-              }
-            } catch (parseError) {
-              console.error('Error parsing verification response:', parseError);
-              console.log('Raw verification response:', verifyText);
-            }
-          } catch (verifyError) {
-            console.warn('Could not verify key shares status:', verifyError);
-            // Continue anyway since the main operation succeeded
-          }
-        } else {
-          console.warn('⚠️ No key shares were reported as created. This may indicate a problem.');
-        }
-      } catch (e) {
-        console.error('Error storing crypto configuration:', e);
-        throw e;
-      }
       // Clean up all temporary data
       localStorage.removeItem('temp_crypto_id');
       localStorage.removeItem('key_share_mapping');
-
       setModalContent({ title: 'Success', message: 'Election created successfully!', type: 'success' });
       setShowModal(true);
       setTimeout(() => router.push('/admin/elections'), 1200);
@@ -723,128 +479,14 @@ export default function CreateElectionPage() {
               </div>
             ))}
           </div>
-          <div className="flex items-center gap-4 mb-4">            <button
+          <div className="flex items-center gap-4 mb-4">
+            <button
               type="button"
               className="px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-800 hover:to-blue-950 disabled:opacity-60 text-white rounded transition-all duration-200 ease-in-out"
-              onClick={async () => {
-                setShowKeyWarning(true);
-                setKeyModalOpen(false);
-                setGenerating(true);
-                try {
-                  // Get temporary election ID from backend
-                  const adminToken = localStorage.getItem('admin_token');
-                  if (!adminToken) {
-                    throw new Error('You are not logged in. Please log in as an administrator.');
-                  }
-                    // First, get a temporary election ID
-                  const tempIdRes = await fetch(`${API_URL}/crypto_configs/temp-election-id`, {
-                    method: 'GET',
-                    headers: {
-                      'Authorization': `Bearer ${adminToken}`,
-                      'Content-Type': 'application/json'
-                    }
-                  });
-                  const tempIdData = await tempIdRes.json();
-                  if (!tempIdRes.ok) {
-                    throw new Error(tempIdData.error || 'Failed to get temporary election ID');
-                  }
-                    // Create temporary trusted authorities for each personnel
-                  const validPersonnel = personnel.filter(p => p.name.trim());
-                  if (validPersonnel.length < 3) {
-                    throw new Error('At least 3 trusted authorities with names are required.');
-                  }
-                  
-                  console.log(`Creating ${validPersonnel.length} temporary trusted authorities`);
-                  
-                  // Create temporary trusted authorities
-                  const authorityIds: number[] = [];
-                  for (const person of validPersonnel) {
-                    try {
-                      const authorityRes = await fetch(`${API_URL}/trusted_authorities`, {
-                        method: 'POST',
-                        headers: {
-                          'Authorization': `Bearer ${adminToken}`,
-                          'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                          authority_name: person.name,
-                          contact_info: ''  // Optional contact info
-                        })
-                      });
-                      
-                      if (!authorityRes.ok) {
-                        const error = await authorityRes.json();
-                        console.error('Failed to create trusted authority:', error);
-                        continue;
-                      }
-                      
-                      const authority = await authorityRes.json();
-                      authorityIds.push(authority.authority_id);
-                    } catch (error) {
-                      console.error('Error creating trusted authority:', error);
-                    }                  }
-                  
-                  if (authorityIds.length === 0) {
-                    throw new Error('Failed to create any trusted authorities. Please check your network connection and try again.');
-                  }
-                  
-                  // Generate key pair
-                  const result = await handleGenerateKeyPair({
-                    electionId: tempIdData.temp_election_id,
-                    nPersonnel: authorityIds.length,
-                    threshold: Math.ceil(authorityIds.length / 2) + 1, // Set threshold to majority
-                    authorityIds,
-                    cryptoMethod: 'paillier',
-                  });
-                  setPublicKey(result.public_key);
-                  setPrivateShares(result.private_shares || []);
-                  // crypto_id may not exist on result, so check before using
-                  if ((result as any).crypto_id) {
-                    localStorage.setItem('temp_crypto_id', (result as any).crypto_id.toString());
-                  }
-                  
-                  setKeyModalOpen(true);
-                } catch (e) {
-                  const errorMessage = e instanceof Error ? e.message : 'Key generation failed';
-                  console.error('Key generation error:', e);
-                  
-                  // Check for authorization errors specifically
-                  if (errorMessage.toLowerCase().includes('authorization') || 
-                      errorMessage.toLowerCase().includes('token') || 
-                      errorMessage.toLowerCase().includes('privileges') || 
-                      errorMessage.toLowerCase().includes('login')) {
-                    console.error('Auth error detected:', errorMessage);
-                    
-                    // Show auth error to user before redirecting
-                    setModalContent({
-                      title: 'Authentication Error',
-                      message: 'Your session has expired. You will be redirected to the login page.',
-                      type: 'error',
-                    });
-                    setShowModal(true);
-                    
-                    // Handle auth errors - redirect to login after a short delay
-                    localStorage.removeItem('admin_token');
-                    setTimeout(() => {
-                      router.push('/auth/admin_login');
-                    }, 2000);
-                    return;
-                  }
-                  
-                  // Show other errors
-                  setModalContent({
-                    title: 'Error Generating Keys',
-                    message: errorMessage,
-                    type: 'error',
-                  });
-                  setShowModal(true);
-                } finally {
-                  setGenerating(false);
-                }
-              }}
+              onClick={() => setShowKeyWarning(true)}
               disabled={generating || !!publicKey}
             >
-              {generating ? 'Generating...' : 'Generate Key Pair'}
+              {generating ? 'Generating...' : (publicKey ? 'Key Pair Generated' : 'Generate Key Pair')}
             </button>
             <input
               className="w-full border rounded px-3 py-2 text-gray-700 bg-gray-100"
@@ -855,115 +497,54 @@ export default function CreateElectionPage() {
               style={{ maxWidth: 400 }}
             />
           </div>
-          {/* Key Generation Warning Notification as Modal */}
+          {/* Key Generation Warning Modal */}
           <Modal
             isOpen={showKeyWarning}
             onClose={() => setShowKeyWarning(false)}
             title="Key Generation Warning"
             size="md"
             footer={null}
-          >            <div className="mb-4 text-yellow-700 bg-red-100 border border-red-300 rounded p-3 text-sm">
-              <b>Warning:</b> The private key shares that will be displayed are critically sensitive security information. <br />
-              <span className="font-medium">Download and store them securely before closing this dialog.</span>
+          >
+            <div className="mb-4 text-yellow-700 bg-red-100 border border-red-300 rounded p-3 text-sm">
+              <b>Warning:</b> The private key shares that will be generated are critically sensitive security information.<br />
+              <span className="font-medium">Download and store them securely before closing the next dialog.</span>
             </div>
             <div className="mb-4 text-blue-700 bg-blue-100 border border-blue-300 rounded p-3 text-sm">
-              <b>How this works:</b> When you continue, the system will:
+              <b>How this works:</b> When you continue, the system will:<br />
               <ol className="list-decimal pl-5 mt-2 space-y-1">
-                <li>Create temporary trusted authorities from your personnel list</li>
                 <li>Generate key pairs using the Paillier threshold cryptosystem</li>
                 <li>Allow you to download the private key shares to distribute to each authority</li>
               </ol>
               <p className="mt-2">These authorities and keys will be properly linked to your election when you submit the form.</p>
             </div>
-            <div className="flex justify-end gap-2">              <button
+            <div className="flex justify-end gap-2">
+              <button
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
                 onClick={async () => {
                   setShowKeyWarning(false);
                   setGenerating(true);
                   try {
-                    // Use the personnel names directly instead of looking for existing authorities
-                    const validPersonnel = personnel.filter(p => p.name.trim());                      if (validPersonnel.length < 3) {
-                        throw new Error('At least 3 personnel with names are required');
-                      }
-                      
-                      // First get a temporary election ID
-                      const adminToken = localStorage.getItem('admin_token');
-                      if (!adminToken) {
-                        throw new Error('You are not logged in. Please log in as an administrator.');
-                      }
-                      
-                      const tempIdRes = await fetch(`${API_URL}/crypto_configs/temp-election-id`, {
-                        method: 'GET',
-                        headers: {
-                          'Authorization': `Bearer ${adminToken}`,
-                          'Content-Type': 'application/json'
-                        }
-                      });
-                      const tempIdData = await tempIdRes.json();
-                      if (!tempIdRes.ok) {
-                        throw new Error(tempIdData.error || 'Failed to get temporary election ID');
-                      }
-                      
-                      // Create temporary trusted authorities
-                      const authorityIds: number[] = [];
-                      for (const person of validPersonnel) {
-                        const authorityRes = await fetch(`${API_URL}/trusted_authorities`, {
-                          method: 'POST',
-                          headers: {
-                            'Authorization': `Bearer ${adminToken}`,
-                            'Content-Type': 'application/json'
-                          },
-                          body: JSON.stringify({
-                            authority_name: person.name,
-                            contact_info: ''
-                          })
-                        });
-                        
-                        if (!authorityRes.ok) {
-                          console.error('Failed to create trusted authority');
-                          continue;
-                        }
-                        
-                        const authority = await authorityRes.json();
-                        authorityIds.push(authority.authority_id);
-                      }
-                      
-                      if (authorityIds.length === 0) {
-                        throw new Error('Failed to create any trusted authorities');
-                      }
-                        // Now generate the key pair
-                      const data = await handleGenerateKeyPair({
-                        electionId: tempIdData.temp_election_id,
-                        nPersonnel: authorityIds.length,
-                        threshold: Math.ceil(authorityIds.length / 2) + 1, // Set threshold to majority
-                        authorityIds,
-                        cryptoMethod: 'paillier',
-                      });
-                    
-                      // Store information about which authority gets which key share
-                      const keyShareMapping = validPersonnel.map((person, idx) => {
-                        const authorityId = authorityIds[idx];
-                        const keyShare = idx < data.private_shares.length ? data.private_shares[idx] : null;
-                        return {
-                          name: person.name,
-                          authorityId,
-                          keyShare
-                        };
-                      }).filter(item => item.keyShare !== null);
-                      
-                      // Store the mapping in local storage for later use
-                      localStorage.setItem('key_share_mapping', JSON.stringify(keyShareMapping));
-                      
-                      // Use the response data directly
-                      setPublicKey(data.public_key);
-                      setPrivateShares(data.private_shares || []);
-                      setKeyModalOpen(true);
-                  } catch (e) {
-                    setModalContent({ 
-                      title: 'Error', 
-                      message: e instanceof Error ? e.message : 'Key generation failed', 
-                      type: 'error' 
+                    const validPersonnel = personnel.filter(p => p.name.trim());
+                    if (validPersonnel.length < 3) {
+                      setModalContent({ title: 'Error', message: 'At least 3 trusted authorities with names are required.', type: 'error' });
+                      setShowModal(true);
+                      setGenerating(false);
+                      return;
+                    }
+                    // Simulate temp authority IDs for modal
+                    const tempAuthorityIds = validPersonnel.map((_, idx) => idx + 1);
+                    const keyGenResult = await handleGenerateKeyPair({
+                      electionId: -1,
+                      nPersonnel: validPersonnel.length,
+                      threshold: Math.ceil(validPersonnel.length / 2) + 1,
+                      authorityIds: tempAuthorityIds,
                     });
+                    setPublicKey(keyGenResult.public_key);
+                    setKeySharesForModal(keyGenResult.private_shares);
+                    setKeyGenAuthorityNames(validPersonnel.map(p => p.name));
+                    setShowKeyModal(true);
+                  } catch (e) {
+                    setModalContent({ title: 'Error', message: e instanceof Error ? e.message : 'Key generation failed', type: 'error' });
                     setShowModal(true);
                   } finally {
                     setGenerating(false);
@@ -980,14 +561,15 @@ export default function CreateElectionPage() {
               </button>
             </div>
           </Modal>
-          {/* Private Key Modal */}
+          {/* Key Generation Modal */}
           <Modal
-            isOpen={keyModalOpen}
-            onClose={() => { setKeyModalOpen(false); setPrivateShares([]); }}
+            isOpen={showKeyModal}
+            onClose={() => setShowKeyModal(false)}
             title="Private Key Shares"
             size="lg"
-            footer={<button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" onClick={() => { setKeyModalOpen(false); setPrivateShares([]); }}>Close</button>}
-          >            <div className="mb-4 text-yellow-700 bg-yellow-100 border border-yellow-300 rounded p-3 text-sm">
+            footer={<button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700" onClick={() => setShowKeyModal(false)}>Close</button>}
+          >
+            <div className="mb-4 text-yellow-700 bg-yellow-100 border border-yellow-300 rounded p-3 text-sm">
               <b>IMPORTANT:</b> When you close this dialog, you will <b className='text-red-600 text-md text-shadow-md'>NOT</b> be able to view the private key shares again. You must generate a new key pair for this election session if you lose them.
             </div>
             <div className="mb-4 text-blue-700 bg-blue-100 border border-blue-300 rounded p-3">
@@ -998,44 +580,35 @@ export default function CreateElectionPage() {
             <div className="mb-4">
               <label className="block text-sm text-gray-700 font-medium mb-1">Private Key Shares</label>
               <div className="space-y-4">
-                {privateShares.map((share, idx) => {
-                  // Get the authority name if available from local storage
-                  let authorityName = `Authority #${idx + 1}`;
-                  try {
-                    const mapping = JSON.parse(localStorage.getItem('key_share_mapping') || '[]');
-                    if (mapping[idx] && mapping[idx].name) {
-                      authorityName = mapping[idx].name;
-                    }
-                  } catch (e) {
-                    console.error('Failed to parse key share mapping', e);
-                  }
-                  
-                  return (
-                    <div key={idx} className="border rounded p-3 bg-gray-50">
-                      <div className="flex justify-between items-center mb-2">
-                        <div className="font-medium text-blue-700">{authorityName}</div>
-                        <button 
-                          type="button" 
-                          className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 flex items-center gap-1"
-                          onClick={() => {
-                            const sanitize = (str: string) => str.replace(/[^a-zA-Z0-9_-]/g, '_');
-                            const safeAuthorityName = sanitize(authorityName);
-                            const prefix = electionName ? sanitize(electionName) + '_' : '';
-                            const blobObj = new Blob([share], { type: 'text/plain' });
-                            const url = URL.createObjectURL(blobObj);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `${prefix}${safeAuthorityName}_private_share.txt`;
-                            a.click();
-                            setTimeout(() => URL.revokeObjectURL(url), 100);
-                          }}
-                        >
-                          <Download size={12} /> Download Share
-                        </button>
-                      </div>                      <input className="w-full border rounded px-3 py-2 text-sm font-mono bg-white" value={share} readOnly />
+                {keySharesForModal.map((share, idx) => (
+                  <div key={idx} className="border rounded p-3 bg-gray-50">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-semibold">{keyGenAuthorityNames[idx] || `Authority #${idx + 1}`}</span>
+                      <button
+                        className="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-800 ml-2"
+                        onClick={() => {
+                          const blob = new Blob([
+                            `Authority: ${keyGenAuthorityNames[idx] || `Authority #${idx + 1}`}` + '\n' +
+                            `Key Share:\n${share}`
+                          ], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `key_share_${(keyGenAuthorityNames[idx] || `authority_${idx + 1}`).replace(/\s+/g, '_')}.txt`;
+                          document.body.appendChild(a);
+                          a.click();
+                          setTimeout(() => {
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                          }, 100);
+                        }}
+                      >
+                        Export
+                      </button>
                     </div>
-                  );
-                })}
+                    <input className="w-full border rounded px-3 py-2 text-sm font-mono bg-white" value={share} readOnly />
+                  </div>
+                ))}
               </div>
             </div>
           </Modal>
@@ -1063,7 +636,8 @@ export default function CreateElectionPage() {
               <Plus size={16} /> Add Candidate
             </button>
           </div>
-          <div className="space-y-4">            {candidates.map((cand, idx) => (
+          <div className="space-y-4">
+            {candidates.map((cand, idx) => (
               <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end border-b pb-4 mb-2">
                 <div className="md:col-span-2">
                   <label className="block text-sm text-gray-700 font-medium mb-1">Full Name</label>
@@ -1104,7 +678,8 @@ export default function CreateElectionPage() {
                         updateCandidate(idx, 'photo', file);
                       }
                     }}
-                  />                  {cand.photo && (
+                  />
+                  {cand.photo && (
                     <div className="mt-2">
                       <Image 
                         src={URL.createObjectURL(cand.photo)} 

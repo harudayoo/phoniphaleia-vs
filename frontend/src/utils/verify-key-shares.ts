@@ -43,7 +43,7 @@ async function verifyElectionKeyShares(electionId: number) {
           console.log(`✓ Verified ${verifyData.key_shares.length} key shares in database`);
           
           // Display details about each key share for debugging
-          verifyData.key_shares.forEach((share, idx) => {
+          (verifyData.key_shares as Array<{ authority_id: number; share_value_length: number }>).forEach((share, idx) => {
             console.log(`Share #${idx}: Authority ID ${share.authority_id}, Share Length: ${share.share_value_length}`);
           });
           return true;

@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_mail import Mail
@@ -61,7 +61,7 @@ def create_app():
     # Register endpoint to serve files from uploads directory
     @app.route('/uploads/<path:filename>')
     def uploaded_file(filename):
-        return app.send_from_directory(uploads_dir, filename)
+        return send_from_directory(uploads_dir, filename)
 
     # Initialize database
     # Models are already imported at module level

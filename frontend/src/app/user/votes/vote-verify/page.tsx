@@ -11,7 +11,7 @@ import {
   handleVerificationError, 
   getErrorMessage 
 } from '@/services/voteVerificationErrors';
-import { formatPaillierPublicKey } from '@/services/cryptoConfigService';
+import { formatElGamalPublicKey } from '@/services/cryptoConfigService';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -214,7 +214,7 @@ export default function VoteVerifyPage() {
       
       // Encrypt each vote using the public key
       const encryptedVotes = votesToVerify.map(vote => {
-        // Encrypt using the frontend service with Paillier encryption
+        // Encrypt using the frontend service with ElGamal encryption
         const encryptedVoteData = encryptVote(vote.candidate_id, key || '');
         
         // Generate a verification receipt for the voter
@@ -300,21 +300,18 @@ export default function VoteVerifyPage() {
         setElectionName(election.election_name);
 
         // Fetch crypto config (public key) for this election
-        const cryptoRes = await fetch(`${API_URL}/crypto_configs/election/${eId}`);
+        const cryptoRes = await fetch(`${API_URL}/crypto_configs/election/${eId}?key_type=threshold_elgamal`);
         if (!cryptoRes.ok) {
           setError('Failed to get encryption key');
           setLoading(false);
           return;
         }
-        
         const cryptoData = await cryptoRes.json();
         const key = cryptoData.public_key;
         setPublicKey(key);
-        
         // Format the public key for display
-        const formattedKey = formatPaillierPublicKey(key);
+        const formattedKey = formatElGamalPublicKey(key);
         console.log('Using public key:', formattedKey);
-        
         // Start verification process
         await verifyVotes(eId, parsedVotes, key);
       } catch (err) {

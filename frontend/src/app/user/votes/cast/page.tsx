@@ -16,6 +16,7 @@ interface Candidate {
   party?: string;
   candidate_desc?: string;
   photo_url?: string;
+  photo_path?: string; // Added to support backend field
 }
 
 interface Position {
@@ -60,26 +61,27 @@ export default function CastVotePage() {
         // Format positions and fix photo URLs
         const formattedPositions = positionsWithCandidates.map(pos => ({
           ...pos,
-          candidates: pos.candidates.map(cand => {
-            // Format photo URL correctly
-            let photoUrl = cand.photo_url;
-            
+          candidates: Array.isArray(pos.candidates) ? pos.candidates.map(cand => {
+            // Map photo_path to photo_url for frontend compatibility
+            let photoUrl = cand.photo_url || cand.photo_path;
             if (photoUrl) {
-              // If it's a relative path like '/api/uploads/filename.jpg'
               if (photoUrl.startsWith('/api/')) {
-                photoUrl = photoUrl.replace('/api', API_URL);
-              }
-              // If it doesn't have http and doesn't include API_URL
-              else if (!photoUrl.startsWith('http') && !photoUrl.includes(API_URL)) {
-                photoUrl = `${API_URL}${photoUrl}`;
+                photoUrl = `${API_URL}${photoUrl.substring(4)}`;
+              } else if (photoUrl.startsWith('photos/')) {
+                photoUrl = `${API_URL}/uploads/${photoUrl}`;
+              } else if (photoUrl.startsWith('uploads/photos/')) {
+                photoUrl = `${API_URL}/uploads/photos/${photoUrl.split('/').pop()}`;
+              } else if (photoUrl.startsWith('uploads/')) {
+                photoUrl = `${API_URL}/uploads/${photoUrl.split('/').pop()}`;
+              } else if (!photoUrl.startsWith('http')) {
+                photoUrl = `${API_URL}/uploads/${photoUrl}`;
               }
             }
-            
             return {
               ...cand,
               photo_url: photoUrl
             };
-          })
+          }) : []
         }));
         
         setPositions(formattedPositions);

@@ -296,39 +296,39 @@ export default function AdminElectionsPage() {
       const candidatesRes = await fetch(`${API_URL}/elections/${election.election_id}/candidates`);
       const candidatesData: Array<{ position_id: number; position_name: string; candidates: Candidate[] }> = await candidatesRes.json();
       
-      // Extract all candidates and their positions
+      // Extract all candidates from all positions for this election
       let allCandidates: Candidate[] = [];
       const candidatePositionIds = new Set<number>();
-        candidatesData.forEach((pos) => {
-        if (Array.isArray(pos.candidates)) {          // Add each candidate with its position ID
-          allCandidates = allCandidates.concat(pos.candidates.map((c) => {
-            // Ensure photo_url has the correct format
-            let photoUrl = c.photo_url;
-            
-            // Handle the photo URL properly
-            if (photoUrl) {
-              // If it's a relative path like '/api/uploads/filename.jpg'
-              if (photoUrl.startsWith('/api/')) {
-                photoUrl = photoUrl.replace('/api', API_URL);
+      candidatesData.forEach((pos) => {
+        if (Array.isArray(pos.candidates)) {
+          if (pos.candidates.length > 0) candidatePositionIds.add(pos.position_id);
+          allCandidates = allCandidates.concat(
+            pos.candidates.map((c: any) => {
+              let photoUrl = c.photo_url;
+              if (!photoUrl && c.photo_path) photoUrl = c.photo_path;
+              if (photoUrl) {
+                if (photoUrl.startsWith('/api/')) {
+                  photoUrl = `${API_URL}${photoUrl.substring(4)}`;
+                } else if (photoUrl.startsWith('photos/')) {
+                  photoUrl = `${API_URL}/uploads/${photoUrl}`;
+                } else if (photoUrl.startsWith('uploads/photos/')) {
+                  photoUrl = `${API_URL}/uploads/photos/${photoUrl.split('/').pop()}`;
+                } else if (photoUrl.startsWith('uploads/')) {
+                  photoUrl = `${API_URL}/uploads/${photoUrl.split('/').pop()}`;
+                } else if (!photoUrl.startsWith('http')) {
+                  photoUrl = `${API_URL}/uploads/${photoUrl}`;
+                }
               }
-              // If it doesn't have http and doesn't include API_URL
-              else if (!photoUrl.startsWith('http') && !photoUrl.includes(API_URL)) {
-                photoUrl = `${API_URL}${photoUrl}`;
-              }
-            }
-            
-            const formattedCandidate = {
-              ...c,
-              position_id: pos.position_id,
-              photo_url: photoUrl
-            };
-            return formattedCandidate;
-          }));
-          
-          // Track which positions are used by candidates
-          candidatePositionIds.add(pos.position_id);
+              return {
+                ...c,
+                position_id: pos.position_id,
+                photo_url: photoUrl
+              };
+            })
+          );
         }
       });
+      setCandidates(allCandidates);
       
       const posRes = await fetch(`${API_URL}/positions/by-election/${election.election_id}`);
       const posData: { id: number; name: string; organization_id: number }[] = await posRes.json();
@@ -339,13 +339,7 @@ export default function AdminElectionsPage() {
         organization_id: p.organization_id,
         inUse: candidatePositionIds.has(p.id)
       }));
-        // Log the photo URLs for debugging
-      console.log('Candidate photo URLs:', allCandidates.map(c => ({
-        name: c.fullname,
-        photo_url: c.photo_url
-      })));
       
-      setCandidates(allCandidates);
       setPositions(formattedPositions);
       
       // Save original candidates for diff
@@ -504,8 +498,29 @@ export default function AdminElectionsPage() {
       return 0;
     });
 
-  const getStatusBadge = (status: string) => {
-    switch(status) {
+  const getStatusBadge = (status: string, date_start?: string, date_end?: string) => {
+    // Compute status based on dates if available
+    let computedStatus = status;
+    if (date_start && date_end) {
+      const now = new Date();
+      const start = new Date(date_start);
+      const end = new Date(date_end);
+
+      // Set time to 00:00:00 for start and 23:59:59 for end to include the whole end day
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+
+      if (now >= start && now <= end && status !== 'Canceled') {
+        computedStatus = 'Ongoing';
+      } else if (now < start && status !== 'Canceled') {
+        computedStatus = 'Upcoming';
+      } else if (now > end && status !== 'Canceled') {
+        computedStatus = 'Finished';
+      } else if (status === 'Canceled') {
+        computedStatus = 'Canceled';
+      }
+    }
+    switch(computedStatus) {
       case 'Ongoing':
         return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Ongoing</span>;
       case 'Upcoming':
@@ -537,7 +552,7 @@ export default function AdminElectionsPage() {
           <div className="flex justify-between items-start mb-2">
             <span className="text-sm text-gray-600">{election.organization?.org_name}</span>
             <div className="flex flex-col items-end gap-1 min-h-[40px] justify-center">
-              {getStatusBadge(election.election_status)}
+              {getStatusBadge(election.election_status, election.date_start, election.date_end)}
               {election.queued_access && (
                 <span className="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded mt-1 align-middle">Queued Access</span>
               )}
@@ -606,7 +621,7 @@ export default function AdminElectionsPage() {
       <div key={election.election_id} className="border rounded-lg bg-white shadow p-4">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm font-medium text-gray-600">{election.organization?.org_name}</span>
-          {getStatusBadge(election.election_status)}
+          {getStatusBadge(election.election_status, election.date_start, election.date_end)}
         </div>
         <h3 className="text-lg font-semibold text-gray-800 mb-1">{election.election_name}</h3>
         <p className="text-sm text-gray-500 mb-3">{election.election_desc}</p>

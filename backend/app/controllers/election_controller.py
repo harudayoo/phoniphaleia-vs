@@ -2,7 +2,7 @@ from app.models.election import Election
 from app.models.organization import Organization
 from app.models.candidate import Candidate
 from app import db
-from flask import jsonify, request
+from flask import jsonify, request, current_app
 from datetime import datetime
 from app.models.election_waitlist import ElectionWaitlist
 from app.models.voter import Voter
@@ -153,6 +153,7 @@ class ElectionController:
                 try:
                     from app.controllers.crypto_config_controller import CryptoConfigController
                     # Update the crypto config with the new election ID
+                    
                     crypto_result = CryptoConfigController.update_election_id(crypto_id, election.election_id)
                     print(f"Updated crypto config {crypto_id} to election {election.election_id}")
                 except Exception as crypto_ex:
@@ -397,15 +398,16 @@ class ElectionController:
                     'description': pos.description,
                     'candidates': []
                 }
+            # Correct grouping: for each candidate, append to the right position
             for cand in candidates:
                 pos_id = cand.position_id
                 if pos_id in grouped:
-                    # Create URL for photo based on photo_path
                     photo_url = None
                     if cand.photo_path:
-                        # Use relative path as URL
-                        photo_url = f"/api/uploads/{os.path.basename(cand.photo_path)}"
-                    
+                        if '/' in cand.photo_path:
+                            photo_url = f"/api/uploads/{os.path.basename(cand.photo_path)}"
+                        else:
+                            photo_url = f"/api/uploads/{cand.photo_path}"
                     grouped[pos_id]['candidates'].append({
                         'candidate_id': cand.candidate_id,
                         'fullname': cand.fullname,
@@ -473,13 +475,17 @@ class ElectionController:
             if not fullname or not position_id:
                 return jsonify({'error': 'fullname and position_id are required'}), 400
             
-            # Handle photo upload if provided
-            photo_path = None
+            # Handle photo upload if provided            photo_path = None
             if photo and AuthController.allowed_file(photo.filename):
                 unique_filename = f"{uuid.uuid4().hex}_{secure_filename(photo.filename)}"
-                photo_path = os.path.join(AuthController.UPLOAD_FOLDER, unique_filename)
-                os.makedirs(AuthController.UPLOAD_FOLDER, exist_ok=True)
-                photo.save(photo_path)
+                # Create absolute path for storage
+                uploads_dir = current_app.config.get('UPLOADS_FOLDER')
+                photos_dir = os.path.join(uploads_dir, 'photos')
+                os.makedirs(photos_dir, exist_ok=True)
+                abs_photo_path = os.path.join(photos_dir, unique_filename)
+                photo.save(abs_photo_path)
+                # Store relative path in the database for URL generation
+                photo_path = f"photos/{unique_filename}"
                 
                 # Fallback for missing metadata
                 if not photo_metadata:
@@ -527,30 +533,36 @@ class ElectionController:
                 candidate.party = data['party']
             if 'candidate_desc' in data:
                 candidate.candidate_desc = data['candidate_desc']
-                
-            # Handle photo upload if provided
+                  # Handle photo upload if provided
             if photo and AuthController.allowed_file(photo.filename):
                 # Remove old photo if it exists
-                if candidate.photo_path and os.path.exists(candidate.photo_path):
-                    try:
-                        os.remove(candidate.photo_path)
-                    except Exception as e:
-                        print(f"Failed to remove old photo: {e}")
+                if candidate.photo_path:
+                    uploads_dir = current_app.config.get('UPLOADS_FOLDER')
+                    old_photo_path = os.path.join(uploads_dir, candidate.photo_path)
+                    if os.path.exists(old_photo_path):
+                        try:
+                            os.remove(old_photo_path)
+                        except Exception as e:
+                            print(f"Failed to remove old photo: {e}")
                 
                 # Save new photo
                 unique_filename = f"{uuid.uuid4().hex}_{secure_filename(photo.filename)}"
-                photo_path = os.path.join(AuthController.UPLOAD_FOLDER, unique_filename)
-                os.makedirs(AuthController.UPLOAD_FOLDER, exist_ok=True)
-                photo.save(photo_path)
-                
-                # Update candidate record
+                # Create absolute path for storage
+                uploads_dir = current_app.config.get('UPLOADS_FOLDER')
+                photos_dir = os.path.join(uploads_dir, 'photos')
+                os.makedirs(photos_dir, exist_ok=True)
+                abs_photo_path = os.path.join(photos_dir, unique_filename)
+                photo.save(abs_photo_path)
+                # Store relative path in the database for URL generation
+                photo_path = f"photos/{unique_filename}"
+                  # Update candidate record
                 candidate.photo_path = photo_path
                 
                 # Fallback for missing metadata
                 if not photo_metadata:
                     photo_metadata = {
                         "name": photo.filename,
-                        "size": os.path.getsize(photo_path),
+                        "size": os.path.getsize(abs_photo_path),
                         "type": photo.mimetype
                     }
                 candidate.photo_metadata = json.dumps(photo_metadata)

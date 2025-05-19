@@ -66,13 +66,13 @@ const CandidateDetailModal: FC<CandidateDetailModalProps> = ({ candidate, isOpen
             className="w-36 h-36 relative mb-4 rounded-full overflow-hidden border-4 border-gray-100 shadow-sm"
             whileHover={{ scale: 1.05 }}
             transition={{ type: "spring", stiffness: 400, damping: 10 }}
-          >
-            {candidate.photo_url ? (
+          >            {candidate.photo_url ? (
               <img
                 src={candidate.photo_url}
                 alt={`Photo of ${candidate.fullname}`}
                 className="w-full h-full object-cover"
                 onError={(e) => {
+                  console.error(`Failed to load photo for ${candidate.fullname}: ${candidate.photo_url}`);
                   e.currentTarget.src = '/user-placeholder.png'; 
                   e.currentTarget.onerror = null;
                 }}

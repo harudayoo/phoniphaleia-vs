@@ -181,6 +181,21 @@ export default function UserVotesPage() {
     }
   }, [filteredElections, waitlistStatus]);
 
+  // Helper to compute accurate status based on dates and current date
+  const computeElectionStatus = (election: Election): Election['election_status'] => {
+    if (election.election_status === 'Canceled') return 'Canceled';
+    const now = new Date();
+    const start = election.date_start ? new Date(election.date_start) : null;
+    const end = new Date(election.date_end);
+    // Set time to 00:00:00 for start and 23:59:59 for end
+    if (start) start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    if (start && now >= start && now <= end) return 'Ongoing';
+    if (start && now < start) return 'Upcoming';
+    if (now > end) return 'Finished';
+    return election.election_status || 'Upcoming';
+  };
+
   // Helper function to format time remaining
   const formatTimeRemaining = (endDateStr: string) => {
     const endDate = new Date(endDateStr);
@@ -229,14 +244,14 @@ export default function UserVotesPage() {
 
   // Helper function to render the status badge (top-right corner)
   const getStatusBadge = (election: Election) => {
-    if (!election.election_status) return null;
+    const status = computeElectionStatus(election);
     let color = 'bg-blue-100 text-blue-600';
-    if (election.election_status === 'Finished') color = 'bg-gray-100 text-gray-600';
-    if (election.election_status === 'Canceled') color = 'bg-red-100 text-red-600';
-    if (election.election_status === 'Upcoming') color = 'bg-yellow-100 text-yellow-600';
+    if (status === 'Finished') color = 'bg-gray-100 text-gray-600';
+    if (status === 'Canceled') color = 'bg-red-100 text-red-600';
+    if (status === 'Upcoming') color = 'bg-yellow-100 text-yellow-600';
     return (
       <span className={`text-xs px-2 py-1 rounded font-semibold shadow ${color}`}>
-        {election.election_status}
+        {status}
       </span>
     );
   };
@@ -338,119 +353,119 @@ export default function UserVotesPage() {
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredElections.map((election) => (
-            <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden flex flex-col relative">
-              <div className="px-6 pt-6 pb-0 flex flex-col items-start">
-                <div className="flex w-full justify-between items-start mb-2">
-                  {election.queued_access && (
-                    <span className="text-xs px-2 py-1 rounded font-semibold shadow bg-yellow-200 text-yellow-800">
-                      Queued Access
-                      {typeof activeVoters[election.election_id] === 'number' && election.max_concurrent_voters ? (
-                        <span className="ml-2 text-gray-700">{activeVoters[election.election_id]}/{election.max_concurrent_voters} active</span>
-                      ) : null}
-                    </span>
-                  )}
-                  <div className="self-end">{getStatusBadge(election)}</div>
-                </div>
-                {election.organization && (
-                  <div className="text-xs text-gray-500 mt-2 mb-2">
-                    {election.organization.org_name}
-                    {election.organization.college_name && (
-                      <span className="ml-2 text-gray-400">({election.organization.college_name})</span>
+          {filteredElections.map((election) => {
+            const status = computeElectionStatus(election);
+            return (
+              <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden flex flex-col relative">
+                <div className="px-6 pt-6 pb-0 flex flex-col items-start">
+                  <div className="flex w-full justify-between items-start mb-2">
+                    {election.queued_access && (
+                      <span className="text-xs px-2 py-1 rounded font-semibold shadow bg-yellow-200 text-yellow-800">
+                        Queued Access
+                        {typeof activeVoters[election.election_id] === 'number' && election.max_concurrent_voters ? (
+                          <span className="ml-2 text-gray-700">{activeVoters[election.election_id]}/{election.max_concurrent_voters} active</span>
+                        ) : null}
+                      </span>
                     )}
+                    <div className="self-end">{getStatusBadge(election)}</div>
                   </div>
-                )}
-              </div>
-              <div className="p-6 pt-2 flex-1">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">{election.election_name}</h3>
-                <p className="text-gray-600 text-sm mb-4">{election.election_desc}</p>
-              </div>
-              <div className="px-6 pb-3 flex flex-col gap-1 items-start justify-between">
-                <span className="text-xs text-gray-500">
-                  Ends on {new Date(election.date_end).toLocaleDateString()}
-                </span>
-                {getTimeRemainingBadge(election)}
-              </div>
-              <div className="px-6 pb-6">
-                <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
-                  <button
-                    className={`w-full mt-2 px-4 py-2 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 ${
-                      election.election_status === 'Finished' || (election.date_start && new Date(election.date_start) > new Date())
-                        ? 'bg-gray-500 cursor-not-allowed'
-                        : 'bg-red-600 hover:bg-red-700'
-                    }`}
-                    disabled={Boolean(
-                      election.election_status === 'Finished' ||
-                      (election.date_start && new Date(election.date_start) > new Date())
-                    )}
-                  >
-                    {election.election_status === 'Finished'
-                      ? 'Election Closed'
-                      : election.date_start && new Date(election.date_start) > new Date()
-                        ? 'Voting Not Started'
-                        : 'Cast Your Vote'}
-                    {election.election_status !== 'Finished' && (!election.date_start || new Date(election.date_start) <= new Date()) && <ArrowRight size={16} />}
-                  </button>
-                </Link>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {filteredElections.map((election) => (
-            <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
-              <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center">
-                <div className="flex-1">
                   {election.organization && (
-                    <div className="text-sm text-gray-600 mb-1">{election.organization.org_name}</div>
+                    <div className="text-xs text-gray-500 mt-2 mb-2">
+                      {election.organization.org_name}
+                      {election.organization.college_name && (
+                        <span className="ml-2 text-gray-400">({election.organization.college_name})</span>
+                      )}
+                    </div>
                   )}
-                  <div className="text-xs text-gray-500 mb-2">
-                    <span className="font-medium">College:</span> {election.organization?.college_name || 'None'}
-                  </div>
+                </div>
+                <div className="p-6 pt-2 flex-1">
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">{election.election_name}</h3>
                   <p className="text-gray-600 text-sm mb-4">{election.election_desc}</p>
-                  <div className="flex items-center">
-                    <Calendar className="h-4 w-4 text-red-600 mr-2" />
-                    <span className="text-sm text-gray-600">
-                      {election.election_status === 'Finished' ? 'Ended on' : 'Ends on'} {new Date(election.date_end).toLocaleDateString()}
-                    </span>
-                  </div>
                 </div>
-                <div className="flex flex-col items-start md:items-end gap-3 mt-4 md:mt-0 md:ml-6">
+                <div className="px-6 pb-3 flex flex-col gap-1 items-start justify-between">
+                  <span className="text-xs text-gray-500">
+                    Ends on {new Date(election.date_end).toLocaleDateString()}
+                  </span>
                   {getTimeRemainingBadge(election)}
-                  {election.queued_access && (
-                    <span className="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded">
-                      Queued Access
-                      {typeof activeVoters[election.election_id] === 'number' && election.max_concurrent_voters ? (
-                        <span className="ml-2 text-gray-700">{activeVoters[election.election_id]}/{election.max_concurrent_voters} active</span>
-                      ) : null}
-                    </span>
-                  )}
+                </div>
+                <div className="px-6 pb-6">
                   <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
-                    <button 
-                      className={`${
-                        election.election_status === 'Finished' || (election.date_start && new Date(election.date_start) > new Date())
-                          ? 'bg-gray-500 cursor-not-allowed' 
-                          : 'bg-red-600 hover:bg-red-700'
-                      } text-white px-4 py-2 rounded-lg transition flex items-center justify-center gap-2`}
-                      disabled={Boolean(
-                        election.election_status === 'Finished' ||
-                        (election.date_start && new Date(election.date_start) > new Date())
-                      )}
+                    <button
+                      className={`w-full mt-2 px-4 py-2 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 ${
+                        status === 'Finished' ? 'bg-gray-500 cursor-not-allowed'
+                        : status === 'Upcoming' ? 'bg-gray-500 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-700'
+                      }`}
+                      disabled={status === 'Finished' || status === 'Upcoming'}
                     >
-                      {election.election_status === 'Finished'
+                      {status === 'Finished'
                         ? 'Election Closed'
-                        : election.date_start && new Date(election.date_start) > new Date()
+                        : status === 'Upcoming'
                           ? 'Voting Not Started'
-                          : 'Cast Your Vote'} 
-                      {election.election_status !== 'Finished' && (!election.date_start || new Date(election.date_start) <= new Date()) && <ArrowRight size={16} />}
+                          : 'Cast Your Vote'}
+                      {status === 'Ongoing' && <ArrowRight size={16} />}
                     </button>
                   </Link>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {filteredElections.map((election) => {
+            const status = computeElectionStatus(election);
+            return (
+              <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+                <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center">
+                  <div className="flex-1">
+                    {election.organization && (
+                      <div className="text-sm text-gray-600 mb-1">{election.organization.org_name}</div>
+                    )}
+                    <div className="text-xs text-gray-500 mb-2">
+                      <span className="font-medium">College:</span> {election.organization?.college_name || 'None'}
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-800 mb-2">{election.election_name}</h3>
+                    <p className="text-gray-600 text-sm mb-4">{election.election_desc}</p>
+                    <div className="flex items-center">
+                      <Calendar className="h-4 w-4 text-red-600 mr-2" />
+                      <span className="text-sm text-gray-600">
+                        {status === 'Finished' ? 'Ended on' : 'Ends on'} {new Date(election.date_end).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-start md:items-end gap-3 mt-4 md:mt-0 md:ml-6">
+                    {getTimeRemainingBadge(election)}
+                    {election.queued_access && (
+                      <span className="inline-block bg-yellow-200 text-yellow-800 text-xs px-2 py-1 rounded">
+                        Queued Access
+                        {typeof activeVoters[election.election_id] === 'number' && election.max_concurrent_voters ? (
+                          <span className="ml-2 text-gray-700">{activeVoters[election.election_id]}/{election.max_concurrent_voters} active</span>
+                        ) : null}
+                      </span>
+                    )}
+                    <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
+                      <button 
+                        className={`${
+                          status === 'Finished' || status === 'Upcoming'
+                            ? 'bg-gray-500 cursor-not-allowed' 
+                            : 'bg-red-600 hover:bg-red-700'
+                        } text-white px-4 py-2 rounded-lg transition flex items-center justify-center gap-2`}
+                        disabled={status === 'Finished' || status === 'Upcoming'}
+                      >
+                        {status === 'Finished'
+                          ? 'Election Closed'
+                          : status === 'Upcoming'
+                            ? 'Voting Not Started'
+                            : 'Cast Your Vote'} 
+                        {status === 'Ongoing' && <ArrowRight size={16} />}
+                      </button>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </UserLayout>
