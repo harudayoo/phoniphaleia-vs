@@ -26,6 +26,17 @@ class UserController:
                 voter = Voter.query.get(data['student_id'])
                 if not voter:
                     return jsonify({'message': 'User not found'}), 401
+                  # Get the base URL for serving photos (from config or default to local path)
+                base_url = current_app.config.get('PHOTO_BASE_URL', f"{request.url_root}uploads/photos/")
+                photo_url = None
+                
+                # Include photo path if available
+                if voter.photo_path:
+                    # Ensure URL doesn't have double slashes
+                    if base_url.endswith('/') and voter.photo_path.startswith('/'):
+                        photo_url = f"{base_url}{voter.photo_path[1:]}"
+                    else:
+                        photo_url = f"{base_url}{voter.photo_path}"
                 
                 return jsonify({
                     'student_id': voter.student_id,
@@ -33,7 +44,9 @@ class UserController:
                     'last_name': voter.lastname,
                     'student_email': voter.student_email,
                     'college_id': voter.college_id,
-                    'status': voter.status
+                    'status': voter.status,
+                    'photo_url': photo_url,
+                    'id_metadata': voter.id_metadata
                 }), 200
                 
             except jwt.ExpiredSignatureError:

@@ -1,0 +1,11 @@
+// This file tells TypeScript to treat .js files as ES modules
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "target": "ESNext",
+    "esModuleInterop": true
+  },
+  "include": ["*.js"]
+}

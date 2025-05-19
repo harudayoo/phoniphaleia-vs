@@ -1,0 +1,17 @@
+{
+  "name": "phoniphaleia-circuits",
+  "version": "1.0.0",
+  "description": "ZKP circuit generation utilities",
+  "type": "module",  "scripts": {
+    "generate-real": "node generate-real-circuit.js",
+    "generate-fixed": "node generate-fixed-circuit.js",
+    "generate-simple": "node simple-circuit-generator.js",
+    "create-binary": "node create-binary-files.js",
+    "test-wasm": "node test-wasm-integration.js"
+  },
+  "dependencies": {
+    "circom2": "^0.2.19",
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.5"
+  }
+}

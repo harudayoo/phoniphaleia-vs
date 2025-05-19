@@ -9,6 +9,8 @@ export interface UserInfo {
   student_email: string;
   college_id: number;
   status: string;
+  photo_url?: string;
+  id_metadata?: string;
 }
 
 interface UserContextType {
@@ -106,16 +108,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       if (!response.ok) {
         throw new Error('Failed to fetch user data');
-      }
-
-      const userData = await response.json();
+      }      const userData = await response.json();
       setUser({
         student_id: userData.student_id,
         first_name: userData.first_name,
         last_name: userData.last_name,
         student_email: userData.student_email,
         college_id: userData.college_id,
-        status: userData.status
+        status: userData.status,
+        photo_url: userData.photo_url || undefined,
+        id_metadata: userData.id_metadata || undefined
       });
     } catch (error) {
       console.error('Error fetching user data:', error);

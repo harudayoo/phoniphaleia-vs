@@ -2,13 +2,27 @@ import { useEffect, useState } from 'react';
 import Modal from '@/components/Modal';
 import ErrorAlert from '@/components/ErrorAlert';
 import { Download, Plus } from 'lucide-react';
+import { authenticatedPost, authenticatedGet } from '@/services/apiService';
 
 type Organization = { id: number; name: string; college_name?: string };
 type Admin = { id: number; name: string; email: string };
 
 interface KeyGenerationResponse {
+  crypto_id: number;
   public_key: string;
   private_shares: string[];
+  threshold?: number;
+}
+
+interface Election {
+  election_id: number;
+  election_name: string;
+  election_status: string;
+  date_created: string;
+  date_start: string;
+  date_end: string;
+  org_id: number;
+  [key: string]: unknown; // For any other properties that might be in the response
 }
 
 interface Props {
@@ -30,9 +44,9 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose, onCreated }) => {
   const [personnel, setPersonnel] = useState<{ name: string; id?: number }[]>([
     { name: '' }, { name: '' }, { name: '' }
   ]);
-  const [adminSuggestions, setAdminSuggestions] = useState<Admin[][]>([[], [], []]);
-  const [publicKey, setPublicKey] = useState('');
+  const [adminSuggestions, setAdminSuggestions] = useState<Admin[][]>([[], [], []]);  const [publicKey, setPublicKey] = useState('');
   const [privateShares, setPrivateShares] = useState<string[]>([]);
+  const [cryptoId, setCryptoId] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -58,10 +72,10 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose, onCreated }) => {
       setMaxConcurrentVoters('');
     }
   }, [open]);
-
   // Fetch organizations on open
   useEffect(() => {
     if (open) {
+      // Regular fetch is fine for public data like organizations
       fetch(`${API_URL}/organizations`)
         .then(res => res.json())
         .then((data: Organization[]) => {
@@ -73,12 +87,10 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose, onCreated }) => {
           );
         })
         .catch(() => setError('Failed to fetch organizations'));
-      // Fetch current admin info
-      fetch(`${API_URL}/admin/me`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('admin_token')}` }
-      })
-        .then(res => res.json())
-        .then((data) => {
+      
+      // Use authenticatedGet for protected admin info
+      authenticatedGet<{full_name: string, id_number: number}>('/admin/me')
+        .then(data => {
           setPersonnel(p => [{ name: data.full_name, id: data.id_number }, ...p.slice(1)]);
         })
         .catch(() => {});
@@ -105,86 +117,68 @@ const CreateElectionModal: React.FC<Props> = ({ open, onClose, onCreated }) => {
       setPersonnel(p => [...p, { name: '' }]);
       setAdminSuggestions(s => [...s, []]);
     }
-  };
-
-  // Generate keys (call backend)
+  };  // Generate keys (call backend)
   const handleGenerateKeys = async (): Promise<void> => {
     setGenerating(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/crypto_configs/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ n_personnel: personnel.length })
-      });
-      if (!res.ok) throw new Error('Failed to generate keys');
-      const data: KeyGenerationResponse = await res.json();
+      // First get a temporary election ID using a GET request
+      const tempElectionData = await authenticatedGet<{ temp_election_id: number }>('/crypto_configs/temp-election-id');
+      
+      // Generate key pair with the temporary election ID
+      const data = await authenticatedPost<KeyGenerationResponse>('/crypto_configs/generate', { 
+        election_id: tempElectionData.temp_election_id,
+        n_personnel: personnel.length 
+      } as Record<string, unknown>);
+      
       setPublicKey(data.public_key);
       setPrivateShares(data.private_shares);
+      setCryptoId(data.crypto_id);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'Key generation failed');
     } finally {
       setGenerating(false);
     }
-  };
-
-  // Save all data
+  };  // Save all data
   const handleFinish = async (): Promise<void> => {
     setError(null);
     setSuccess(null);
-    try {
-      // 1. Create election
-      const electionRes = await fetch(`${API_URL}/elections`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          org_id: orgId,
-          election_name: electionName,
-          election_desc: description,
-          election_status: 'Upcoming',
-          date_start: dateStart,
-          date_end: endDate,
-          queued_access: queuedAccess,
-          max_concurrent_voters: queuedAccess ? maxConcurrentVoters : null
-        })
-      });
-      if (!electionRes.ok) throw new Error('Failed to create election');
-      const election = await electionRes.json();
-      // 2. Save public key
-      const cryptoRes = await fetch(`${API_URL}/crypto_configs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    try {      // 1. Create election
+      const election = await authenticatedPost<Election>('/elections', {
+        org_id: orgId,
+        election_name: electionName,
+        election_desc: description,
+        election_status: 'Upcoming',
+        date_start: dateStart,
+        date_end: endDate,
+        queued_access: queuedAccess,
+        max_concurrent_voters: queuedAccess ? maxConcurrentVoters : null
+      });      // 2. Update the crypto config with the real election ID if we have a temporary one
+      let crypto;      if (cryptoId) {
+        // Update the existing crypto config with the real election ID
+        crypto = await authenticatedPost<{crypto_id: number}>(`/crypto_configs/${cryptoId}/update-election`, {
+          election_id: election.election_id
+        });
+      } else {
+        // If no temporary crypto config exists, create a new one
+        crypto = await authenticatedPost<{crypto_id: number}>('/crypto_configs', {
           election_id: election.election_id,
           public_key: publicKey
-        })
-      });
-      if (!cryptoRes.ok) throw new Error('Failed to save public key');
-      const crypto = await cryptoRes.json();
-      // 3. Save personnel and key shares
+        });
+      }      // 3. Save personnel and key shares
       for (let i = 0; i < personnel.length; i++) {
         // Save trusted authority
-        const taRes = await fetch(`${API_URL}/trusted_authorities`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            authority_name: personnel[i].name,
-            contact_info: ''
-          })
+        const ta = await authenticatedPost<{authority_id: number}>('/trusted_authorities', {
+          authority_name: personnel[i].name,
+          contact_info: ''
         });
-        if (!taRes.ok) throw new Error('Failed to save trusted authority');
-        const ta = await taRes.json();
+        
         // Save key share
-        const ksRes = await fetch(`${API_URL}/key_shares`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            crypto_id: crypto.crypto_id,
-            authority_id: ta.authority_id,
-            share_value: privateShares[i]
-          })
+        await authenticatedPost<{key_share_id: number}>('/key_shares', {
+          crypto_id: crypto.crypto_id,
+          authority_id: ta.authority_id,
+          share_value: privateShares[i]
         });
-        if (!ksRes.ok) throw new Error('Failed to save key share');
       }
       setSuccess('Election created successfully!');
       setTimeout(() => {

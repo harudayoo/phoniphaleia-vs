@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { FaDownload, FaEdit, FaEye, FaTrash, FaLock, FaLockOpen } from 'react-icons/fa';
-import { Filter, Calendar, ArrowUp } from 'lucide-react';
+import { Filter, Calendar, ArrowUp, Key, Shield } from 'lucide-react';
 import Link from 'next/link';
 
 // Import reusable components
@@ -21,6 +21,9 @@ type Result = {
   participation_rate?: number;
   voters_count?: number;
   total_votes?: number;
+  crypto_enabled?: boolean;
+  threshold_crypto?: boolean;
+  zkp_verified?: boolean;
   candidates?: {
     name: string;
     votes: number;
@@ -56,8 +59,7 @@ export default function AdminResultsPage() {
   useEffect(() => {
     const fetchResults = async () => {
       try {
-        setLoading(true);
-        const mockData: Result[] = [
+        setLoading(true);        const mockData: Result[] = [
           {
             result_id: 1,
             election_name: "Student Council Election 2025",
@@ -68,6 +70,9 @@ export default function AdminResultsPage() {
             participation_rate: 78.4,
             voters_count: 1802,
             total_votes: 1412,
+            crypto_enabled: true,
+            threshold_crypto: true,
+            zkp_verified: true,
             candidates: [
               { name: "Maria Rodriguez", votes: 642, percentage: 45.5, winner: true },
               { name: "James Wilson", votes: 524, percentage: 37.1, winner: false },
@@ -156,7 +161,6 @@ export default function AdminResultsPage() {
         return null;
     }
   };
-
   const renderGridItem = (result: Result, key?: React.Key) => (
     <div key={key ?? result.result_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
       <div className="p-6">
@@ -171,6 +175,23 @@ export default function AdminResultsPage() {
           <Calendar className="h-4 w-4 mr-2" />
           <span>Published: {new Date(result.published_at).toLocaleDateString()}</span>
         </div>
+        
+        {result.crypto_enabled && (
+          <div className="flex items-center gap-1 mb-3 text-xs">
+            {result.threshold_crypto && (
+              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full flex items-center">
+                <Key className="h-3 w-3 mr-1" />
+                Threshold Crypto
+              </span>
+            )}
+            {result.zkp_verified && (
+              <span className="px-2 py-0.5 bg-green-50 text-green-700 rounded-full flex items-center">
+                <Shield className="h-3 w-3 mr-1" />
+                ZKP Verified
+              </span>
+            )}
+          </div>
+        )}
         
         <p className="text-gray-600 text-sm mb-4 line-clamp-2">{result.description}</p>
         
@@ -256,10 +277,27 @@ export default function AdminResultsPage() {
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {filtered.map((result) => (
-            <tr key={result.result_id} className="hover:bg-gray-50">
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-medium text-gray-900">{result.election_name}</div>
-                <div className="text-sm text-gray-500 truncate max-w-[200px]">{result.description}</div>
+            <tr key={result.result_id} className="hover:bg-gray-50">              <td className="px-6 py-4 whitespace-nowrap">
+                <div className="flex flex-col">
+                  <div className="text-sm font-medium text-gray-900">{result.election_name}</div>
+                  <div className="text-sm text-gray-500 truncate max-w-[200px]">{result.description}</div>
+                  {result.crypto_enabled && (
+                    <div className="flex items-center mt-1 gap-1">
+                      {result.threshold_crypto && (
+                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs flex items-center">
+                          <Key className="h-2.5 w-2.5 mr-0.5" />
+                          TH
+                        </span>
+                      )}
+                      {result.zkp_verified && (
+                        <span className="px-1.5 py-0.5 bg-green-50 text-green-700 rounded-full text-xs flex items-center">
+                          <Shield className="h-2.5 w-2.5 mr-0.5" />
+                          ZKP
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm text-gray-900">{result.organization?.org_name}</div>

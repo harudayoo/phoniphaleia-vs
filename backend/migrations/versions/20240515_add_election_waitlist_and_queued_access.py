@@ -1,9 +1,20 @@
-"""
-Migration script to add queued_access and max_concurrent_voters to elections table,
+"""Migration script to add queued_access and max_concurrent_voters to elections table,
 and create the election_waitlist table.
+
+Revision ID: 20240515_waitlist
+Revises: db08a0816cf3
+Create Date: 2024-05-15 10:00:00.000000
+
 """
 from alembic import op
 import sqlalchemy as sa
+
+
+# revision identifiers, used by Alembic.
+revision = '20240515_waitlist'
+down_revision = 'db08a0816cf3'
+branch_labels = None
+depends_on = None
 
 def upgrade():
     op.add_column('elections', sa.Column('queued_access', sa.Boolean(), nullable=False, server_default=sa.false()))

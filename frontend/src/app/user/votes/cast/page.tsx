@@ -102,9 +102,8 @@ export default function CastVotePage() {
 
   const handleSelect = (positionId: number, candidateId: number) => {
     setSelected(prev => ({ ...prev, [positionId]: candidateId }));
-  };
-  const handleSubmit = () => {
-    // No DB submission yet, just validate
+  };  const handleSubmit = () => {
+    // Validate all positions have selections
     for (const pos of positions) {
       if (!selected[pos.position_id]) {
         setError(`Please select a candidate for ${pos.position_name}.`);
@@ -112,8 +111,21 @@ export default function CastVotePage() {
         return;
       }
     }
+    
+    // Format votes for verification
+    const votes = Object.entries(selected).map(([positionId, candidateId]) => ({
+      position_id: parseInt(positionId),
+      candidate_id: candidateId as number
+    }));
+    
+    // Prepare votes data for URL parameter
+    const votesParam = encodeURIComponent(JSON.stringify(votes));
+    
+    // Redirect to verify page with election ID and votes
+    router.push(`/user/votes/vote-verify?election_id=${electionId}&votes=${votesParam}`);
+    
     setError(null);
-    setSuccess('Your selections are valid! (Not submitted yet)');
+    setSuccess('Redirecting to vote verification...');
   };
 
   // Add scroll detection for showing/hiding the scroll-to-top button
@@ -439,7 +451,7 @@ export default function CastVotePage() {
                   damping: 15
                 }}
               >
-                Review My Vote
+                Verify Votes
                 <motion.svg 
                   xmlns="http://www.w3.org/2000/svg" 
                   width="16" 

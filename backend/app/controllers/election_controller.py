@@ -118,10 +118,10 @@ class ElectionController:
                 status = 'Upcoming'
             elif date_start <= now <= date_end:
                 status = 'Ongoing'
-            elif now > date_end:
-                status = 'Finished'
+            elif now > date_end:                status = 'Finished'
             else:
                 status = data.get('election_status', 'Upcoming')
+                
             election = Election(
                 org_id=data['org_id'],
                 election_name=data['election_name'],
@@ -146,13 +146,27 @@ class ElectionController:
                     candidate_desc=cand.get('candidate_desc')
                 )
                 db.session.add(candidate)
+            
+            # Handle crypto_id if provided - link crypto config to this election
+            crypto_id = data.get('crypto_id')
+            if crypto_id:
+                try:
+                    from app.controllers.crypto_config_controller import CryptoConfigController
+                    # Update the crypto config with the new election ID
+                    crypto_result = CryptoConfigController.update_election_id(crypto_id, election.election_id)
+                    print(f"Updated crypto config {crypto_id} to election {election.election_id}")
+                except Exception as crypto_ex:
+                    print(f"Error updating crypto config: {crypto_ex}")
+                    # Don't fail the whole transaction if crypto linking fails
+            
             db.session.commit()
 
             return jsonify({
                 'election_id': election.election_id,
                 'election_name': election.election_name,
                 'queued_access': election.queued_access,
-                'max_concurrent_voters': election.max_concurrent_voters
+                'max_concurrent_voters': election.max_concurrent_voters,
+                'crypto_id': crypto_id if crypto_id else None
             }), 201
         except Exception as ex:
             db.session.rollback()
@@ -214,34 +228,47 @@ class ElectionController:
         except Exception as ex:
             db.session.rollback()
             print('Error in update election:', ex)
-            return jsonify({'error': f'Failed to update election: {str(ex)}'}), 500
-
-    @staticmethod
+            return jsonify({'error': f'Failed to update election: {str(ex)}'}), 500    @staticmethod
     def delete(election_id):
         try:
             election = Election.query.get(election_id)
             if not election:
                 return jsonify({'error': 'Election not found'}), 404
 
-            # Delete all candidates linked to this election
+            # 1. Delete all votes cast in this election
+            from app.models.vote import Vote
+            Vote.query.filter_by(election_id=election_id).delete()
+            
+            # 2. Delete all candidates linked to this election
             from app.models.candidate import Candidate
             Candidate.query.filter_by(election_id=election_id).delete()
 
-            # Delete all key shares and crypto configs linked to this election
+            # 3. Delete all key shares and crypto configs linked to this election
             from app.models.crypto_config import CryptoConfig
             from app.models.key_share import KeyShare
+            from app.models.trusted_authority import TrustedAuthority
+            
             crypto_configs = CryptoConfig.query.filter_by(election_id=election_id).all()
             for crypto in crypto_configs:
                 KeyShare.query.filter_by(crypto_id=crypto.crypto_id).delete()
                 db.session.delete(crypto)
+                
+            # 4. Delete all waitlist entries for this election
+            from app.models.election_waitlist import ElectionWaitlist
+            ElectionWaitlist.query.filter_by(election_id=election_id).delete()
+            
+            # 5. Delete election results
+            from app.models.election_result import ElectionResult
+            ElectionResult.query.filter_by(election_id=election_id).delete()
 
+            # 6. Finally, delete the election itself
             db.session.delete(election)
             db.session.commit()
-            return jsonify({'message': 'Election and related data deleted successfully'})
+            return jsonify({'message': 'Election and all related data deleted successfully'})
         except Exception as ex:
             db.session.rollback()
             print('Error in delete election:', ex)
-            return jsonify({'error': 'Failed to delete election'}), 500
+            return jsonify({'error': f'Failed to delete election: {str(ex)}'}), 500
 
     @staticmethod
     def join_waitlist(election_id):
@@ -548,3 +575,26 @@ class ElectionController:
             db.session.rollback()
             print('Error in delete_candidate:', ex)
             return jsonify({'error': 'Failed to delete candidate'}), 500
+
+    @staticmethod
+    def check_voter_voted(election_id, voter_id=None):
+        """Check if a voter has already voted in this election"""
+        try:
+            # If coming from POST request body
+            if request.method == 'POST':
+                data = request.json or {}
+                voter_id = data.get('voter_id')
+            
+            if not voter_id:
+                return jsonify({"error": "No voter_id provided"}), 400
+                
+            # Check database for existing votes
+            existing = Vote.query.filter_by(election_id=election_id, student_id=voter_id).first()
+            
+            return jsonify({
+                "unique": not existing,  # true if no existing vote, false otherwise
+                "message": "You have already voted in this election." if existing else "You haven't voted in this election yet."
+            })
+        except Exception as ex:
+            print('Error in check_voter_voted:', ex)
+            return jsonify({"error": "Failed to check voting status"}), 500

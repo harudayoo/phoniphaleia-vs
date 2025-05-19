@@ -1,4 +1,4 @@
-from flask import Blueprint
+from flask import Blueprint, request
 from app.controllers.election_controller import ElectionController
 
 election_bp = Blueprint('election', __name__, url_prefix='/api')
@@ -80,3 +80,11 @@ def delete_candidate(candidate_id):
 def submit_vote(election_id):
     from app.controllers.election_controller import ElectionController
     return ElectionController.submit_vote(election_id)
+
+@election_bp.route('/elections/<int:election_id>/vote-check', methods=['GET', 'POST'])
+def check_voter_voted(election_id):
+    if request.method == 'GET':
+        voter_id = request.args.get('voter_id')
+    else:  # POST
+        voter_id = request.json.get('voter_id') if request.json else None
+    return ElectionController.check_voter_voted(election_id, voter_id)

@@ -41,12 +41,27 @@ def create_app():
     app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
     app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
     app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER')
-    mail.init_app(app)
-
-    # CORS setup
+    mail.init_app(app)    # CORS setup
     cors_origins = os.getenv("CORS_ORIGINS")
     cors_origins = [origin.strip() for origin in cors_origins.split(",")] if "," in cors_origins else [cors_origins]
     CORS(app, origins=cors_origins, supports_credentials=True)
+    
+    # Configure uploads directory for serving static files
+    # Create uploads directory if it doesn't exist
+    uploads_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'uploads')
+    if not os.path.exists(uploads_dir):
+        os.makedirs(uploads_dir)
+    if not os.path.exists(os.path.join(uploads_dir, 'photos')):
+        os.makedirs(os.path.join(uploads_dir, 'photos'))
+    
+    # Configure Flask to serve static files from the uploads directory
+    app.config['UPLOADS_FOLDER'] = uploads_dir
+    app.config['PHOTO_BASE_URL'] = f"{os.getenv('BACKEND_URL', 'http://localhost:5000/')}/uploads/"
+    
+    # Register endpoint to serve files from uploads directory
+    @app.route('/uploads/<path:filename>')
+    def uploaded_file(filename):
+        return app.send_from_directory(uploads_dir, filename)
 
     # Initialize database
     # Models are already imported at module level
@@ -56,6 +71,7 @@ def create_app():
     with app.app_context():
         db.create_all()    # Register blueprints
     from app.routes import auth_bp, college_bp, admin_bp, election_bp, user_bp, position_bp, organization_bp, trusted_authority_bp, crypto_config_bp, key_share_bp, admin_search_bp, upload_bp
+    from app.routes.verification_routes import verification_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(college_bp)
     app.register_blueprint(admin_bp)
@@ -68,6 +84,7 @@ def create_app():
     app.register_blueprint(key_share_bp)
     app.register_blueprint(admin_search_bp)
     app.register_blueprint(upload_bp)
+    app.register_blueprint(verification_bp)
 
     # Simple test route
     @app.route('/direct-test')

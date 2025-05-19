@@ -167,31 +167,62 @@ function UserLayoutInner({ children }: UserLayoutProps) {
               >
                 <div className="w-32 h-5 bg-gray-200 rounded-md animate-pulse mb-2"></div>
                 <div className="w-24 h-3 bg-gray-200 rounded-md animate-pulse"></div>
-              </motion.div>
-            ) : user ? (
+              </motion.div>            ) : user ? (
               <motion.div 
                 key="user-info"
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="text-right p-4 rounded-xl"
+                className="flex items-center gap-4 p-4 rounded-xl"
                 style={{
                   background: 'linear-gradient(to left, rgba(253, 230, 138, 0.1), rgba(253, 230, 138, 0) 70%)'
                 }}
               >
-                <motion.div 
-                  className="text-lg font-semibold text-red-900 text-shadow-gray-600"
-                  layoutId="user-name"
-                >
-                  Welcome, {user.first_name}
-                </motion.div>
-                <motion.div 
-                  className="text-sm text-gray-600"
-                  layoutId="user-id"
-                >
-                  Student ID: {user.student_id}
-                </motion.div>
+                {/* User photo */}
+                {user.photo_url ? (
+                  <motion.div 
+                    className="h-12 w-12 overflow-hidden rounded-full border-2 border-red-700 shadow-md flex-shrink-0"
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    <img 
+                      src={user.photo_url} 
+                      alt={`${user.first_name}'s photo`}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        // Fallback if image fails to load
+                        e.currentTarget.src = "/LogoNoText.png";
+                      }}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    className="h-12 w-12 rounded-full bg-red-100 text-red-800 flex items-center justify-center border-2 border-red-700 shadow-md font-bold text-lg flex-shrink-0"
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.1 }}
+                  >
+                    {user.first_name.charAt(0)}{user.last_name.charAt(0)}
+                  </motion.div>
+                )}
+                
+                {/* User info */}
+                <div className="text-right">
+                  <motion.div 
+                    className="text-lg font-semibold text-red-900 text-shadow-gray-600"
+                    layoutId="user-name"
+                  >
+                    Welcome, {user.first_name}
+                  </motion.div>
+                  <motion.div 
+                    className="text-sm text-gray-600"
+                    layoutId="user-id"
+                  >
+                    Student ID: {user.student_id}
+                  </motion.div>
+                </div>
               </motion.div>
             ) : (
               <motion.div
