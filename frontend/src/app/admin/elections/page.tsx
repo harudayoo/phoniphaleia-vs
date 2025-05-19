@@ -105,6 +105,7 @@ export default function AdminElectionsPage() {
   const [candidateToDeleteIdx, setCandidateToDeleteIdx] = useState<number | null>(null);
   const [showCandidateDeleteModal, setShowCandidateDeleteModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [eligibleVoters, setEligibleVoters] = useState<Record<number, number>>({});
   const originalCandidatesRef = useRef<Candidate[]>([]);
 
   const router = useRouter();
@@ -194,7 +195,33 @@ export default function AdminElectionsPage() {
     }
 
     fetchElections();
-  }, [organizations]);  useEffect(() => {
+  }, [organizations]);
+
+  useEffect(() => {
+    if (!elections || elections.length === 0) return;
+    let isMounted = true;
+    async function fetchEligibleVoters() {
+      const results: Record<number, number> = {};
+      await Promise.all(
+        elections.map(async (election) => {
+          try {
+            const res = await fetch(`${API_URL}/elections/${election.election_id}/eligible_voters`);
+            if (res.ok) {
+              const data = await res.json();
+              results[election.election_id] = data.eligible_voters;
+            }
+          } catch {
+            // Ignore error
+          }
+        })
+      );
+      if (isMounted) setEligibleVoters(results);
+    }
+    fetchEligibleVoters();
+    return () => { isMounted = false; };
+  }, [elections]);
+
+  useEffect(() => {
     // This is now only needed to refresh position data when the modal is reopened
     // (The main loading of positions is handled in handleManageCandidates)
     if (!showCandidatesModal || !candidatesElection?.org_id || candidatesLoading) return;
@@ -233,9 +260,19 @@ export default function AdminElectionsPage() {
     }
   }, [showCandidatesModal, candidatesElection, candidatesLoading, positions.length]);
 
-  const handleShowInfo = (election: Election) => {
+  const handleShowInfo = async (election: Election) => {
     setSelectedElection(election);
     setShowDetailModal(true);
+    // Fetch eligible voters for this election
+    try {
+      const res = await fetch(`${API_URL}/elections/${election.election_id}/eligible_voters`);
+      if (res.ok) {
+        const data = await res.json();
+        setEligibleVoters(prev => ({ ...prev, [election.election_id]: data.eligible_voters }));
+      }
+    } catch {
+      // Ignore error, fallback to 0
+    }
   };
 
   const handleEdit = (election: Election) => {
@@ -467,7 +504,7 @@ export default function AdminElectionsPage() {
       date_start: election.date_start || '',
       date_end: election.date_end || '',
       college_name: election.college_name || 'None',
-      voters_count: election.voters_count,
+      voters_count: eligibleVoters[election.election_id] !== undefined ? eligibleVoters[election.election_id] : '...',
       participation_rate: election.participation_rate,
     };
   };
@@ -573,7 +610,7 @@ export default function AdminElectionsPage() {
             </div>
             <div className="flex items-center text-sm">
               <Users className="h-4 w-4 text-gray-400 mr-2" />
-              <span className="text-gray-600">{election.voters_count.toLocaleString()} eligible voters</span>
+              <span className="text-gray-600">{eligibleVoters[election.election_id] !== undefined ? eligibleVoters[election.election_id] : '...'} eligible voters</span>
             </div>
             {election.participation_rate !== undefined && (
               <div className="flex items-center text-sm">
@@ -628,6 +665,7 @@ export default function AdminElectionsPage() {
         <p className="text-sm text-gray-500 mb-3">{election.election_desc}</p>
         <div className="text-xs text-gray-500 mb-2">
           <span className="font-medium">College:</span> {election.college_name || 'None'}
+          <span className="ml-4 font-medium">Eligible Voters:</span> {eligibleVoters[election.election_id] !== undefined ? eligibleVoters[election.election_id] : '...'}
         </div>
         <div className="flex justify-between items-center">
           <div className="text-sm text-gray-600">
