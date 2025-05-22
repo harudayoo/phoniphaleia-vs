@@ -34,6 +34,8 @@ export default function UserSettingsPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [passwordMatchError, setPasswordMatchError] = useState('');
+  const [passwordLengthError, setPasswordLengthError] = useState('');
   const [activeTab, setActiveTab] = useState('profile');
   const [photoModalOpen, setPhotoModalOpen] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -55,6 +57,19 @@ export default function UserSettingsPage() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (newPassword && confirmPassword && newPassword !== confirmPassword) {
+      setPasswordMatchError('New passwords do not match');
+    } else {
+      setPasswordMatchError('');
+    }
+    if (newPassword && newPassword.length > 0 && newPassword.length < 8) {
+      setPasswordLengthError('Password must be at least 8 characters long');
+    } else {
+      setPasswordLengthError('');
+    }
+  }, [newPassword, confirmPassword]);
 
   const handleNotificationChange = (setting: keyof typeof settings.notifications) => {
     setSettings(prev => ({
@@ -87,16 +102,17 @@ export default function UserSettingsPage() {
   const changePassword = async () => {
     setPasswordError('');
     setSuccessMessage('');
+    // Client-side validation
     if (!currentPassword || !newPassword || !confirmPassword) {
       setPasswordError('All password fields are required');
       return;
     }
-    if (newPassword !== confirmPassword) {
-      setPasswordError('New passwords do not match');
-      return;
-    }
     if (newPassword.length < 8) {
       setPasswordError('Password must be at least 8 characters long');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match');
       return;
     }
     setSaving(true);
@@ -318,6 +334,7 @@ export default function UserSettingsPage() {
                           {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                       </div>
+                      {passwordLengthError && <div className="text-xs text-red-600 mt-1">{passwordLengthError}</div>}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
@@ -339,8 +356,9 @@ export default function UserSettingsPage() {
                           {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                       </div>
+                      {passwordMatchError && <div className="text-xs text-red-600 mt-1">{passwordMatchError}</div>}
                     </div>
-                    <button onClick={changePassword} className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition" disabled={saving}>Change Password</button>
+                    <button onClick={changePassword} className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition" disabled={saving || !!passwordMatchError || !!passwordLengthError}>Change Password</button>
                   </div>
                   <hr className="my-6" />
                 </div>
