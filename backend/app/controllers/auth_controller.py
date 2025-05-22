@@ -278,7 +278,8 @@ class AuthController:
                     'last_name': voter.last_name,
                     'student_email': voter.student_email,
                     'college_id': voter.college_id,
-                    'status': voter.status
+                    'status': voter.status,
+                    'photo_url': '/uploads/photos/' + os.path.basename(voter.photo_path).replace('\\', '/').replace('\\', '/') if voter.photo_path else None
                 }), 200
                 
             except jwt.ExpiredSignatureError:

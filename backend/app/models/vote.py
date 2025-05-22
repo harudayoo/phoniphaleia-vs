@@ -10,8 +10,8 @@ class Vote(db.Model):
     student_id = db.Column(db.String(10), db.ForeignKey('voters.student_id'), nullable=False)
     candidate_id = db.Column(db.Integer, db.ForeignKey('candidates.candidate_id'), nullable=False)
     encrypted_vote = db.Column(db.Text, nullable=False)
-    zkp_proof = db.Column(db.Text)
-    verification_receipt = db.Column(db.Text)
+    zkp_proof = db.Column(db.String(32), nullable=True, comment='Status: e.g., verified, failed')
+    verification_receipt = db.Column(db.String(32), nullable=True, comment='Status: e.g., sent, not_sent')
     cast_time = db.Column(db.DateTime, default=datetime.utcnow)
     vote_status = db.Column(db.String(50), nullable=False)
     

@@ -11,6 +11,7 @@ export interface UserInfo {
   status: string;
   photo_url?: string;
   id_metadata?: string;
+  updated_at?: string; // Added for cache busting and LCP improvements
 }
 
 interface UserContextType {
@@ -108,7 +109,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
       if (!response.ok) {
         throw new Error('Failed to fetch user data');
-      }      const userData = await response.json();
+      }      
+      const userData = await response.json();
       setUser({
         student_id: userData.student_id,
         first_name: userData.first_name,
@@ -117,7 +119,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         college_id: userData.college_id,
         status: userData.status,
         photo_url: userData.photo_url || undefined,
-        id_metadata: userData.id_metadata || undefined
+        id_metadata: userData.id_metadata || undefined,
+        updated_at: userData.updated_at || undefined // Add updated_at from backend
       });
     } catch (error) {
       console.error('Error fetching user data:', error);

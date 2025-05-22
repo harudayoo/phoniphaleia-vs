@@ -37,6 +37,7 @@ export default function UserVotesPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeVoters, setActiveVoters] = useState<{ [electionId: number]: number }>({});
   const [waitlistStatus, setWaitlistStatus] = useState<{ [electionId: number]: 'waiting' | 'active' | null }>({});
+  const [alreadyVoted, setAlreadyVoted] = useState<{ [electionId: number]: boolean }>({});
 
   // Fetch available elections
   useEffect(() => {
@@ -110,6 +111,33 @@ export default function UserVotesPage() {
     };
     fetchElections();
   }, []);
+
+  // Check if user has already voted for each election
+  useEffect(() => {
+    const checkVotes = async () => {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const updates: { [electionId: number]: boolean } = {};
+      await Promise.all(
+        elections.map(async (election) => {
+          if (!user.student_id) return;
+          try {
+            const res = await fetch(`${API_URL}/elections/${election.election_id}/vote-check`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ voter_id: user.student_id })
+            });
+            const data = await res.json();
+            updates[election.election_id] = data.unique === false;
+          } catch {
+            updates[election.election_id] = false;
+          }
+        })
+      );
+      setAlreadyVoted(updates);
+    };
+    if (elections.length > 0) checkVotes();
+  }, [elections]);
 
   // Fetch active voter counts for queued elections
   useEffect(() => {
@@ -389,23 +417,26 @@ export default function UserVotesPage() {
                   {getTimeRemainingBadge(election)}
                 </div>
                 <div className="px-6 pb-6">
-                  <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
-                    <button
-                      className={`w-full mt-2 px-4 py-2 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 ${
-                        status === 'Finished' ? 'bg-gray-500 cursor-not-allowed'
-                        : status === 'Upcoming' ? 'bg-gray-500 cursor-not-allowed'
-                        : 'bg-red-600 hover:bg-red-700'
-                      }`}
-                      disabled={status === 'Finished' || status === 'Upcoming'}
-                    >
-                      {status === 'Finished'
+                  <button
+                    className={`w-full mt-2 px-4 py-2 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 ${
+                      status === 'Finished' ? 'bg-gray-500 cursor-not-allowed'
+                      : status === 'Upcoming' ? 'bg-gray-500 cursor-not-allowed'
+                      : alreadyVoted[election.election_id] ? 'bg-gray-500 cursor-not-allowed'
+                      : 'bg-red-600 hover:bg-red-700'
+                    }`}
+                    disabled={status === 'Finished' || status === 'Upcoming' || alreadyVoted[election.election_id]}
+                    title={alreadyVoted[election.election_id] ? 'You have already voted in this election.' : 'Cast your vote'}
+                    onClick={() => window.location.href = `/user/votes/access-check?election_id=${election.election_id}`}
+                  >
+                    {alreadyVoted[election.election_id]
+                      ? 'Already Voted'
+                      : status === 'Finished'
                         ? 'Election Closed'
                         : status === 'Upcoming'
                           ? 'Voting Not Started'
                           : 'Cast Your Vote'}
-                      {status === 'Ongoing' && <ArrowRight size={16} />}
-                    </button>
-                  </Link>
+                    {status === 'Ongoing' && !alreadyVoted[election.election_id] && <ArrowRight size={16} />}
+                  </button>
                 </div>
               </div>
             );
@@ -444,23 +475,25 @@ export default function UserVotesPage() {
                         ) : null}
                       </span>
                     )}
-                    <Link href={`/user/votes/access-check?election_id=${election.election_id}`}>
-                      <button 
-                        className={`${
-                          status === 'Finished' || status === 'Upcoming'
-                            ? 'bg-gray-500 cursor-not-allowed' 
-                            : 'bg-red-600 hover:bg-red-700'
-                        } text-white px-4 py-2 rounded-lg transition flex items-center justify-center gap-2`}
-                        disabled={status === 'Finished' || status === 'Upcoming'}
-                      >
-                        {status === 'Finished'
+                    <button 
+                      className={`${
+                        status === 'Finished' || status === 'Upcoming' || alreadyVoted[election.election_id]
+                          ? 'bg-gray-500 cursor-not-allowed' 
+                          : 'bg-red-600 hover:bg-red-700'
+                      } text-white px-4 py-2 rounded-lg transition flex items-center justify-center gap-2`}
+                      disabled={status === 'Finished' || status === 'Upcoming' || alreadyVoted[election.election_id]}
+                      title={alreadyVoted[election.election_id] ? 'You have already voted in this election.' : 'Cast your vote'}
+                      onClick={() => window.location.href = `/user/votes/access-check?election_id=${election.election_id}`}
+                    >
+                      {alreadyVoted[election.election_id]
+                        ? 'Already Voted'
+                        : status === 'Finished'
                           ? 'Election Closed'
                           : status === 'Upcoming'
                             ? 'Voting Not Started'
                             : 'Cast Your Vote'} 
-                        {status === 'Ongoing' && <ArrowRight size={16} />}
-                      </button>
-                    </Link>
+                      {status === 'Ongoing' && !alreadyVoted[election.election_id] && <ArrowRight size={16} />}
+                    </button>
                   </div>
                 </div>
               </div>

@@ -58,6 +58,17 @@ export default function AccessCheckPage() {
           setShowNotVerified(true);
           return;
         }
+        // Check if user already voted
+        const voteCheckRes = await fetch(`${API_URL}/elections/${election.election_id}/vote-check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voter_id: user.student_id })
+        });
+        const voteCheckData = await voteCheckRes.json();
+        if (voteCheckData && voteCheckData.unique === false) {
+          setError('You have already voted in this election.');
+          return;
+        }
         const accessRes = await fetch(`${API_URL}/elections/${election.election_id}/access-check`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
