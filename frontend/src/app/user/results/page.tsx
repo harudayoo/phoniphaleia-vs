@@ -5,6 +5,7 @@ import { useUser } from '@/contexts/UserContext';
 import UserSearchFilterBar from '@/components/user/UserSearchFilterBar';
 import { Calendar, Download, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
+import NothingIcon from '@/components/NothingIcon';
 
 interface ElectionResult {
   election_id: number;
@@ -23,12 +24,13 @@ interface ElectionResult {
 }
 
 export default function UserResultsPage() {
-  useUser();
+  const { user } = useUser();
   const [results, setResults] = useState<ElectionResult[]>([]);
   const [filteredResults, setFilteredResults] = useState<ElectionResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all'); // 'all', 'recent', 'highest-participation'
+  const [, setParticipatedElectionIds] = useState<Set<number>>(new Set());
 
   const filterOptions = [
     { value: 'all', label: 'All Results' },
@@ -36,86 +38,41 @@ export default function UserResultsPage() {
     { value: 'highest-participation', label: 'Highest Participation' },
   ];
 
-  // Fetch election results
+  // Fetch election results and participated elections
   useEffect(() => {
     const fetchResults = async () => {
       try {
         setLoading(true);
-        
-        // For now, using mock data
-        // This would be replaced with an actual API call
-        // const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-        // const response = await fetch(`${API_URL}/user/election-results`, {
-        //   headers: { Authorization: `Bearer ${localStorage.getItem('voter_token')}` }
-        // });
-        // const data = await response.json();
-        
-        // Mock data
-        const mockData: ElectionResult[] = [
-          {
-            election_id: 101,
-            election_name: "Student Council President Election",
-            organization: "Student Government Association",
-            ended_at: "2024-04-15T23:59:59",
-            winner: "Maria Rodriguez",
-            total_votes: 1254,
-            participation_rate: 78.4,
-            candidates: [
-              { name: "Maria Rodriguez", votes: 642, percentage: 51.2, winner: true },
-              { name: "James Wilson", votes: 524, percentage: 41.8, winner: false },
-              { name: "Sarah Thompson", votes: 88, percentage: 7.0, winner: false }
-            ]
-          },
-          {
-            election_id: 102,
-            election_name: "Computer Science Club Leadership",
-            organization: "CS Department",
-            ended_at: "2024-03-22T18:00:00",
-            winner: "David Chen",
-            total_votes: 186,
-            participation_rate: 62.0,
-            candidates: [
-              { name: "David Chen", votes: 98, percentage: 52.7, winner: true },
-              { name: "Emily Jackson", votes: 88, percentage: 47.3, winner: false }
-            ]
-          },
-          {
-            election_id: 103,
-            election_name: "Library Committee Representatives",
-            organization: "University Library",
-            ended_at: "2024-02-10T20:00:00",
-            winner: "Multiple Winners",
-            total_votes: 567,
-            participation_rate: 42.3,
-            candidates: [
-              { name: "Michael Brown", votes: 230, percentage: 40.6, winner: true },
-              { name: "Jennifer Davis", votes: 187, percentage: 33.0, winner: true },
-              { name: "Robert Jones", votes: 150, percentage: 26.4, winner: false }
-            ]
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        // Fetch all finished elections with results
+        const res = await fetch(`${API_URL}/election-results`);
+        const allResults: ElectionResult[] = await res.json();
+        // Fetch user's votes to get participated election IDs
+        let userElectionIds = new Set<number>();
+        if (user && user.student_id) {
+          const votesRes = await fetch(`${API_URL}/votes/by-voter/${user.student_id}`);
+          if (votesRes.ok) {
+            const votesData = await votesRes.json();
+            userElectionIds = new Set<number>((votesData.votes || []).map((v: { election_id: number }) => v.election_id));
           }
-        ];
-        
-        // Simulate API delay
-        setTimeout(() => {
-          setResults(mockData);
-          setFilteredResults(mockData);
-          setLoading(false);
-        }, 800);
-        
+        }
+        setParticipatedElectionIds(userElectionIds);
+        // Only show results for elections the user participated in
+        const participatedResults = allResults.filter(r => userElectionIds.has(r.election_id));
+        setResults(participatedResults);
+        setFilteredResults(participatedResults);
+        setLoading(false);
       } catch (error) {
         console.error("Error fetching election results:", error);
         setLoading(false);
       }
     };
-
     fetchResults();
-  }, []);
+  }, [user]);
 
   // Filter results when search or filter changes
   useEffect(() => {
     let result = [...results];
-    
-    // Apply search filter
     if (search) {
       const searchLower = search.toLowerCase();
       result = result.filter(item => 
@@ -124,14 +81,11 @@ export default function UserResultsPage() {
         item.candidates.some(candidate => candidate.name.toLowerCase().includes(searchLower))
       );
     }
-    
-    // Apply category filter
     if (filter === 'recent') {
       result.sort((a, b) => new Date(b.ended_at).getTime() - new Date(a.ended_at).getTime());
     } else if (filter === 'highest-participation') {
       result.sort((a, b) => b.participation_rate - a.participation_rate);
     }
-    
     setFilteredResults(result);
   }, [results, search, filter]);
 
@@ -173,11 +127,7 @@ export default function UserResultsPage() {
         </div>
       ) : filteredResults.length === 0 ? (
         <div className="bg-white rounded-xl shadow p-8 border border-gray-200 text-center">
-          <div className="text-gray-400 mb-4">
-            <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17l4-4m0 0l-4-4m4 4H3m16-4v4m0 0v4m0-4h-8" />
-            </svg>
-          </div>
+          <NothingIcon width={80} height={80} className="mb-4 mx-auto" />
           <h3 className="text-lg font-medium text-gray-900 mb-1">No Results Found</h3>
           <p className="text-gray-600">
             {search ? 'Try adjusting your search or filters' : 'There are no election results available for you at this time.'}

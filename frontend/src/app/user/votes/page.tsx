@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import UserLayout from '@/layouts/UserLayout';
 import { useUser } from '@/contexts/UserContext';
 import { ArrowRight, Calendar } from 'lucide-react';

@@ -25,7 +25,7 @@ interface Election {
 }
 
 export default function UserDashboard() {
-  useUser();
+  const { user } = useUser();
   const [electionStats, setElectionStats] = useState<ElectionStats>({
     ongoing: 0,
     upcoming: 0,
@@ -34,6 +34,8 @@ export default function UserDashboard() {
   const [ongoingElections, setOngoingElections] = useState<Election[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingOngoing, setLoadingOngoing] = useState(true);
+  const [participatedCount, setParticipatedCount] = useState(0);
+  const [participatedElectionIds, setParticipatedElectionIds] = useState<Set<number>>(new Set());
 
   // Function to calculate days remaining until an election ends
   const calculateDaysRemaining = (endDateStr: string): number => {
@@ -172,6 +174,27 @@ export default function UserDashboard() {
     fetchElections();
   }, []);
 
+  // Fetch participated elections count and ids for the user
+  useEffect(() => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const fetchParticipated = async () => {
+      if (!user || !user.student_id) return;
+      try {
+        const res = await fetch(`${API_URL}/votes/by-voter/${user.student_id}`);
+        if (!res.ok) throw new Error('Failed to fetch votes');
+        const data = await res.json();
+        // Count unique election_ids
+        const uniqueElections = new Set<number>((data.votes || []).map((v: { election_id: number }) => v.election_id));
+        setParticipatedCount(uniqueElections.size);
+        setParticipatedElectionIds(uniqueElections);
+      } catch {
+        setParticipatedCount(0);
+        setParticipatedElectionIds(new Set());
+      }
+    };
+    fetchParticipated();
+  }, [user]);
+
   return (
     <UserLayout>
       <h1 className="text-2xl font-bold mb-8 text-gray-900">Student Dashboard</h1>
@@ -185,7 +208,7 @@ export default function UserDashboard() {
               {loading ? '...' : electionStats.ongoing}
             </div>
             <div className="ml-4 text-sm text-gray-600">
-              Elections you can currently participate in
+              Active elections you can explore
             </div>
           </div>
         </div>
@@ -203,10 +226,10 @@ export default function UserDashboard() {
         </div>
 
         <div className="bg-white rounded-xl shadow p-6 border border-gray-200">
-          <h2 className="text-lg font-semibold mb-2 text-gray-800">Past Elections</h2>
+          <h2 className="text-lg font-semibold mb-2 text-gray-800">Participated Elections</h2>
           <div className="flex items-center">
             <div className="text-3xl font-bold text-green-600">
-              {loading ? '...' : electionStats.completed}
+              {loading ? '...' : participatedCount}
             </div>
             <div className="ml-4 text-sm text-gray-600">
               Elections you&apos;ve participated in
@@ -256,9 +279,9 @@ export default function UserDashboard() {
               <div className="animate-pulse text-gray-500">Loading elections...</div>
             </div>
           ) : (
-            ongoingElections.length > 0 ? (
+            ongoingElections.filter(election => !participatedElectionIds.has(election.election_id)).length > 0 ? (
               <div className="space-y-4">
-                {ongoingElections.map((election: Election) => {
+                {ongoingElections.filter(election => !participatedElectionIds.has(election.election_id)).map((election: Election) => {
                   const daysLeft = calculateDaysRemaining(election.date_end);
                   return (
                     <div key={election.election_id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
@@ -287,8 +310,8 @@ export default function UserDashboard() {
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-8 text-gray-500">
-                <p>No ongoing elections at this time.</p>
-                <p className="text-sm mt-1">Check back soon for upcoming votes!</p>
+                <p>No ongoing elections at this time where you are illegible to vote.</p>
+                <p className="text-sm mt-1">Check back soon for upcoming elections!</p>
               </div>
             )
           )}

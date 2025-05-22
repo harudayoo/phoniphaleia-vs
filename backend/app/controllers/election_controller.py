@@ -730,3 +730,55 @@ class ElectionController:
         except Exception as ex:
             print('Error in send_vote_receipt:', ex)
             return jsonify({'error': 'Failed to send vote receipt'}), 500
+
+    @staticmethod
+    def get_election_results():
+        try:
+            # Only include finished elections
+            finished_elections = (
+                Election.query.filter(Election.election_status == 'Finished').all()
+            )
+            results = []
+            for election in finished_elections:
+                # Get all candidates for this election
+                candidates = Candidate.query.filter_by(election_id=election.election_id).all()
+                # Get all votes for this election
+                votes = Vote.query.filter_by(election_id=election.election_id).all()
+                total_votes = len(votes)
+                # Count votes per candidate
+                candidate_vote_counts = {c.candidate_id: 0 for c in candidates}
+                for v in votes:
+                    if v.candidate_id in candidate_vote_counts:
+                        candidate_vote_counts[v.candidate_id] += 1
+                # Build candidate breakdown
+                candidate_breakdown = []
+                max_votes = max(candidate_vote_counts.values()) if candidate_vote_counts else 0
+                winners = [c for c in candidates if candidate_vote_counts[c.candidate_id] == max_votes and max_votes > 0]
+                for c in candidates:
+                    votes_count = candidate_vote_counts[c.candidate_id]
+                    percentage = (votes_count / total_votes * 100) if total_votes > 0 else 0
+                    candidate_breakdown.append({
+                        'name': c.fullname,
+                        'votes': votes_count,
+                        'percentage': round(percentage, 1),
+                        'winner': votes_count == max_votes and max_votes > 0
+                    })
+                # Compute participation rate (if possible)
+                participation_rate = None
+                if hasattr(election, 'voters_count') and election.voters_count:
+                    participation_rate = round((total_votes / election.voters_count) * 100, 1) if election.voters_count > 0 else 0
+                # Compose result object
+                results.append({
+                    'election_id': election.election_id,
+                    'election_name': election.election_name,
+                    'organization': election.organization.org_name if election.organization else '',
+                    'ended_at': election.date_end.isoformat() if election.date_end else '',
+                    'winner': ', '.join([w.fullname for w in winners]) if winners else 'No winner',
+                    'total_votes': total_votes,
+                    'participation_rate': participation_rate if participation_rate is not None else 0,
+                    'candidates': candidate_breakdown
+                })
+            return jsonify(results)
+        except Exception as ex:
+            print('Error in get_election_results:', ex)
+            return jsonify([]), 500

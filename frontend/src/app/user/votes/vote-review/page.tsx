@@ -27,8 +27,8 @@ export default function VoteReviewPage() {
   const [emailSent, setEmailSent] = useState(false);
 
   // Get election_id and student_id from params or context
-  const electionId = searchParams.get('election_id');
-  const studentId = searchParams.get('student_id');
+  const electionId = searchParams ? searchParams.get('election_id') : null;
+  const studentId = searchParams ? searchParams.get('student_id') : null;
 
   useEffect(() => {
     async function fetchVotes() {
@@ -70,53 +70,55 @@ export default function VoteReviewPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center"
-      style={{ 
-        minHeight: '100vh', 
-        width: '100vw', 
-        background: 'linear-gradient(135deg, #f9fafb 100%, #f9fafb 100%, #fef9c3 50%, #fef9c3 100%)' 
-      }}
-    >
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-yellow-50 via-yellow-100 to-yellow-200 relative overflow-hidden">
       <Image src="/usep-bg.jpg" alt="bg" fill style={{ objectFit: 'cover', opacity: 0.08, zIndex: 0 }} />
-      <div className="z-10">
-        <SystemLogo2 width={200} className="mb-8" />
-        <div className="max-w-md w-full bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg">
-          <h2 className="text-2xl font-bold text-center mb-6">Your Submitted Votes</h2>
+      <div className="z-10 flex flex-col items-center w-full">
+        <SystemLogo2 width={180} className="mb-8 drop-shadow-lg" />
+        <div className="max-w-xl w-full bg-white/90 backdrop-blur-md rounded-2xl p-10 shadow-2xl border border-yellow-200 mx-auto flex flex-col items-center"
+          style={{ maxHeight: '80vh', overflowY: 'auto' }}
+        >
+          <h2 className="text-3xl font-extrabold text-center mb-8 text-yellow-700 tracking-tight drop-shadow-sm">Your Submitted Votes</h2>
           {loading ? (
             <div className="flex flex-col items-center">
-              <Loader4 size={100} className="mb-6" />
-              <p className="text-gray-700 font-medium text-center">Loading your votes...</p>
+              <Loader4 size={90} className="mb-6" />
+              <p className="text-gray-600 font-semibold text-center text-lg">Loading your votes...</p>
             </div>
           ) : error ? (
-            <div className="text-center text-red-600 mb-4">{error}</div>
+            <div className="text-center text-red-600 mb-4 text-lg font-semibold">{error}</div>
           ) : (
             <>
-              <table className="w-full mb-6 border border-gray-200 rounded overflow-hidden">
-                <thead>
-                  <tr className="bg-yellow-100">
-                    <th className="p-2 text-left text-xs font-semibold text-gray-700">Position</th>
-                    <th className="p-2 text-left text-xs font-semibold text-gray-700">Candidate</th>
-                    <th className="p-2 text-left text-xs font-semibold text-gray-700">Party</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {votes.map((v, i) => (
-                    <tr key={i} className="border-b last:border-b-0">
-                      <td className="p-2 text-sm text-gray-800">{v.position_name}</td>
-                      <td className="p-2 text-sm text-gray-800">{v.candidate_name}</td>
-                      <td className="p-2 text-sm text-gray-800">{v.party}</td>
+              <div className="w-full overflow-x-auto mb-6">
+                <table className="w-full border border-yellow-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                  <thead>
+                    <tr className="bg-yellow-100">
+                      <th className="p-3 text-left text-xs font-bold text-yellow-800 uppercase tracking-wider">Position</th>
+                      <th className="p-3 text-left text-xs font-bold text-yellow-800 uppercase tracking-wider">Candidate</th>
+                      <th className="p-3 text-left text-xs font-bold text-yellow-800 uppercase tracking-wider">Party</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {votes.map((v, i) => (
+                      <tr key={i} className="border-b last:border-b-0 hover:bg-yellow-50 transition">
+                        <td className="p-3 text-sm text-gray-900 font-medium">{v.position_name}</td>
+                        <td className="p-3 text-sm text-gray-800">{v.candidate_name}</td>
+                        <td className="p-3 text-sm text-gray-700">{v.party}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <button
-                className="w-full py-2 px-4 bg-green-700 hover:bg-green-800 text-white rounded-lg font-semibold transition mb-2 disabled:opacity-60"
+                className="w-full py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-bold text-lg shadow-md transition mb-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 onClick={handleSendReceipt}
                 disabled={sending || emailSent}
               >
-                {sending ? 'Sending Receipt...' : emailSent ? 'Receipt Sent!' : 'Send Vote Receipt to Email'}
+                {sending ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader4 size={24} /> Sending Receipt...
+                  </span>
+                ) : emailSent ? 'Receipt Sent!' : 'Send Vote Receipt to Email'}
               </button>
-              {success && <div className="text-green-700 text-center mt-2">{success}</div>}
+              {success && <div className="text-green-700 text-center mt-3 font-semibold animate-fade-in">{success}</div>}
               {emailSent && <div className="text-gray-500 text-center text-xs mt-2">You will be redirected to the elections page shortly.</div>}
             </>
           )}

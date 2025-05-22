@@ -98,3 +98,60 @@ def get_votes_by_voter(election_id, student_id):
 def send_vote_receipt(election_id):
     from app.controllers.election_controller import ElectionController
     return ElectionController.send_vote_receipt(election_id)
+
+@election_bp.route('/votes/by-voter/<student_id>', methods=['GET'])
+def get_votes_by_voter_all(student_id):
+    from app.models.vote import Vote
+    votes = Vote.query.filter_by(student_id=student_id).all()
+    return {'votes': [
+        {
+            'vote_id': v.vote_id,
+            'election_id': v.election_id,
+            'candidate_id': v.candidate_id,
+            'cast_time': v.cast_time.isoformat() if v.cast_time else None,
+            'vote_status': v.vote_status
+        } for v in votes
+    ]}
+
+@election_bp.route('/election-results', methods=['GET'])
+def get_election_results():
+    from app.models.election import Election
+    from app.models.candidate import Candidate
+    from app.models.election_result import ElectionResult
+    from flask import jsonify
+    results = []
+    finished_elections = Election.query.filter(Election.election_status == 'Finished').all()
+    for election in finished_elections:
+        candidates = Candidate.query.filter_by(election_id=election.election_id).all()
+        candidate_results = []
+        total_votes = 0
+        for cand in candidates:
+            er = ElectionResult.query.filter_by(election_id=election.election_id, candidate_id=cand.candidate_id).first()
+            votes = er.vote_count if er and er.vote_count is not None else 0
+            total_votes += votes
+            candidate_results.append({
+                'name': cand.fullname,
+                'votes': votes,
+                'percentage': 0,  # will fill below
+                'winner': False   # will fill below
+            })
+        max_votes = max([c['votes'] for c in candidate_results], default=0)
+        for c in candidate_results:
+            c['percentage'] = round((c['votes'] / total_votes) * 100, 1) if total_votes > 0 else 0
+            c['winner'] = c['votes'] == max_votes and max_votes > 0
+        winners = [c['name'] for c in candidate_results if c['winner']]
+        winner_str = ', '.join(winners) if winners else 'No winner'
+        participation_rate = getattr(election, 'participation_rate', None)
+        if participation_rate is None:
+            participation_rate = 0
+        results.append({
+            'election_id': election.election_id,
+            'election_name': election.election_name,
+            'organization': election.organization.org_name if election.organization else '',
+            'ended_at': election.date_end.isoformat() if election.date_end else '',
+            'winner': winner_str,
+            'total_votes': total_votes,
+            'participation_rate': participation_rate,
+            'candidates': candidate_results
+        })
+    return jsonify(results)

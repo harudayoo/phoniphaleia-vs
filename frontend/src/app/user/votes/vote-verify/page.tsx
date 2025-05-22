@@ -201,14 +201,14 @@ export default function VoteVerifyPage() {
       setOverallStatus('failed');
       setError('An error occurred during vote verification or encryption.');
     }
-  }, [user]);
+  }, [user, router]);
   
   useEffect(() => {
     const initVerification = async () => {
       try {
         // Get election ID and votes from URL parameters
-        const eId = searchParams.get('election_id');
-        const votesParam = searchParams.get('votes');
+        const eId = searchParams ? searchParams.get('election_id') : null;
+        const votesParam = searchParams ? searchParams.get('votes') : null;
         
         if (!eId || !votesParam) {
           setError('Missing election information');
@@ -276,19 +276,18 @@ export default function VoteVerifyPage() {
       }}
     >
       <Image src="/usep-bg.jpg" alt="bg" fill style={{ objectFit: 'cover', opacity: 0.08, zIndex: 0 }} />
-      <div className="z-10">
+      <div className="z-10 flex flex-col items-center w-full">
         <SystemLogo2 width={200} className="mb-8" />
-        
-        <div className="max-w-md w-full bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg">
+        <div className="max-w-xl w-full bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg border border-gray-200 mx-auto"
+          style={{ maxHeight: '80vh', overflowY: 'auto' }}
+        >
           <h2 className="text-2xl font-bold text-center mb-6">Vote Verification</h2>
-          
           {loading ? (
             <div className="flex flex-col items-center">
               <Loader4 size={100} className="mb-6" />
               <p className="text-gray-700 font-medium text-center">
                 Verifying your vote for {electionName}...
               </p>
-              
               <div className="w-full mt-8 space-y-4">
                 <VerificationStep 
                   title="Verifying you haven't voted before"
@@ -303,7 +302,6 @@ export default function VoteVerifyPage() {
                   status={verificationStatus.followsRules} 
                 />
               </div>
-              
               {publicKey && (
                 <div className="mt-6 bg-gray-100 rounded p-3 w-full">
                   <p className="text-xs text-gray-600 font-mono mb-1">Public Key:</p>
@@ -312,7 +310,8 @@ export default function VoteVerifyPage() {
               )}
             </div>
           ) : overallStatus === 'success' ? (
-            <div className="text-center">              <motion.div 
+            <div className="text-center">
+              <motion.div 
                 className="mx-auto w-16 h-16 bg-green-100 text-green-500 rounded-full flex items-center justify-center mb-4"
                 initial={{ scale: 0 as number }}
                 animate={{ scale: 1 as number }}
@@ -322,12 +321,13 @@ export default function VoteVerifyPage() {
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
               </motion.div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Vote Successfully Verified!</h3>
-              <p className="text-gray-600 mb-4">Your vote has been securely encrypted and recorded.</p>
+              <h3 className="text-xl font-bold mb-2 text-green-700">Vote Successfully Verified!</h3>
+              <p className="mb-4 text-green-700">Your vote has been securely encrypted and recorded.</p>
               <p className="text-sm text-gray-500">Redirecting back to elections page...</p>
             </div>
           ) : (
-            <div className="text-center">              <motion.div 
+            <div className="text-center">
+              <motion.div 
                 className="mx-auto w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4"
                 initial={{ scale: 0 as number }}
                 animate={{ scale: 1 as number }}
@@ -337,8 +337,8 @@ export default function VoteVerifyPage() {
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
               </motion.div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Verification Failed</h3>
-              <p className="text-red-600 mb-6">{error}</p>
+              <h3 className="text-xl font-bold mb-2 text-red-600">Verification Failed</h3>
+              <p className="mb-6 text-red-600">{error}</p>
               <button
                 onClick={() => router.push('/user/votes')}
                 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition"
@@ -354,6 +354,9 @@ export default function VoteVerifyPage() {
 }
 
 function VerificationStep({ title, status }: { title: string, status: 'pending' | 'verified' | 'failed' }) {
+  let textColor = 'text-gray-500';
+  if (status === 'verified') textColor = 'text-green-700';
+  else if (status === 'failed') textColor = 'text-red-600';
   return (
     <div className="flex items-center">
       <div className={`w-6 h-6 rounded-full mr-3 flex items-center justify-center
@@ -372,9 +375,7 @@ function VerificationStep({ title, status }: { title: string, status: 'pending' 
           </svg>
         )}
       </div>
-      <span className="text-sm">
-        {title}
-      </span>
+      <span className={`text-sm font-medium ${textColor}`}>{title}</span>
     </div>
   );
 }

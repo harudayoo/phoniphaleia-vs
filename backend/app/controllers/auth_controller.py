@@ -57,7 +57,8 @@ class AuthController:
             photo_path = None
             if photo and AuthController.allowed_file(photo.filename):
                 unique_filename = f"{uuid.uuid4().hex}_{secure_filename(photo.filename)}"
-                photo_path = os.path.join(AuthController.UPLOAD_FOLDER, unique_filename)
+                # Always use forward slashes for the photo_path
+                photo_path = os.path.join(AuthController.UPLOAD_FOLDER, unique_filename).replace('\\', '/')
                 os.makedirs(AuthController.UPLOAD_FOLDER, exist_ok=True)
                 photo.save(photo_path)
             else:

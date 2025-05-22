@@ -34,7 +34,7 @@ export default function AccessCheckPage() {
   const [waitlistStatus] = useState<'waiting' | 'active' | null>(null);
   const [showNotVerified, setShowNotVerified] = useState(false);
 
-  const electionId = searchParams.get('election_id');
+  const electionId = searchParams?.get('election_id');
 
   useEffect(() => {
     if (!electionId) {

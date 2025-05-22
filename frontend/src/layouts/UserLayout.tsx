@@ -14,7 +14,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser, UserProvider } from '@/contexts/UserContext';
 import { usePathname } from 'next/navigation';
-import Image from 'next/image';
 
 interface UserLayoutProps {
   children: ReactNode;
@@ -189,23 +188,24 @@ function UserLayoutInner({ children }: UserLayoutProps) {
                     transition={{ delay: 0.1 }}
                     key={user.photo_url + user.student_id} // Force re-render on user/photo change
                   >
-                    <Image
+                    {(() => { console.log('User photo_url:', user.photo_url); return null; })()}
+                    <img
                       src={
                         user.photo_url.startsWith('http')
                           ? user.photo_url
-                          : user.photo_url // Use as-is if it starts with /uploads/
+                          : `${process.env.NEXT_PUBLIC_API_URL?.replace(/\/api$/, '') || 'http://localhost:5000'}${user.photo_url}`
                       }
                       alt={`${user.first_name}'s photo`}
                       width={48}
                       height={48}
                       className="h-full w-full object-cover"
                       onError={(e) => {
-                        // Fallback if image fails to load
                         (e.target as HTMLImageElement).src = "/LogoNoText.png";
                       }}
-                      priority
+                      style={{ display: 'block' }}
                     />
                   </motion.div>
+                  
                 ) : (
                   <motion.div 
                     className="h-12 w-12 rounded-full bg-red-100 text-red-800 flex items-center justify-center border-2 border-red-700 shadow-md font-bold text-lg flex-shrink-0"

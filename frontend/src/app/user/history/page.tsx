@@ -5,6 +5,7 @@ import { useUser } from '@/contexts/UserContext';
 import { Calendar, Eye } from 'lucide-react';
 import Link from 'next/link';
 import UserSearchFilterBar from '@/components/user/UserSearchFilterBar';
+import NothingIcon from '@/components/NothingIcon';
 
 interface VotingHistory {
   election_id: number;
@@ -13,6 +14,13 @@ interface VotingHistory {
   voted_at: string;
   status: 'completed' | 'ongoing' | 'cancelled';
   has_results: boolean;
+}
+
+interface ElectionInfo {
+  election_id: number;
+  election_name: string;
+  election_status: string;
+  organization?: { org_name: string };
 }
 
 export default function UserHistoryPage() {
@@ -35,72 +43,60 @@ export default function UserHistoryPage() {
     const fetchHistory = async () => {
       try {
         setLoading(true);
-        
-        // For now, using mock data
-        // This would be replaced with an actual API call
-        // const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-        // const response = await fetch(`${API_URL}/user/voting-history`, {
-        //   headers: { Authorization: `Bearer ${localStorage.getItem('voter_token')}` }
-        // });
-        // const data = await response.json();
-        
-        // Mock data
-        const mockData: VotingHistory[] = [
-          {
-            election_id: 1,
-            election_name: "Student Council Election 2024",
-            organization: "Student Affairs Office",
-            voted_at: "2024-03-15T14:30:00",
-            status: "completed",
-            has_results: true
-          },
-          {
-            election_id: 2,
-            election_name: "Department Representative Selection",
-            organization: "Computer Science Department",
-            voted_at: "2024-04-05T11:20:00",
-            status: "completed",
-            has_results: true
-          },
-          {
-            election_id: 3,
-            election_name: "Student Activity Budget Allocation",
-            organization: "Student Government",
-            voted_at: "2025-01-10T09:45:00",
-            status: "ongoing",
-            has_results: false
-          },
-          {
-            election_id: 4,
-            election_name: "Library Committee Election",
-            organization: "University Library",
-            voted_at: "2024-02-22T16:15:00",
-            status: "cancelled",
-            has_results: false
-          },
-          {
-            election_id: 5,
-            election_name: "Sports Committee Election",
-            organization: "Sports Department",
-            voted_at: "2024-05-07T10:30:00",
-            status: "completed",
-            has_results: true
-          }
-        ];
-        
-        // Simulate API delay
-        setTimeout(() => {
-          setHistory(mockData);
-          setFilteredHistory(mockData);
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (!user.student_id) {
+          setHistory([]);
+          setFilteredHistory([]);
           setLoading(false);
-        }, 800);
-        
+          return;
+        }
+        // Fetch all votes for this user
+        const votesRes = await fetch(`${API_URL}/votes/by-voter/${user.student_id}`);
+        const votesData = await votesRes.json();
+        const votes: Array<{ election_id: number; cast_time: string }> = votesData.votes || [];
+        // Fetch all elections (for names, org, status)
+        const electionsRes = await fetch(`${API_URL}/elections`);
+        const electionsData: ElectionInfo[] = await electionsRes.json();
+        // Map election_id to election info
+        const electionMap: Record<number, ElectionInfo> = {};
+        for (const e of electionsData) {
+          electionMap[e.election_id] = e;
+        }
+        // Compose history (deduplicate by election_id, use latest voted_at)
+        const electionHistoryMap = new Map<number, VotingHistory>();
+        for (const v of votes) {
+          const election = electionMap[v.election_id];
+          let status: VotingHistory['status'] = 'completed';
+          if (election) {
+            if (election.election_status === 'Ongoing') status = 'ongoing';
+            else if (election.election_status === 'Canceled') status = 'cancelled';
+            else if (election.election_status === 'Finished') status = 'completed';
+          }
+          const prev = electionHistoryMap.get(v.election_id);
+          // Use the latest voted_at (max date)
+          if (!prev || new Date(v.cast_time).getTime() > new Date(prev.voted_at).getTime()) {
+            electionHistoryMap.set(v.election_id, {
+              election_id: v.election_id,
+              election_name: election ? election.election_name : 'Unknown',
+              organization: election && election.organization ? election.organization.org_name : 'Unknown',
+              voted_at: v.cast_time || '',
+              status,
+              has_results: election ? election.election_status === 'Finished' : false
+            });
+          }
+        }
+        const historyData: VotingHistory[] = Array.from(electionHistoryMap.values());
+        setHistory(historyData);
+        setFilteredHistory(historyData);
+        setLoading(false);
       } catch (error) {
-        console.error("Error fetching voting history:", error);
+        console.error('Error fetching voting history:', error);
+        setHistory([]);
+        setFilteredHistory([]);
         setLoading(false);
       }
     };
-
     fetchHistory();
   }, []);
 
@@ -178,11 +174,7 @@ export default function UserHistoryPage() {
         </div>
       ) : filteredHistory.length === 0 ? (
         <div className="bg-white rounded-xl shadow p-8 border border-gray-200 text-center">
-          <div className="text-gray-400 mb-4">
-            <svg className="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
+          <NothingIcon width={80} height={80} className="mb-4 mx-auto" />
           <h3 className="text-lg font-medium text-gray-900 mb-1">No Voting History Found</h3>
           <p className="text-gray-600">
             {search || filter !== 'all' ? 'Try adjusting your search or filters' : 'You have not participated in any elections yet.'}
@@ -191,7 +183,7 @@ export default function UserHistoryPage() {
       ) : (
         <div className="space-y-4">
           {filteredHistory.map((item) => (
-            <div key={item.election_id} className="bg-white rounded-xl shadow border border-gray-200 p-6">
+            <div key={`${item.election_id}-${item.voted_at}`} className="bg-white rounded-xl shadow border border-gray-200 p-6">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm text-gray-600">{item.organization}</span>
                 {getStatusBadge(item.status)}
