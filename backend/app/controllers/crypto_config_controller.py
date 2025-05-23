@@ -2,6 +2,7 @@ from flask import jsonify, request
 from app.models.crypto_config import CryptoConfig
 from app.models.key_share import KeyShare
 from app.models.trusted_authority import TrustedAuthority
+from app.models.election import Election
 from app import db
 import secrets
 import json
@@ -624,4 +625,93 @@ class CryptoConfigController:
             db.session.rollback()
             error_details = traceback.format_exc()
             logger.error(f"Error storing election crypto data: {str(e)}\n{error_details}")
+            return jsonify({'error': str(e)}), 500
+
+    @staticmethod
+    def get_all_security_keys():
+        """
+        Fetch all security keys (public keys) for elections, including election name, key type, status, created_at, and associated election.
+        Status is set to 'Expired' if 5 days have passed since the election's end date.
+        """
+        try:
+            from datetime import datetime, timedelta
+            crypto_configs = CryptoConfig.query.all()
+            keys = []
+            for config in crypto_configs:
+                election = Election.query.get(config.election_id) if config.election_id else None
+                # Determine status
+                status = config.status or 'Active'
+                if election and election.date_end:
+                    end_date = election.date_end
+                    if isinstance(end_date, str):
+                        end_date = datetime.fromisoformat(end_date)
+                    # Patch: ensure end_date is a datetime for comparison
+                    if isinstance(end_date, datetime):
+                        expire_date = end_date + timedelta(days=5)
+                    else:
+                        # end_date is likely a date, convert datetime.utcnow() to date for comparison
+                        expire_date = end_date + timedelta(days=5)
+                        if datetime.utcnow().date() > expire_date:
+                            status = 'Expired'
+                        else:
+                            status = config.status or 'Active'
+                        # skip the rest of this block
+                        key_type = 'Paillier'
+                        keys.append({
+                            'key_id': config.crypto_id,
+                            'key_name': election.election_name if election else f"Key #{config.crypto_id}",
+                            'key_type': key_type,
+                            'key_status': status,
+                            'created_at': config.created_at.isoformat() if config.created_at else None,
+                            'description': election.election_desc if election else '',
+                            'associated_election': election.election_name if election else None,
+                            'key_fingerprint': config.public_key[:47] + '...' if config.public_key else '',
+                            'election_id': config.election_id
+                        })
+                        continue
+                    if datetime.utcnow() > expire_date:
+                        status = 'Expired'
+                # Always set key_type to 'Paillier'
+                key_type = 'Paillier'
+                keys.append({
+                    'key_id': config.crypto_id,
+                    'key_name': election.election_name if election else f"Key #{config.crypto_id}",
+                    'key_type': key_type,
+                    'key_status': status,
+                    'created_at': config.created_at.isoformat() if config.created_at else None,
+                    'description': election.election_desc if election else '',
+                    'associated_election': election.election_name if election else None,
+                    'key_fingerprint': config.public_key[:47] + '...' if config.public_key else '',
+                    'election_id': config.election_id
+                })
+            return jsonify({'keys': keys}), 200
+        except Exception as e:
+            import logging
+            logging.exception("Failed to fetch security keys")
+            return jsonify({'error': str(e)}), 500
+
+    @staticmethod
+    def get_trusted_authorities_for_election(election_id):
+        """
+        Fetch trusted authorities for a given election by looking up key shares for the election's crypto config.
+        """
+        try:
+            crypto_config = CryptoConfig.query.filter_by(election_id=election_id).first()
+            if not crypto_config:
+                return jsonify({'error': 'No crypto config found for this election'}), 404
+            key_shares = KeyShare.query.filter_by(crypto_id=crypto_config.crypto_id).all()
+            authority_ids = [ks.authority_id for ks in key_shares]
+            authorities = TrustedAuthority.query.filter(TrustedAuthority.authority_id.in_(authority_ids)).all()
+            result = [
+                {
+                    'authority_id': a.authority_id,
+                    'authority_name': a.authority_name,
+                    'contact_info': a.contact_info,
+                    'created_at': a.created_at.isoformat() if a.created_at else None
+                }
+                for a in authorities
+            ]
+            return jsonify({'authorities': result}), 200
+        except Exception as e:
+            logging.exception("Failed to fetch trusted authorities for election")
             return jsonify({'error': str(e)}), 500

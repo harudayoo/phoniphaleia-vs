@@ -6,6 +6,8 @@ from .college_controller import CollegeController
 from .user_controller import UserController
 from .organization_controller import OrganizationController
 from .position_controller import PositionController
+from .verification_controller import VerificationController
+from .election_results_controller import ElectionResultsController
 
 # Export controllers
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     'UserController',
     'OrganizationController',
     'PositionController',
+    'ElectionResultsController',
+    'VerificationController',
 ]

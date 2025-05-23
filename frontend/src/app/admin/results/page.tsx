@@ -1,5 +1,7 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
+import { useRouter } from 'next/navigation';
+import { Dialog, Transition } from '@headlessui/react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { FaDownload, FaEdit, FaEye, FaTrash, FaLock, FaLockOpen } from 'react-icons/fa';
 import { Filter, Calendar, ArrowUp, Key, Shield } from 'lucide-react';
@@ -10,6 +12,8 @@ import PageHeader from '@/components/admin/PageHeader';
 import SearchFilterBar from '@/components/admin/SearchFilterBar';
 import FilterSelect from '@/components/admin/FilterSelect';
 import DataView from '@/components/admin/DataView';
+import Loader4 from '@/components/Loader4';
+import NothingIcon from '@/components/NothingIcon';
 
 type Result = {
   result_id: number;
@@ -17,6 +21,7 @@ type Result = {
   organization?: { org_name: string };
   status: string;
   published_at: string;
+  end_date?: string; // Add end_date to Result type
   description?: string;
   participation_rate?: number;
   voters_count?: number;
@@ -31,6 +36,41 @@ type Result = {
     winner: boolean;
   }[];
 };
+
+interface BackendElectionResult {
+  election_id: number;
+  election_name: string;
+  organization: string;
+  ended_at: string;
+  winner: string;
+  total_votes: number;
+  participation_rate: number;
+  candidates: {
+    name: string;
+    votes: number;
+    percentage: number;
+    winner: boolean;
+  }[];
+}
+
+interface BackendOngoingElection {
+  election_id?: number;
+  result_id?: number;
+  id?: number;
+  election_name: string;
+  organization?: string | { org_name: string };
+  election_status?: string;
+  date_start?: string;
+  date_end?: string;
+  election_desc?: string;
+  participation_rate?: number;
+  voters_count?: number;
+  total_votes?: number;
+  crypto_enabled?: boolean;
+  threshold_crypto?: boolean;
+  zkp_verified?: boolean;
+  candidates?: unknown[];
+}
 
 const statusOptions = [
   { value: 'ALL', label: 'All Statuses' },
@@ -55,82 +95,107 @@ export default function AdminResultsPage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('date_desc');
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchResults = async () => {
-      try {
-        setLoading(true);        const mockData: Result[] = [
-          {
-            result_id: 1,
-            election_name: "Student Council Election 2025",
-            organization: { org_name: "Student Affairs Office" },
-            status: "Published",
-            published_at: "2025-04-05T14:30:00",
-            description: "Official results for the 2025 student council election",
-            participation_rate: 78.4,
-            voters_count: 1802,
-            total_votes: 1412,
-            crypto_enabled: true,
-            threshold_crypto: true,
-            zkp_verified: true,
-            candidates: [
-              { name: "Maria Rodriguez", votes: 642, percentage: 45.5, winner: true },
-              { name: "James Wilson", votes: 524, percentage: 37.1, winner: false },
-              { name: "Sarah Thompson", votes: 246, percentage: 17.4, winner: false }
-            ]
-          },
-          {
-            result_id: 2,
-            election_name: "CS Department Chair Selection",
-            organization: { org_name: "Computer Science Department" },
-            status: "Pending",
-            published_at: "2025-05-01T10:00:00",
-            description: "Results pending final verification",
-            participation_rate: 91.2,
-            voters_count: 245,
-            total_votes: 223
-          },
-          {
-            result_id: 3,
-            election_name: "Library Committee Representatives",
-            organization: { org_name: "University Library" },
-            status: "Published",
-            published_at: "2025-03-15T12:00:00",
-            description: "Final results for library committee election",
-            participation_rate: 63.7,
-            voters_count: 950,
-            total_votes: 605,
-            candidates: [
-              { name: "Michael Brown", votes: 230, percentage: 38.0, winner: true },
-              { name: "Jennifer Davis", votes: 187, percentage: 30.9, winner: true },
-              { name: "Robert Jones", votes: 188, percentage: 31.1, winner: false }
-            ]
-          },
-          {
-            result_id: 4,
-            election_name: "Campus Safety Committee",
-            organization: { org_name: "Campus Security" },
-            status: "Archived",
-            published_at: "2024-10-22T09:00:00",
-            description: "Archive of last term's safety committee election",
-            participation_rate: 52.8,
-            voters_count: 1240,
-            total_votes: 655
-          }
-        ];
+  const router = useRouter();
+  const [tallyModalOpen, setTallyModalOpen] = useState(false);
+  const [step, setStep] = useState<'warning' | 'select' | 'confirm'>('warning');
+  const [ongoingElections, setOngoingElections] = useState<Result[]>([]);
+  const [fetchingOngoing, setFetchingOngoing] = useState(false);
+  const [selectedElection, setSelectedElection] = useState<Result | null>(null);
+  const [proceeding, setProceeding] = useState(false);  useEffect(() => {
+    const fetchResults = async () => {      try {        setLoading(true);
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        // Use the proper endpoint that returns data from ElectionResult table
+        // This endpoint relies solely on homomorphic encryption for vote counting
+        const res = await fetch(`${backendUrl}/election_results`);
+        if (!res.ok) throw new Error('Failed to fetch results');
+        const data = await res.json();
+          // Map backend response to frontend Result type
+        const mappedResults: Result[] = (data as BackendElectionResult[]).map((item) => ({
+          result_id: item.election_id,
+          election_name: item.election_name,
+          organization: { org_name: item.organization || '' },
+          status: 'Published', // Since these are finished elections, mark as published
+          published_at: item.ended_at || '',
+          description: '', // Not available in backend response
+          participation_rate: item.participation_rate || 0,
+          voters_count: 0, // Not available in this endpoint
+          total_votes: item.total_votes || 0,
+          crypto_enabled: false, // Not available in this endpoint
+          threshold_crypto: false,
+          zkp_verified: false,
+          candidates: item.candidates || []
+        }));
         
-        setTimeout(() => {
-          setResults(mockData);
-          setLoading(false);
-        }, 800);
+        setResults(mappedResults);
+        setLoading(false);
       } catch (error) {
         console.error("Error fetching results:", error);
         setLoading(false);
       }
     };
-
     fetchResults();
   }, []);
+
+  const openTallyModal = () => {
+    setStep('warning');
+    setTallyModalOpen(true);
+    setSelectedElection(null);
+    setOngoingElections([]);
+  };
+
+  const fetchOngoing = async (): Promise<void> => {
+    setFetchingOngoing(true);
+    try {
+      // Use full backend URL for local dev, or env var if set
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      const res = await fetch(`${backendUrl}/elections/ongoing`);
+      const data: BackendOngoingElection[] = await res.json();
+      console.log('Fetched elections for modal:', data); // Debug log
+      // Only include elections with status 'Ongoing' (case-insensitive)
+      const filtered = (Array.isArray(data) ? data : []).filter(
+        el => (el.election_status || '').toLowerCase() === 'ongoing'
+      );
+      const mapped: Result[] = filtered.map((el) => ({
+        result_id: el.election_id ?? 0,
+        election_name: el.election_name || '',
+        organization: typeof el.organization === 'string'
+          ? { org_name: el.organization as string }
+          : (el.organization || { org_name: '' }),
+        status: el.election_status || 'Ongoing',
+        published_at: el.date_start || '',
+        end_date: el.date_end || '',
+        description: el.election_desc || '',
+        participation_rate: el.participation_rate || 0,
+        voters_count: el.voters_count || 0,
+        total_votes: el.total_votes || 0,
+        crypto_enabled: el.crypto_enabled || false,
+        threshold_crypto: el.threshold_crypto || false,
+        zkp_verified: el.zkp_verified || false,
+        candidates: (el.candidates as Result['candidates']) || [],
+      }));
+      setOngoingElections(mapped);
+    } catch (err) {
+      setOngoingElections([]);
+      console.error('Error fetching ongoing elections:', err);
+    }
+    setFetchingOngoing(false);
+  };
+
+  const handleProceed = () => {
+    setStep('confirm');
+  };
+
+  const handleConfirm = () => {
+    setProceeding(true);
+    setTimeout(() => {
+      setProceeding(false);
+      setTallyModalOpen(false);
+      if (selectedElection) {
+        // Use result_id for redirect (which is actually election_id in this context)
+        router.push(`/admin/results/tally?election_id=${selectedElection.result_id}`);
+      }
+    }, 1000);
+  };
 
   const filtered = results
     .filter(r =>
@@ -362,21 +427,22 @@ export default function AdminResultsPage() {
           options={sortOptions}
           icon={ArrowUp}
         />
-      </SearchFilterBar>
-
-      <DataView
+      </SearchFilterBar>      <DataView
         title="Election Results"
-        description="Browse, search, and manage election results."
+        description="Browse, search, and manage election results. All vote counts are securely tallied using homomorphic encryption."
+        addButtonText="Tally an Election"
+        onAdd={openTallyModal}
       >
         {loading ? (
           <div className="text-center py-12 text-gray-500">Loading...</div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="flex flex-col items-center justify-center py-12">
+            <NothingIcon width={80} height={80} className="mb-4" />
             <h3 className="text-lg font-semibold mb-2">No results found</h3>
             <p className="text-gray-500 mb-4">
               {search || status !== 'ALL'
                 ? 'Try adjusting your search or filters'
-                : 'Create your first election result'}
+                : 'No election results available.'}
             </p>
           </div>
         ) : view === 'grid' ? (
@@ -387,6 +453,118 @@ export default function AdminResultsPage() {
           renderListTable()
         )}
       </DataView>
+
+      {/* Tally Modal */}
+      <Transition appear show={tallyModalOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-50 " onClose={() => setTallyModalOpen(false)}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100"
+            leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/70 bg-opacity-25" />
+          </Transition.Child>
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-5xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+                  {step === 'warning' && (
+                    <>
+                      <Dialog.Title as="h3" className="text-lg font-bold text-gray-900 mb-2">
+                        Tally an Election
+                      </Dialog.Title>
+                      <div className="mb-4 text-gray-700">
+                        Manually creating a tally for an election will automatically set its status to <b>Finished</b> and voting will be <b>closed</b> for that election. This action cannot be undone.
+                      </div>
+                      <button
+                        className="w-full bg-blue-700 text-white py-2 rounded hover:bg-blue-800 font-semibold"
+                        onClick={() => { setStep('select'); fetchOngoing(); }}
+                      >
+                        Continue
+                      </button>
+                    </>
+                  )}
+                  {step === 'select' && (
+                    <>
+                      <Dialog.Title as="h3" className="text-lg font-bold text-gray-900 mb-2">
+                        Select Ongoing Election
+                      </Dialog.Title>
+                      {fetchingOngoing ? (
+                        <div className="flex justify-center py-6"><Loader4 size={40} /></div>
+                      ) : ongoingElections.length === 0 ? (
+                        <div className="text-gray-500 mb-4">No ongoing elections found.</div>
+                      ) : (
+                        <div className="space-y-4 max-h-96 overflow-y-auto mb-4">
+                          {ongoingElections.map(el => {
+                            const isSelected = selectedElection?.result_id === el.result_id;
+                            return (
+                              <div
+                                key={el.result_id}
+                                className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${isSelected ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} hover:border-blue-400`}
+                                onClick={() => setSelectedElection(el)}
+                                tabIndex={0}
+                                role="button"
+                                aria-pressed={isSelected}
+                              >
+                                <div className="flex justify-between items-center mb-2">
+                                  <div className="font-semibold text-lg text-gray-800">{el.election_name}</div>
+                                  {isSelected && <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded">Selected</span>}
+                                </div>
+                                <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-1">
+                                  <div><span className="font-medium">Organization:</span> {el.organization?.org_name || 'N/A'}</div>
+                                </div>
+                                <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+                                  <div><span className="font-medium">Start:</span> {el.published_at ? new Date(el.published_at).toLocaleDateString() : 'N/A'}</div>
+                                  <div><span className="font-medium">End:</span> {el.end_date ? new Date(el.end_date).toLocaleDateString() : 'N/A'}</div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <button
+                        className="w-full bg-blue-700 text-white py-2 rounded hover:bg-blue-800 font-semibold disabled:opacity-50"
+                        disabled={!selectedElection}
+                        onClick={handleProceed}
+                      >
+                        Proceed
+                      </button>
+                    </>
+                  )}
+                  {step === 'confirm' && selectedElection && (
+                    <>
+                      <Dialog.Title as="h3" className="text-lg font-bold text-gray-900 mb-2">
+                        Confirm Tally
+                      </Dialog.Title>
+                      <div className="mb-4 text-gray-700">
+                        Are you sure you want to tally <b>{selectedElection.election_name}</b>? This will close voting and set the status to <b>Finished</b>.
+                      </div>
+                      <button
+                        className="w-full bg-green-700 text-white py-2 rounded hover:bg-green-800 font-semibold mb-2"
+                        onClick={handleConfirm}
+                        disabled={proceeding}
+                      >
+                        {proceeding ? <Loader4 size={24} /> : 'Yes, Tally Election'}
+                      </button>
+                      <button
+                        className="w-full bg-gray-200 text-gray-700 py-2 rounded font-semibold"
+                        onClick={() => setTallyModalOpen(false)}
+                        disabled={proceeding}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  )}
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
     </AdminLayout>
   );
 }

@@ -88,3 +88,13 @@ def reconstruct_key():
 def check_key_shares_status():
     """Check status of key shares for an election"""
     return InMemoryKeyController.check_key_shares_status()
+
+@crypto_config_bp.route('/crypto_configs/security-keys', methods=['GET'])
+def get_security_keys():
+    from app.controllers.crypto_config_controller import CryptoConfigController
+    return CryptoConfigController.get_all_security_keys()
+
+@crypto_config_bp.route('/crypto_configs/<int:election_id>/trusted-authorities', methods=['GET'])
+def get_trusted_authorities_for_election(election_id):
+    from app.controllers.crypto_config_controller import CryptoConfigController
+    return CryptoConfigController.get_trusted_authorities_for_election(election_id)

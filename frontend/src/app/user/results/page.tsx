@@ -15,37 +15,34 @@ interface ElectionResult {
   winner: string;
   total_votes: number;
   participation_rate: number;
-  candidates: {
+  candidates: Array<{
     name: string;
     votes: number;
     percentage: number;
     winner: boolean;
-  }[];
+  }>;
 }
 
 export default function UserResultsPage() {
   const { user } = useUser();
   const [results, setResults] = useState<ElectionResult[]>([]);
   const [filteredResults, setFilteredResults] = useState<ElectionResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all'); // 'all', 'recent', 'highest-participation'
+  const [loading, setLoading] = useState(true);  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
   const [, setParticipatedElectionIds] = useState<Set<number>>(new Set());
-
-  const filterOptions = [
+  const filterOptions: Array<{ value: string; label: string }> = [
     { value: 'all', label: 'All Results' },
     { value: 'recent', label: 'Most Recent' },
     { value: 'highest-participation', label: 'Highest Participation' },
   ];
-
   // Fetch election results and participated elections
   useEffect(() => {
     const fetchResults = async () => {
       try {
         setLoading(true);
         const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-        // Fetch all finished elections with results
-        const res = await fetch(`${API_URL}/election-results`);
+        // Fetch all finished elections with properly tallied results
+        const res = await fetch(`${API_URL}/election_results`);
         const allResults: ElectionResult[] = await res.json();
         // Fetch user's votes to get participated election IDs
         let userElectionIds = new Set<number>();
@@ -53,7 +50,10 @@ export default function UserResultsPage() {
           const votesRes = await fetch(`${API_URL}/votes/by-voter/${user.student_id}`);
           if (votesRes.ok) {
             const votesData = await votesRes.json();
-            userElectionIds = new Set<number>((votesData.votes || []).map((v: { election_id: number }) => v.election_id));
+            userElectionIds = new Set<number>(
+              (votesData.votes as Array<{ election_id: number }> || [])
+                .map((v) => v.election_id)
+            );
           }
         }
         setParticipatedElectionIds(userElectionIds);
@@ -61,15 +61,13 @@ export default function UserResultsPage() {
         const participatedResults = allResults.filter(r => userElectionIds.has(r.election_id));
         setResults(participatedResults);
         setFilteredResults(participatedResults);
-        setLoading(false);
-      } catch (error) {
+        setLoading(false);      } catch (error: unknown) {
         console.error("Error fetching election results:", error);
         setLoading(false);
       }
     };
     fetchResults();
-  }, [user]);
-
+  }, [user, setParticipatedElectionIds]);
   // Filter results when search or filter changes
   useEffect(() => {
     let result = [...results];
@@ -78,10 +76,9 @@ export default function UserResultsPage() {
       result = result.filter(item => 
         item.election_name.toLowerCase().includes(searchLower) || 
         item.organization.toLowerCase().includes(searchLower) ||
-        item.candidates.some(candidate => candidate.name.toLowerCase().includes(searchLower))
+        item.candidates.some((candidate) => candidate.name.toLowerCase().includes(searchLower))
       );
-    }
-    if (filter === 'recent') {
+    }    if (filter === 'recent') {
       result.sort((a, b) => new Date(b.ended_at).getTime() - new Date(a.ended_at).getTime());
     } else if (filter === 'highest-participation') {
       result.sort((a, b) => b.participation_rate - a.participation_rate);
@@ -107,11 +104,10 @@ export default function UserResultsPage() {
         searchPlaceholder="Search results..."
       />
 
-      {/* Results list */}
-      {loading ? (
+      {/* Results list */}      {loading ? (
         <div className="space-y-6">
-          {[1, 2].map((i) => (
-            <div key={i} className="bg-white rounded-xl shadow p-6 border border-gray-200 animate-pulse">
+          {Array.from({length: 2}, (_, i) => (
+            <div key={`loading-skeleton-${i}`} className="bg-white rounded-xl shadow p-6 border border-gray-200 animate-pulse">
               <div className="flex justify-between items-center mb-4">
                 <div className="h-5 bg-gray-200 rounded w-1/3"></div>
                 <div className="h-5 bg-gray-200 rounded w-24"></div>
@@ -165,10 +161,9 @@ export default function UserResultsPage() {
                   </div>
                 </div>
                 
-                <h4 className="font-medium text-gray-700 mb-3">Results Breakdown</h4>
-                <div className="space-y-3">
-                  {result.candidates.map((candidate, idx) => (
-                    <div key={idx} className="relative">
+                <h4 className="font-medium text-gray-700 mb-3">Results Breakdown</h4>                <div className="space-y-3">
+                  {result.candidates.map((candidate, idx: number) => (
+                    <div key={`${result.election_id}-candidate-${idx}`} className="relative">
                       <div className="flex justify-between mb-1">
                         <div className="flex items-center">
                           <span className="font-medium text-gray-800">{candidate.name}</span>

@@ -278,7 +278,8 @@ export default function VoteVerifyPage() {
       <Image src="/usep-bg.jpg" alt="bg" fill style={{ objectFit: 'cover', opacity: 0.08, zIndex: 0 }} />
       <div className="z-10 flex flex-col items-center w-full">
         <SystemLogo2 width={200} className="mb-8" />
-        <div className="max-w-xl w-full bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg border border-gray-200 mx-auto"
+        <div
+          className="max-w-3xl w-full bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg border border-gray-200 mx-auto"
           style={{ maxHeight: '80vh', overflowY: 'auto' }}
         >
           <h2 className="text-2xl font-bold text-center mb-6">Vote Verification</h2>
