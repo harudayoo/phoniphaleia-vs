@@ -71,3 +71,17 @@ def debug_election_results():
 def delete_election_result(election_id):
     from app.controllers.election_results_controller import ElectionResultsController
     return ElectionResultsController.delete_election_result(election_id)
+
+@election_results_bp.route('/election_results/fix-verification', methods=['POST'])
+def fix_verification_status():
+    """
+    Fix the verification status of election results.
+    
+    Request body (optional):
+    {
+        "election_id": 123  // Specific election to fix, omit to fix all
+    }
+    """
+    data = request.get_json() or {}
+    election_id = data.get('election_id')
+    return ElectionResultsController.fix_verification_status(election_id)

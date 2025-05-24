@@ -652,21 +652,26 @@ class ElectionResultsController:
                     # Set election status to 'Finished' after successful decryption
                     election.election_status = 'Finished'
                     logger.info(f"Setting election {election_id} status to 'Finished'")
-                    
-                    # Commit all changes (decrypted results and election status)
+                      # Commit all changes (decrypted results and election status)
                     db.session.commit()
                     logger.info(f"Successfully stored decrypted results and updated election status for election {election_id}")
+                    
+                    # Verify vote counts and update verified status in the database
+                    verified, issues = ElectionResult.verify_vote_counts(election_id)
+                    if verified:
+                        logger.info(f"Vote count verification passed for election {election_id}")
+                    else:
+                        logger.warning(f"Vote count verification found issues for election {election_id}: {issues}")
                     
                     # VERIFICATION: Final verification that all candidates have vote counts
                     missing_counts = ElectionResult.query.filter_by(election_id=election_id, vote_count=None).count()
                     if missing_counts > 0:
                         logger.warning(f"After decryption, {missing_counts} candidates are still missing vote counts")
-                    
-                    return jsonify({
+                        return jsonify({
                         'decrypted_results': decrypted,
                         'total_decrypted_votes': total_votes,
                         'vote_count_match': total_votes == actual_votes,
-                        'verification_passed': True
+                        'verification_passed': verified  # Use actual verification result
                     }), 200
                     
                 else:
@@ -766,10 +771,18 @@ class ElectionResultsController:
             
             # Sort results by position_id for consistent ordering
             results.sort(key=lambda x: x['position_id'])
+              # Add verification status information
+            # Check the actual verification status from the database
+            all_verified = True
+            if verified_column_exists:
+                # Get verification status from the database
+                verification_query = db.session.query(ElectionResult).filter_by(election_id=election_id).all()
+                # All results must be verified for the election to be considered verified
+                all_verified = all(getattr(result, 'verified', False) for result in verification_query)
+                logger.info(f"Verification status for election {election_id}: {all_verified}")
             
-            # Add verification status information
             verification_status = {
-                "verified": True,  # Default to true unless issues found
+                "verified": all_verified,  # Use the actual verification status from the database
                 "vote_count_match": True,
                 "total_decrypted": sum(candidate['vote_count'] for position in results for candidate in position['candidates'])
             }
@@ -944,3 +957,77 @@ class ElectionResultsController:
             db.session.rollback()
             logger.error(f"Error deleting election results for election_id {election_id}: {str(e)}")
             return jsonify({'error': f'Failed to delete election results: {str(e)}'}), 500
+
+    @staticmethod
+    def fix_verification_status(election_id=None):
+        """
+        Fix the verification status for election results.
+        If election_id is provided, fix only that election.
+        Otherwise, fix all elections with decrypted results.
+        """
+        try:
+            from app.models.election import Election
+            from sqlalchemy import inspect
+            
+            # Check if the verified column exists in the database
+            try:
+                insp = inspect(db.engine)
+                columns = [c['name'] for c in insp.get_columns('election_results')]
+                verified_column_exists = 'verified' in columns
+                logger.info(f"Verified column exists in election_results table: {verified_column_exists}")
+                
+                if not verified_column_exists:
+                    return jsonify({
+                        'error': 'Cannot fix verification status - verified column does not exist in the database',
+                        'suggestion': 'Run a database migration to add the verified column to the election_results table'
+                    }), 400
+            except Exception as e:
+                logger.error(f"Error checking for verified column: {e}")
+                return jsonify({'error': f'Error checking database structure: {str(e)}'}), 500
+            
+            # Get elections to process
+            query = ElectionResult.query.filter(ElectionResult.vote_count.isnot(None))
+            if election_id:
+                query = query.filter_by(election_id=election_id)
+                
+            # Group by election_id
+            election_ids = set(r.election_id for r in query.all())
+            
+            if not election_ids:
+                return jsonify({'message': 'No elections with decrypted results found'}), 404
+                
+            results = {
+                'elections_processed': len(election_ids),
+                'verified': [],
+                'failed': []
+            }
+            
+            for eid in election_ids:
+                try:
+                    verified, issues = ElectionResult.verify_vote_counts(eid)
+                    if verified:
+                        results['verified'].append(eid)
+                        logger.info(f"Successfully verified election {eid}")
+                    else:
+                        results['failed'].append({
+                            'election_id': eid,
+                            'issues': issues
+                        })
+                        logger.warning(f"Verification failed for election {eid}: {issues}")
+                except Exception as e:
+                    logger.error(f"Error verifying election {eid}: {e}")
+                    results['failed'].append({
+                        'election_id': eid,
+                        'error': str(e)
+                    })
+            
+            return jsonify({
+                'success': True,
+                'message': f"Processed verification status for {len(election_ids)} elections",
+                'results': results
+            }), 200
+            
+        except Exception as e:
+            logger.error(f"Error in fix_verification_status: {str(e)}")
+            logger.exception(e)
+            return jsonify({'error': str(e)}), 500
