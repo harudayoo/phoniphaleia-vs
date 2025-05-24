@@ -438,6 +438,11 @@ class ElectionResultsController:
             if not election_id or not private_key_b64:
                 return jsonify({'error': 'Missing election_id or private_key'}), 400
             
+            # Get election and crypto config
+            election = Election.query.get(election_id)
+            if not election:
+                return jsonify({'error': 'Election not found'}), 404
+            
             crypto_config = CryptoConfig.query.filter_by(election_id=election_id).first()
             if not crypto_config:
                 return jsonify({'error': 'Crypto config not found'}), 404
@@ -479,11 +484,19 @@ class ElectionResultsController:
                                 vote_count = privkey.decrypt(enc_num)
                                 r.vote_count = vote_count
                                 decrypted[r.candidate_id] = vote_count
+                                logger.info(f"Decrypted votes for candidate {r.candidate_id}: {vote_count}")
                             except Exception as e:
                                 logger.error(f"Error decrypting result for candidate {r.candidate_id}: {e}")
                                 return jsonify({'error': f'Decryption failed for candidate {r.candidate_id}: {str(e)}'}), 500
                     
+                    # Set election status to 'Finished' after successful decryption
+                    election.election_status = 'Finished'
+                    logger.info(f"Setting election {election_id} status to 'Finished'")
+                    
+                    # Commit all changes (decrypted results and election status)
                     db.session.commit()
+                    logger.info(f"Successfully stored decrypted results and updated election status for election {election_id}")
+                    
                     return jsonify({'decrypted_results': decrypted}), 200
                 else:
                     logger.error(f"Unsupported private key type: {private_key_data.get('type')}. Only type=prime is supported.")

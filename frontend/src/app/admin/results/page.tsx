@@ -276,14 +276,14 @@ export default function AdminResultsPage() {
     }
   };
   const renderGridItem = (result: Result, key?: React.Key) => (
-    <div key={key ?? result.result_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+    <div key={key ?? result.result_id} className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow duration-200">
       <div className="p-6">
-        <div className="flex justify-between items-start mb-2">
-          <span className="text-sm text-gray-600">{result.organization?.org_name}</span>
+        <div className="flex justify-between items-start mb-3">
+          <span className="text-sm font-medium text-gray-600">{result.organization?.org_name}</span>
           {getStatusBadge(result.status)}
         </div>
         
-        <h3 className="text-lg font-semibold text-gray-800 mb-3">{result.election_name}</h3>
+        <h3 className="text-lg font-semibold text-gray-800 mb-3 line-clamp-2">{result.election_name}</h3>
         
         <div className="flex items-center mb-3 text-sm text-gray-600">
           <Calendar className="h-4 w-4 mr-2" />
@@ -310,65 +310,65 @@ export default function AdminResultsPage() {
         <p className="text-gray-600 text-sm mb-4 line-clamp-2">{result.description}</p>
         
         <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-blue-50 rounded-md p-2">
-            <div className="text-xs text-blue-700 mb-1">Voters</div>
-            <div className="font-medium">{result.voters_count?.toLocaleString()}</div>
+          <div className="bg-blue-50 rounded-lg p-3">
+            <div className="text-xs text-blue-700 mb-1 font-medium">Total Votes</div>
+            <div className="font-semibold text-blue-800">{result.total_votes?.toLocaleString()}</div>
           </div>
-          <div className="bg-green-50 rounded-md p-2">
-            <div className="text-xs text-green-700 mb-1">Participation</div>
-            <div className="font-medium">{result.participation_rate}%</div>
+          <div className="bg-green-50 rounded-lg p-3">
+            <div className="text-xs text-green-700 mb-1 font-medium">Participation</div>
+            <div className="font-semibold text-green-800">{result.participation_rate}%</div>
           </div>
         </div>
         
         {result.candidates && result.candidates.length > 0 && (
-          <div className="mb-4">
-            <div className="text-sm font-medium mb-2">Top Candidate</div>
-            <div className="text-gray-800">
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+            <div className="text-sm font-medium mb-1 text-gray-700">Elected</div>
+            <div className="text-gray-800 font-medium">
               {result.candidates.find(c => c.winner)?.name || result.candidates[0].name}
             </div>
           </div>
         )}
         
-        <div className="flex justify-between items-center pt-3 border-t border-gray-200">
+        <div className="flex justify-between items-center pt-4 border-t border-gray-200">
           <div className="flex space-x-2">
-            <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded" onClick={() => handleDownload(result)}>
+            <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" onClick={() => handleDownload(result)}>
               <FaDownload size={16} />
             </button>
-            <button type="button" className="p-2 text-green-600 hover:bg-green-50 rounded" onClick={() => router.push(`/admin/results/${result.result_id}`)}>
+            <button type="button" className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" onClick={() => router.push(`/admin/results/${result.result_id}`)}>
               <FaEye size={16} />
             </button>
           </div>
           <div className="flex space-x-2">
             {result.status === 'Published' ? (
-              <button type="button" className="p-2 text-amber-600 hover:bg-amber-50 rounded" disabled>
+              <button type="button" className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" disabled>
                 <FaLock size={16} />
               </button>
             ) : (
-              <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded" disabled>
+              <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" disabled>
                 <FaLockOpen size={16} />
               </button>
             )}
-            <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded" onClick={() => router.push(`/admin/results/${result.result_id}/edit`)}>
+            <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" onClick={() => router.push(`/admin/results/${result.result_id}/edit`)}>
               <FaEdit size={16} />
             </button>
-            <button type="button" className="p-2 text-red-600 hover:bg-red-50 rounded" onClick={() => setShowDeleteModal(result.result_id)}>
+            <button type="button" className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" onClick={() => setShowDeleteModal(result.result_id)}>
               <FaTrash size={16} />
             </button>
           </div>
         </div>
         {showDeleteModal === result.result_id && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/70 bg-opacity-30 z-50">
-            <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full animate-fadeIn">
-              <h3 className="text-lg font-semibold mb-2">Confirm Deletion</h3>
-              <div className="mb-4 text-gray-600">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 animate-fadeIn">
+              <h3 className="text-xl font-semibold mb-4 text-gray-800">Confirm Deletion</h3>
+              <div className="mb-6 text-gray-600 leading-relaxed">
                 Are you sure you want to delete the results for <b>{result.election_name}</b>? This action cannot be undone.
               </div>
-              {error && <div className="bg-red-100 text-red-800 px-4 py-2 rounded mb-2 text-center">{error}</div>}
-              <div className="flex gap-3 justify-end">
-                <button type="button" className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowDeleteModal(null)}>
+              {error && <div className="bg-red-100 text-red-800 px-4 py-3 rounded-lg mb-4 text-center">{error}</div>}
+              <div className="flex gap-3">
+                <button type="button" className="flex-1 px-4 py-3 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors font-medium" onClick={() => setShowDeleteModal(null)}>
                   Cancel
                 </button>
-                <button type="button" className="px-4 py-2 rounded bg-red-700 text-white hover:bg-red-800" onClick={() => handleDelete(result)}>
+                <button type="button" className="flex-1 px-4 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors font-medium" onClick={() => handleDelete(result)}>
                   Delete
                 </button>
               </div>
@@ -518,7 +518,7 @@ export default function AdminResultsPage() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
             <NothingIcon width={80} height={80} className="mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No results found</h3>
+            <h3 className="text-lg font-semibold mb-2 text-gray-700">No results found</h3>
             <p className="text-gray-500 mb-4">
               {search || status !== 'ALL'
                 ? 'Try adjusting your search or filters'
@@ -551,92 +551,130 @@ export default function AdminResultsPage() {
                 enter="ease-out duration-300" enterFrom="opacity-0 scale-95" enterTo="opacity-100 scale-100"
                 leave="ease-in duration-200" leaveFrom="opacity-100 scale-100" leaveTo="opacity-0 scale-95"
               >
-                <Dialog.Panel className="w-full max-w-5xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+                <Dialog.Panel className="w-full max-w-5xl transform overflow-hidden rounded-2xl bg-white p-8 text-left align-middle shadow-xl transition-all">
                   {step === 'warning' && (
                     <>
-                      <Dialog.Title as="h3" className="text-lg font-bold text-gray-900 mb-2">
+                      <Dialog.Title as="h3" className="text-xl font-bold text-gray-900 mb-4">
                         Tally an Election
                       </Dialog.Title>
-                      <div className="mb-4 text-gray-700">
+                      <div className="mb-8 text-gray-700 leading-relaxed">
                         Manually creating a tally for an election will automatically set its status to <b>Finished</b> and voting will be <b>closed</b> for that election. This action cannot be undone.
                       </div>
-                      <button
-                        className="w-full bg-blue-700 text-white py-2 rounded hover:bg-blue-800 font-semibold"
-                        onClick={() => { setStep('select'); fetchOngoing(); }}
-                      >
-                        Continue
-                      </button>
+                      <div className="flex justify-end gap-3">
+                        <button
+                          type="button"
+                          className="px-6 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                          onClick={() => setTallyModalOpen(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                          onClick={() => { setStep('select'); fetchOngoing(); }}
+                        >
+                          Continue
+                        </button>
+                      </div>
                     </>
                   )}
                   {step === 'select' && (
                     <>
-                      <Dialog.Title as="h3" className="text-lg font-bold text-gray-900 mb-2">
+                      <Dialog.Title as="h3" className="text-xl font-bold text-gray-900 mb-4">
                         Select Ongoing Election
                       </Dialog.Title>
                       {fetchingOngoing ? (
-                        <div className="flex justify-center py-6"><Loader4 size={40} /></div>
+                        <div className="flex justify-center py-12"><Loader4 size={40} /></div>
                       ) : ongoingElections.length === 0 ? (
-                        <div className="text-gray-500 mb-4">No ongoing elections found.</div>
-                      ) : (
-                        <div className="space-y-4 max-h-96 overflow-y-auto mb-4">
-                          {ongoingElections.map(el => {
-                            const isSelected = selectedElection?.result_id === el.result_id;
-                            return (
-                              <div
-                                key={el.result_id}
-                                className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${isSelected ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} hover:border-blue-400`}
-                                onClick={() => setSelectedElection(el)}
-                                tabIndex={0}
-                                role="button"
-                                aria-pressed={isSelected}
-                              >
-                                <div className="flex justify-between items-center mb-2">
-                                  <div className="font-semibold text-lg text-gray-800">{el.election_name}</div>
-                                  {isSelected && <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded">Selected</span>}
-                                </div>
-                                <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-1">
-                                  <div><span className="font-medium">Organization:</span> {el.organization?.org_name || 'N/A'}</div>
-                                </div>
-                                <div className="flex flex-wrap gap-4 text-xs text-gray-500">
-                                  <div><span className="font-medium">Start:</span> {el.published_at ? new Date(el.published_at).toLocaleDateString() : 'N/A'}</div>
-                                  <div><span className="font-medium">End:</span> {el.end_date ? new Date(el.end_date).toLocaleDateString() : 'N/A'}</div>
-                                </div>
-                              </div>
-                            );
-                          })}
+                        <div className="text-center py-12">
+                          <div className="text-gray-500 mb-6">No ongoing elections found.</div>
+                          <div className="flex justify-end gap-3">
+                            <button
+                              type="button"
+                              className="px-6 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                              onClick={() => setTallyModalOpen(false)}
+                            >
+                              Close
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <>
+                          <div className="space-y-4 max-h-96 overflow-y-auto mb-8">
+                            {ongoingElections.map(el => {
+                              const isSelected = selectedElection?.result_id === el.result_id;
+                              return (
+                                <div
+                                  key={el.result_id}
+                                  className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${isSelected ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} hover:border-blue-400`}
+                                  onClick={() => setSelectedElection(el)}
+                                  tabIndex={0}
+                                  role="button"
+                                  aria-pressed={isSelected}
+                                >
+                                  <div className="flex justify-between items-center mb-2">
+                                    <div className="font-semibold text-lg text-gray-800">{el.election_name}</div>
+                                    {isSelected && <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded">Selected</span>}
+                                  </div>
+                                  <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-1">
+                                    <div><span className="font-medium">Organization:</span> {el.organization?.org_name || 'N/A'}</div>
+                                  </div>
+                                  <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+                                    <div><span className="font-medium">Start:</span> {el.published_at ? new Date(el.published_at).toLocaleDateString() : 'N/A'}</div>
+                                    <div><span className="font-medium">End:</span> {el.end_date ? new Date(el.end_date).toLocaleDateString() : 'N/A'}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex justify-end gap-3">
+                            <button
+                              type="button"
+                              className="px-6 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                              onClick={() => setTallyModalOpen(false)}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={!selectedElection}
+                              onClick={handleProceed}
+                            >
+                              Proceed
+                            </button>
+                          </div>
+                        </>
                       )}
-                      <button
-                        className="w-full bg-blue-700 text-white py-2 rounded hover:bg-blue-800 font-semibold disabled:opacity-50"
-                        disabled={!selectedElection}
-                        onClick={handleProceed}
-                      >
-                        Proceed
-                      </button>
                     </>
                   )}
                   {step === 'confirm' && selectedElection && (
                     <>
-                      <Dialog.Title as="h3" className="text-lg font-bold text-gray-900 mb-2">
+                      <Dialog.Title as="h3" className="text-xl font-bold text-gray-900 mb-4">
                         Confirm Tally
                       </Dialog.Title>
-                      <div className="mb-4 text-gray-700">
+                      <div className="mb-8 text-gray-700 leading-relaxed">
                         Are you sure you want to tally <b>{selectedElection.election_name}</b>? This will close voting and set the status to <b>Finished</b>.
                       </div>
-                      <button
-                        className="w-full bg-green-700 text-white py-2 rounded hover:bg-green-800 font-semibold mb-2"
-                        onClick={handleConfirm}
-                        disabled={proceeding}
-                      >
-                        {proceeding ? <Loader4 size={24} /> : 'Yes, Tally Election'}
-                      </button>
-                      <button
-                        className="w-full bg-gray-200 text-gray-700 py-2 rounded font-semibold"
-                        onClick={() => setTallyModalOpen(false)}
-                        disabled={proceeding}
-                      >
-                        Cancel
-                      </button>
+                      <div className="flex justify-end gap-3">
+                        <button
+                          type="button"
+                          className="px-6 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors disabled:opacity-50"
+                          onClick={() => setTallyModalOpen(false)}
+                          disabled={proceeding}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          onClick={handleConfirm}
+                          disabled={proceeding}
+                        >
+                          {proceeding && <Loader4 size={16} />}
+                          {proceeding ? 'Processing...' : 'Yes, Tally Election'}
+                        </button>
+                      </div>
                     </>
                   )}
                 </Dialog.Panel>

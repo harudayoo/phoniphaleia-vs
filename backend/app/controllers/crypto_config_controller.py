@@ -719,22 +719,33 @@ class CryptoConfigController:
                 elif isinstance(meta_data_input, dict):
                     meta_data_obj = meta_data_input
             
+            # If security_data is empty but meta_data has security_data, use it
+            if not security_data and 'security_data' in meta_data_obj:
+                security_data = meta_data_obj['security_data']
+                logger.info("[store_election_crypto_data] Extracted security_data from meta_data")
+            
             # Extract and validate critical security parameters
-            paillier_prime = security_data.get('p') or meta_data_obj.get('p')
+            paillier_prime = (security_data.get('p') or 
+                            meta_data_obj.get('p') or
+                            meta_data_obj.get('security_data', {}).get('p'))
             prime_modulus = (security_data.get('prime_modulus') or 
                             security_data.get('prime') or
                             meta_data_obj.get('prime_modulus') or
-                            meta_data_obj.get('prime'))
+                            meta_data_obj.get('prime') or
+                            meta_data_obj.get('security_data', {}).get('prime_modulus') or
+                            meta_data_obj.get('security_data', {}).get('prime'))
             sharing_method = security_data.get('sharing_method', 'direct_p')
             
             # Ensure we have required security data
             if not paillier_prime:
                 logger.error("[store_election_crypto_data] CRITICAL: Paillier prime (p) missing from security_data!")
-                return jsonify({'error': 'Paillier prime (p) is required in security_data'}), 400
+                logger.error(f"[store_election_crypto_data] Available data - security_data: {security_data}")
+                logger.error(f"[store_election_crypto_data] Available data - meta_data_obj: {meta_data_obj}")
+                return jsonify({'error': 'Paillier prime (p) is required in security_data or meta_data'}), 400
                 
             if not prime_modulus:
                 logger.error("[store_election_crypto_data] CRITICAL: Shamir modulus prime missing from security_data!")
-                return jsonify({'error': 'Shamir modulus prime is required in security_data'}), 400
+                return jsonify({'error': 'Shamir modulus prime is required in security_data or meta_data'}), 400
             
             logger.info(f"[store_election_crypto_data] Paillier prime (p): {paillier_prime}")
             logger.info(f"[store_election_crypto_data] Shamir modulus prime: {prime_modulus}")
