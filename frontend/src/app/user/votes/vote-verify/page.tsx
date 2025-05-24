@@ -121,17 +121,23 @@ export default function VoteVerifyPage() {
           setOverallStatus('failed');
           return;
         }
-        
-        // Verify the generated proof
+          // Verify the generated proof
         let isVerified = false;
         if (verificationResult.proof && verificationResult.publicSignals) {
           try {
+            console.log('About to verify proof with data:');
+            console.log('Proof:', JSON.stringify(verificationResult.proof));
+            console.log('Public Signals:', JSON.stringify(verificationResult.publicSignals));
+            
             isVerified = await verifyVoteProof(
               verificationResult.proof,
               verificationResult.publicSignals
             );
+            console.log('Verification result:', isVerified);
           } catch (verifyError) {
             console.error('Error during verification:', verifyError);
+            const errorMessage = verifyError instanceof Error ? verifyError.message : String(verifyError);
+            console.error('Verification error details:', errorMessage);
             // Continue with isVerified = false
           }
           

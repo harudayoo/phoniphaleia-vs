@@ -1,6 +1,7 @@
 // Vote Verification Service for ZKP and Paillier encryption
-import { generateProof, verifyProof, ZKProof, CircuitInputs, VerificationKey } from './snarkjsService';
-import { encryptData } from './elgamalService';
+import { generateProof, verifyProof, ZKProof, CircuitInputs } from './snarkjsService';
+// Remove ElGamal import
+// import { encryptData } from './elgamalService';
 
 // Export interfaces to be used in other files
 export interface VoteData {
@@ -59,11 +60,8 @@ export const generateVoteProof = async (input: VoteZKProofInput): Promise<Verifi
   }
 };
 
-// Verify ZK proof using the verification key
-export const verifyVoteProof = async (
-  proof: ZKProof,
-  publicSignals: string[]
-): Promise<boolean> => {
+// Verify ZK proof for vote validity
+export const verifyVoteProof = async (proof: ZKProof, publicSignals: string[]): Promise<boolean> => {
   try {
     console.log('Verifying ZK proof');
     console.log('Public signals:', publicSignals);
@@ -72,75 +70,162 @@ export const verifyVoteProof = async (
     if (!Array.isArray(publicSignals) || publicSignals.length !== 2) {
       throw new Error(`Expected 2 public signals, got ${publicSignals.length}: ${JSON.stringify(publicSignals)}`);
     }
-    // Always use the static verification key file for now
-    const response = await fetch("/circuits/verification_key.json");
-    if (!response.ok) {
-      throw new Error(`Failed to fetch verification key: ${response.status}`);
+    // First fetch the verification key from the path
+    const vkeyResponse = await fetch("/circuits/verification_key.json");
+    if (!vkeyResponse.ok) {
+      throw new Error(`Failed to fetch verification key: ${vkeyResponse.status}`);
     }
-    const vKey: VerificationKey = await response.json();
-    const isValid = await verifyProof(vKey, publicSignals, proof);
-    console.log('Proof verification result (static key):', isValid);
+    let verificationKey;
+    try {
+      verificationKey = await vkeyResponse.json();
+      console.log('Verification key loaded successfully');
+    } catch (jsonError) {
+      console.error('JSON parse error with verification key:', jsonError);
+      throw new Error(`Failed to parse verification key: ${jsonError instanceof Error ? jsonError.message : String(jsonError)}`);
+    }    // Validate the verification key structure
+    if (!verificationKey || !verificationKey.protocol || !verificationKey.curve || !verificationKey.nPublic) {
+      console.error('Invalid verification key structure:', verificationKey);
+      throw new Error('Verification key has invalid structure');
+    }
+
+    // Then verify using the key object
+    console.log('Verifying proof with key, signals, and proof');
+    const isValid = await verifyProof(
+      verificationKey,
+      publicSignals,
+      proof
+    );
+    console.log('Proof verification result:', isValid);
     return isValid;
-  } catch (error: unknown) {
+  } catch (error) {
     console.error('Error verifying proof:', error);
+    if (error instanceof Error) {
+      console.error('Error details:', error.message);
+      if (error.stack) {
+        console.error('Stack trace:', error.stack);
+      }
+    }
     throw error instanceof Error ? error : new Error(String(error));
   }
 };
 
 /**
- * Interface for encrypted vote with metadata
+ * Encrypt a vote using Paillier homomorphic encryption
  */
-export interface EncryptedVoteData {
-  c1: string;
-  c2: string;
-  metadata: {
-    encryption_timestamp: number;
-    encryption_scheme: string;
-    public_key_id: string;
-  };
+export const encryptVote = (voteValue: number | string, publicKeyStr: string): string => {
+  try {
+    // Ensure vote is a number
+    const vote = typeof voteValue === 'string' ? parseInt(voteValue, 10) : voteValue;
+    
+    // First try to parse the key as Paillier
+    try {
+      const keyObj = JSON.parse(publicKeyStr);
+      
+      // If we have an 'n' value, it's a Paillier key
+      if (keyObj.n) {
+        console.log('Using Paillier encryption');
+        // Create a BigInt from the n value for Paillier encryption
+        const n = BigInt(keyObj.n);
+        
+        // Simple modular exponentiation for Paillier encryption: (vote + 1)^n mod n^2
+        // Note: In production, use a proper Paillier library with randomization
+        const g = BigInt(keyObj.g || (n + BigInt(1)));  // g is often n+1 in Paillier
+        
+        // Calculate n^2
+        const nSquared = n * n;
+        
+        // Convert vote to BigInt and encrypt: g^m * r^n mod n^2 
+        // For simplicity, we're using r=1 which isn't secure in production
+        const m = BigInt(vote);
+        
+        // Calculate g^m mod n^2
+        const gPowM = modPow(g, m, nSquared);
+        
+        // Result is just g^m (no randomization - for production use a proper library)
+        const encryptedVote = gPowM.toString();
+        
+        return encryptedVote;
+      }
+    } catch (e) {
+      console.error('Error parsing key or encrypting with Paillier:', e);
+    }
+    
+    // Input validation
+    if (typeof vote !== 'number') {
+      throw new Error('Vote must be a number');
+    }
+    
+    // We only support Paillier now
+    throw new Error('Only Paillier encryption is supported');
+  } catch (error) {
+    console.error('Error encrypting vote:', error);
+    throw error instanceof Error ? error : new Error(String(error));
+  }
+};
+
+/**
+ * Simple modular exponentiation helper function (base^exponent mod modulus)
+ * Note: This is a simple implementation for demonstration
+ * In production, use a cryptographically secure library
+ */
+function modPow(base: bigint, exponent: bigint, modulus: bigint): bigint {
+  if (modulus === BigInt(1)) return BigInt(0);
+  
+  let result = BigInt(1);
+  base = base % modulus;
+  
+  while (exponent > BigInt(0)) {
+    if (exponent % BigInt(2) === BigInt(1)) {
+      result = (result * base) % modulus;
+    }
+    exponent = exponent >> BigInt(1);
+    base = (base * base) % modulus;
+  }
+  
+  return result;
 }
 
-// Encrypt votes using Paillier or ElGamal depending on key type
-export const encryptVote = (voteValue: number, publicKey: string): string => {
+// Function to create encrypted ballot that contains ZK proof and encrypted vote
+export const createEncryptedBallot = async (
+  input: VoteZKProofInput,
+  publicKey: string
+): Promise<unknown> => {
   try {
-    let encryptedData: Record<string, unknown>;
-    // Try to parse the public key as JSON (Paillier format)
-    let keyObj: unknown = null;
-    try {
-      keyObj = JSON.parse(publicKey);
-    } catch {
-      // Not JSON, fallback to ElGamal
+    // Generate ZK proof first
+    const proofResult = await generateVoteProof(input);
+    
+    if (!proofResult.isValid || !proofResult.proof || !proofResult.publicSignals) {
+      throw new Error('Failed to generate valid proof');
     }
-    if (
-      keyObj &&
-      typeof keyObj === 'object' &&
-      'key_type' in keyObj &&
-      (keyObj as { key_type: string }).key_type === 'paillier' &&
-      'n' in keyObj
-    ) {
-      // Paillier encryption (client-side, demo only; real use should be server-side)
-      encryptedData = {
-        ciphertext: voteValue.toString(), // Placeholder: store plaintext or use a real Paillier JS lib
-        scheme: 'paillier',
-        n: (keyObj as { n: string }).n
+    
+    // Encrypt votes using only Paillier
+    const encryptedVotes = input.candidateIds.map((candidateId, index) => {
+      return {
+        position_id: input.positionIds[index],
+        candidate_id: candidateId,
+        encrypted_vote: encryptVote(candidateId, publicKey)
       };
-    } else {
-      // Fallback: ElGamal encryption
-      const encryptedVote = encryptData(publicKey, voteValue);
-      encryptedData = {
-        c1: encryptedVote.c1,
-        c2: encryptedVote.c2,
-        metadata: {
-          encryption_timestamp: Date.now(),
-          encryption_scheme: "elgamal",
-          public_key_id: publicKey.slice(0, 16)
-        }
-      };
-    }
-    return JSON.stringify(encryptedData);
-  } catch {
-    console.error('Error encrypting vote');
-    throw new Error('Error encrypting vote');
+    });
+    
+    // Construct ballot with proof and encrypted votes
+    return {
+      voter_id: input.voterId,
+      election_id: input.electionId,
+      votes: encryptedVotes,
+      proof: {
+        zkp: proofResult.proof,
+        public_signals: proofResult.publicSignals
+      },
+      metadata: {
+        timestamp: new Date().toISOString(),
+        nonce: input.nonce || Date.now().toString(),
+        encryption_scheme: "paillier",
+        client_version: "2.0.0"
+      }
+    };
+  } catch (error) {
+    console.error('Error creating encrypted ballot:', error);
+    throw error instanceof Error ? error : new Error(String(error));
   }
 };
 

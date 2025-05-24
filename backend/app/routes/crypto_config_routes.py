@@ -13,7 +13,8 @@ def create_crypto_config():
 @admin_required
 def store_crypto_config_with_shares():
     """Store complete crypto configuration with key shares after election creation"""
-    return InMemoryKeyController.store_crypto_config_with_shares()
+    # Use the CryptoConfigController method for consistency
+    return CryptoConfigController.store_election_crypto_data()
 
 @crypto_config_bp.route('/crypto_configs/temp-election-id', methods=['GET'])
 @admin_required
@@ -29,7 +30,8 @@ def generate_crypto_key_pair():
 @admin_required
 def generate_in_memory_key_pair():
     """Generate key pair without storing in the database"""
-    return InMemoryKeyController.generate_paillier_keypair()
+    # Use the CryptoConfigController method directly for consistency
+    return CryptoConfigController.generate_key_pair_in_memory()
 
 @crypto_config_bp.route('/crypto_configs/distribute', methods=['POST'])
 @admin_required

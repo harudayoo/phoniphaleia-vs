@@ -93,13 +93,50 @@ export default function TallyElectionPage() {
       arr[idx] = value;
       return arr;
     });
-  };
-
-  // Handle file upload for key share
+  };  // Handle file upload for key share
   const handleFileUpload = (idx: number, file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      handleKeyShareChange(idx, e.target?.result as string);
+      const content = e.target?.result as string;
+      if (content) {
+        // Extract just the key share line from the file content
+        const lines = content.split('\n');
+        let keyShareLine = '';
+        
+        // Look for a line that contains the key share (format: number:hex)
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Match pattern like "1:1c8973dddb6575fe..." or just "1c8973dddb6575fe..." 
+          if (/^\d+:[a-fA-F0-9]+$/.test(trimmed)) {
+            keyShareLine = trimmed;
+            break;
+          }
+        }
+        
+        // If we didn't find the expected format, try to extract from "Key Share:" line
+        if (!keyShareLine) {
+          for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes('Key Share:')) {
+              // Check the next line
+              if (i + 1 < lines.length) {
+                const nextLine = lines[i + 1].trim();
+                if (/^\d+:[a-fA-F0-9]+$/.test(nextLine)) {
+                  keyShareLine = nextLine;
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        if (keyShareLine) {
+          handleKeyShareChange(idx, keyShareLine);
+          console.log(`Loaded key share ${idx + 1}:`, keyShareLine);
+        } else {
+          console.error('Could not extract key share from file content:', content);
+          setError(`Invalid key share format in file. Expected format: "number:hexadecimal"`);
+        }
+      }
     };
     reader.readAsText(file);
   };  // Construct private key from key shares
@@ -107,10 +144,29 @@ export default function TallyElectionPage() {
     setStep("constructing");
     setNotification(null);
     setError(null);
+    
+    // Validate and clean up key shares before sending
+    const cleanedShares = keyShares.map((share, idx) => {
+      if (!share || share.trim() === '') {
+        throw new Error(`Key share ${idx + 1} is empty`);
+      }
+      
+      const trimmed = share.trim();
+      
+      // Check if it matches the expected format (number:hex)
+      if (!/^\d+:[a-fA-F0-9]+$/.test(trimmed)) {
+        throw new Error(`Key share ${idx + 1} has invalid format. Expected: "number:hexadecimal"`);
+      }
+      
+      return trimmed;
+    });
+    
+    console.log("Sending cleaned key shares:", cleanedShares);
+    
     fetch(`${API_URL}/election_results/reconstruct`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ election_id, shares: keyShares }),
+      body: JSON.stringify({ election_id, shares: cleanedShares }),
     }).then(async (res) => {
         if (!res.ok) {
           const errorText = await res.text();

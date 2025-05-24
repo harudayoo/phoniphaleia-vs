@@ -13,9 +13,45 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
-from app.services.crypto.threshold_elgamal import ThresholdElGamalService
-from app.services.crypto.shamir import split_secret, reconstruct_secret, next_prime, serialize_share, deserialize_share
+import shamirs
 from app.services.zkp.snarkjs_verifier import SnarkjsVerifier
+
+# Helper for next_prime if sympy is not available
+try:
+    from sympy import nextprime as next_prime
+except ImportError:
+    def next_prime(n):
+        def is_prime(num):
+            if num < 2:
+                return False
+            if num == 2:
+                return True
+            if num % 2 == 0:
+                return False
+            # Use integer square root to avoid overflow with very large numbers
+            sqrt_num = int(num ** 0.5) if num < 10**15 else isqrt(num)
+            for i in range(3, sqrt_num + 1, 2):
+                if num % i == 0:
+                    return False
+            return True
+        
+        def isqrt(n):
+            """Integer square root for very large numbers"""
+            if n < 0:
+                raise ValueError("Square root not defined for negative numbers")
+            if n == 0:
+                return 0
+            x = n
+            y = (x + 1) // 2
+            while y < x:
+                x = y
+                y = (x + n // x) // 2
+            return x
+            
+        candidate = n + 1
+        while not is_prime(candidate):
+            candidate += 1
+        return candidate
 
 class TestCryptoIntegrated(unittest.TestCase):
     """
@@ -117,38 +153,41 @@ class TestCryptoIntegrated(unittest.TestCase):
         prime_candidate = 2**bits_needed
         prime = next_prime(prime_candidate)
         
-        # Generate shares
-        shares = split_secret(secret, n, k)
-        self.assertEqual(len(shares), n)
-        print(f"Generated {len(shares)} shares")
+        # Generate shares using shamirs library
+        shares_raw = shamirs.shares(secret, quantity=n, modulus=prime, threshold=k)
+        self.assertEqual(len(shares_raw), n)
+        print(f"Generated {len(shares_raw)} shares")
         
         # Print debug info
         print(f"Prime modulus: {prime}")
-        print(f"First share: {shares[0]}")
+        print(f"First share: {shares_raw[0]}")
         
         # Reconstruct from minimum number of shares
-        min_shares = shares[:k]
+        min_shares = shares_raw[:k]
         print(f"Reconstructing from {len(min_shares)} shares")
         
         # When reconstructing, the secret might be congruent to the original secret modulo the prime
         # So we need to compare them modulo the prime
-        reconstructed = reconstruct_secret(min_shares, prime)
+        reconstructed = shamirs.interpolate(min_shares)
         self.assertEqual(reconstructed % prime, secret % prime)
         print(f"Successfully reconstructed secret (mod prime): {reconstructed % prime}")
         print(f"Original secret (mod prime): {secret % prime}")
         
         # Try with more than the threshold
-        more_shares = shares[:k+1]
+        more_shares = shares_raw[:k+1]
         print(f"Reconstructing from {len(more_shares)} shares")
-        reconstructed = reconstruct_secret(more_shares, prime)
+        reconstructed = shamirs.interpolate(more_shares)
         self.assertEqual(reconstructed % prime, secret % prime)
         print(f"Successfully reconstructed secret: {reconstructed % prime}")
         
         # Test serialization and deserialization
         print("Testing share serialization/deserialization")
-        for share in shares:
-            share_str = serialize_share(share)
-            deserialized = deserialize_share(share_str)
+        for share in shares_raw:
+            # Serialize as x:hex(y)
+            share_str = f"{share[0]}:{hex(share[1])[2:]}"
+            # Deserialize
+            x_str, y_hex = share_str.split(':', 1)
+            deserialized = (int(x_str), int(y_hex, 16))
             self.assertEqual(share, deserialized)
         print("Serialization and deserialization successful")
 

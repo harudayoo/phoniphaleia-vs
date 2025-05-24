@@ -148,19 +148,30 @@ class ElectionController:
                     candidate_desc=cand.get('candidate_desc')
                 )
                 db.session.add(candidate)
-            
-            # Handle crypto_id if provided - link crypto config to this election
+              # Handle crypto_id if provided - link crypto config to this election
             crypto_id = data.get('crypto_id')
+            crypto_data = data.get('crypto_data')
+            
             if crypto_id:
                 try:
                     from app.controllers.crypto_config_controller import CryptoConfigController
                     # Update the crypto config with the new election ID
-                    
                     crypto_result = CryptoConfigController.update_election_id(crypto_id, election.election_id)
                     print(f"Updated crypto config {crypto_id} to election {election.election_id}")
                 except Exception as crypto_ex:
                     print(f"Error updating crypto config: {crypto_ex}")
                     # Don't fail the whole transaction if crypto linking fails
+            # Handle crypto data if provided directly
+            elif crypto_data:
+                try:
+                    from app.controllers.crypto_config_controller import CryptoConfigController
+                    # Store the crypto data
+                    crypto_data['election_id'] = election.election_id
+                    crypto_result = CryptoConfigController.store_election_crypto_data(crypto_data)
+                    print(f"Stored crypto data for election {election.election_id}")
+                except Exception as crypto_ex:
+                    print(f"Error storing crypto data: {crypto_ex}")
+                    # Don't fail the whole transaction if crypto storing fails
             
             db.session.commit()
 
@@ -244,7 +255,11 @@ class ElectionController:
             from app.models.vote import Vote
             Vote.query.filter_by(election_id=election_id).delete()
 
-            # 2. Delete all candidates linked to this election (and their photos)
+            # 2. Delete all election results for this election (MUST be before deleting candidates)
+            from app.models.election_result import ElectionResult
+            ElectionResult.query.filter_by(election_id=election_id).delete()
+
+            # 3. Delete all candidates linked to this election (and their photos)
             from app.models.candidate import Candidate
             candidates = Candidate.query.filter_by(election_id=election_id).all()
             for cand in candidates:
@@ -258,7 +273,7 @@ class ElectionController:
                             print(f"Failed to remove candidate photo {abs_photo_path}: {e}")
                 db.session.delete(cand)
 
-            # 3. Delete all key shares and crypto configs linked to this election
+            # 4. Delete all key shares and crypto configs linked to this election
             from app.models.crypto_config import CryptoConfig
             from app.models.key_share import KeyShare
             from app.models.trusted_authority import TrustedAuthority
@@ -280,9 +295,6 @@ class ElectionController:
 
             from app.models.election_waitlist import ElectionWaitlist
             ElectionWaitlist.query.filter_by(election_id=election_id).delete()
-
-            from app.models.election_result import ElectionResult
-            ElectionResult.query.filter_by(election_id=election_id).delete()
 
             db.session.delete(election)
             db.session.commit()
@@ -439,9 +451,7 @@ class ElectionController:
             return jsonify(list(grouped.values()))
         except Exception as ex:
             print('Error in get_candidates_by_election:', ex)
-            return jsonify({'error': 'Failed to fetch candidates'}), 500
-
-    @staticmethod
+            return jsonify({'error': 'Failed to fetch candidates'}), 500    @staticmethod
     def submit_vote(election_id):
         """Submit a vote for an election. Enforce one per position, one per election per voter."""
         try:
@@ -449,14 +459,23 @@ class ElectionController:
             print('DEBUG submit_vote payload:', data)
             student_id = data.get('student_id')
             votes = data.get('votes')  # [{position_id, candidate_id, encrypted_vote, zkp_proof, verification_receipt}]
+            
             if not student_id or not isinstance(votes, list):
                 print('DEBUG submit_vote error: missing student_id or votes')
                 return jsonify({'error': 'Missing student_id or votes'}), 400
+                
+            # Validate that all votes have required encrypted_vote field
+            for v in votes:
+                if not v.get('encrypted_vote'):
+                    print('DEBUG submit_vote error: missing encrypted_vote for candidate', v.get('candidate_id'))
+                    return jsonify({'error': 'All votes must include encrypted_vote'}), 400
+            
             # Check for duplicate vote for this election
             existing = Vote.query.filter_by(election_id=election_id, student_id=student_id).first()
             if existing:
                 print('DEBUG submit_vote error: already voted')
                 return jsonify({'error': 'You have already voted in this election.'}), 400
+                
             # Enforce one vote per position
             seen_positions = set()
             for v in votes:
@@ -465,22 +484,35 @@ class ElectionController:
                     print('DEBUG submit_vote error: multiple votes for same position')
                     return jsonify({'error': 'Multiple votes for the same position are not allowed.'}), 400
                 seen_positions.add(pos_id)
-            # Save votes
+                
+            # Save votes with proper encrypted data
             for v in votes:
-                print('DEBUG submit_vote saving vote:', v)
+                print('DEBUG submit_vote saving vote for candidate:', v.get('candidate_id'))
+                
+                # Store ZKP proof if provided, otherwise mark as verified for now
+                zkp_status = 'verified'  # Default status
+                if 'zkp_proof' in v and v['zkp_proof']:
+                    zkp_status = 'verified_with_proof'
+                
                 vote = Vote(
                     election_id=election_id,
                     student_id=student_id,
                     candidate_id=v['candidate_id'],
-                    encrypted_vote=v.get('encrypted_vote', ''),
-                    zkp_proof='verified',
+                    encrypted_vote=v['encrypted_vote'],  # Store the encrypted vote
+                    zkp_proof=zkp_status,
                     verification_receipt='sent',
                     vote_status='cast'
                 )
                 db.session.add(vote)
+                
             db.session.commit()
             print('DEBUG submit_vote success')
-            return jsonify({'message': 'Vote submitted successfully'})
+            return jsonify({
+                'message': 'Vote submitted successfully',
+                'votes_count': len(votes),
+                'election_id': election_id
+            })
+            
         except Exception as ex:
             db.session.rollback()
             print('Error in submit_vote:', ex)
@@ -782,3 +814,28 @@ class ElectionController:
         except Exception as ex:
             print('Error in get_election_results:', ex)
             return jsonify([]), 500
+
+    @staticmethod
+    def get_crypto_config(election_id):
+        """Get the crypto configuration for an election"""
+        try:
+            from app.models.crypto_config import CryptoConfig
+            
+            crypto_config = CryptoConfig.query.filter_by(
+                election_id=election_id,
+                status='active'
+            ).first()
+            
+            if not crypto_config:
+                return jsonify({'error': 'No crypto configuration found for this election'}), 404
+                
+            return jsonify({
+                'crypto_id': crypto_config.crypto_id,
+                'public_key': crypto_config.public_key,
+                'key_type': crypto_config.key_type,
+                'meta_data': crypto_config.meta_data
+            }), 200
+            
+        except Exception as ex:
+            print('Error in get_crypto_config:', ex)
+            return jsonify({'error': 'Failed to fetch crypto configuration'}), 500

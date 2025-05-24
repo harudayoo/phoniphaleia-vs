@@ -66,3 +66,8 @@ def debug_election_results():
         })
     
     return jsonify(output)
+
+@election_results_bp.route('/election_results/<int:election_id>', methods=['DELETE'])
+def delete_election_result(election_id):
+    from app.controllers.election_results_controller import ElectionResultsController
+    return ElectionResultsController.delete_election_result(election_id)

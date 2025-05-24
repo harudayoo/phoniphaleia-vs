@@ -68,8 +68,7 @@ class TestVerificationController(unittest.TestCase):
         db.session.add(election)
         db.session.commit()
         self.election_id = election.election_id
-        
-        # Create crypto configs
+          # Create crypto configs
         # Mock ElGamal config
         elgamal_config = CryptoConfig(
             election_id=self.election_id,
@@ -81,7 +80,7 @@ class TestVerificationController(unittest.TestCase):
                 "p": "789",
                 "q": "101"
             }),
-            metadata=json.dumps({
+            meta_data=json.dumps({
                 "n": 5,
                 "t": 3,
                 "crypto_type": "threshold_elgamal"
@@ -91,8 +90,7 @@ class TestVerificationController(unittest.TestCase):
         
         # Mock ZKP verification key config
         zkp_config = CryptoConfig(
-            election_id=self.election_id,
-            key_type="verification_key",
+            election_id=self.election_id,            key_type="verification_key",
             status="active",
             public_key=json.dumps({
                 "protocol": "groth16",
@@ -104,13 +102,11 @@ class TestVerificationController(unittest.TestCase):
         db.session.add(zkp_config)
         db.session.commit()
         
-        self.elgamal_config_id = elgamal_config.config_id
-        
-        # Create key shares
+        self.elgamal_config_id = elgamal_config.crypto_id  # Fixed: use crypto_id instead of config_id
+          # Create key shares
         key_share = KeyShare(
             crypto_id=self.elgamal_config_id,
-            trusted_authority_id=1,
-            share_index=1,
+            authority_id=1,
             share_value="123456"
         )
         db.session.add(key_share)

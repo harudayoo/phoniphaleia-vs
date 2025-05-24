@@ -5,7 +5,6 @@ import { Dialog, Transition } from '@headlessui/react';
 import AdminLayout from '@/layouts/AdminLayout';
 import { FaDownload, FaEdit, FaEye, FaTrash, FaLock, FaLockOpen } from 'react-icons/fa';
 import { Filter, Calendar, ArrowUp, Key, Shield } from 'lucide-react';
-import Link from 'next/link';
 
 // Import reusable components
 import PageHeader from '@/components/admin/PageHeader';
@@ -101,15 +100,23 @@ export default function AdminResultsPage() {
   const [ongoingElections, setOngoingElections] = useState<Result[]>([]);
   const [fetchingOngoing, setFetchingOngoing] = useState(false);
   const [selectedElection, setSelectedElection] = useState<Result | null>(null);
-  const [proceeding, setProceeding] = useState(false);  useEffect(() => {
-    const fetchResults = async () => {      try {        setLoading(true);
+  const [proceeding, setProceeding] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState<number | null>(null);
+  const [notification, setNotification] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchResults = async () => {
+      try {
+        setLoading(true);
         const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
         // Use the proper endpoint that returns data from ElectionResult table
         // This endpoint relies solely on homomorphic encryption for vote counting
         const res = await fetch(`${backendUrl}/election_results`);
         if (!res.ok) throw new Error('Failed to fetch results');
         const data = await res.json();
-          // Map backend response to frontend Result type
+        
+        // Map backend response to frontend Result type
         const mappedResults: Result[] = (data as BackendElectionResult[]).map((item) => ({
           result_id: item.election_id,
           election_name: item.election_name,
@@ -146,11 +153,10 @@ export default function AdminResultsPage() {
   const fetchOngoing = async (): Promise<void> => {
     setFetchingOngoing(true);
     try {
-      // Use full backend URL for local dev, or env var if set
       const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-      const res = await fetch(`${backendUrl}/elections/ongoing`);
+      // Fetch all elections from the database (Election model)
+      const res = await fetch(`${backendUrl}/elections`);
       const data: BackendOngoingElection[] = await res.json();
-      console.log('Fetched elections for modal:', data); // Debug log
       // Only include elections with status 'Ongoing' (case-insensitive)
       const filtered = (Array.isArray(data) ? data : []).filter(
         el => (el.election_status || '').toLowerCase() === 'ongoing'
@@ -195,6 +201,49 @@ export default function AdminResultsPage() {
         router.push(`/admin/results/tally?election_id=${selectedElection.result_id}`);
       }
     }, 1000);
+  };
+
+  // Download CSV for a result
+  const handleDownload = (result: Result) => {
+    if (!Array.isArray(result.candidates) || result.candidates.length === 0) {
+      setNotification('No candidate data to export.');
+      return;
+    }
+    const csv = [
+      'Candidate, Votes, Percentage, Winner',
+      ...result.candidates.map(c => `${c.name},${c.votes},${c.percentage},${c.winner ? 'Yes' : 'No'}`)
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${result.election_name.replace(/\s+/g, '_')}_results.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotification('Results exported as CSV.');
+  };
+
+  // Delete result (with confirmation)
+  const handleDelete = async (result: Result) => {
+    setError(null);
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+      // Only delete the election results, not the election session
+      const res = await fetch(`${backendUrl}/election_results/${result.result_id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to delete election results.');
+      }
+      setResults((prev: Result[]) => prev.filter(r => r.result_id !== result.result_id));
+      setNotification('Election results deleted successfully.');
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message || 'Failed to delete election results.');
+      } else {
+        setError('Failed to delete election results.');
+      }
+    }
+    setShowDeleteModal(null);
   };
 
   const filtered = results
@@ -282,35 +331,50 @@ export default function AdminResultsPage() {
         
         <div className="flex justify-between items-center pt-3 border-t border-gray-200">
           <div className="flex space-x-2">
-            <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
+            <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded" onClick={() => handleDownload(result)}>
               <FaDownload size={16} />
             </button>
-            <Link href={`/admin/results/${result.result_id}`}>
-              <button className="p-2 text-green-600 hover:bg-green-50 rounded">
-                <FaEye size={16} />
-              </button>
-            </Link>
+            <button type="button" className="p-2 text-green-600 hover:bg-green-50 rounded" onClick={() => router.push(`/admin/results/${result.result_id}`)}>
+              <FaEye size={16} />
+            </button>
           </div>
           <div className="flex space-x-2">
             {result.status === 'Published' ? (
-              <button className="p-2 text-amber-600 hover:bg-amber-50 rounded">
+              <button type="button" className="p-2 text-amber-600 hover:bg-amber-50 rounded" disabled>
                 <FaLock size={16} />
               </button>
             ) : (
-              <button className="p-2 text-blue-600 hover:bg-blue-50 rounded">
+              <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded" disabled>
                 <FaLockOpen size={16} />
               </button>
             )}
-            <Link href={`/admin/results/${result.result_id}/edit`}>
-              <button className="p-2 text-amber-600 hover:bg-amber-50 rounded">
-                <FaEdit size={16} />
-              </button>
-            </Link>
-            <button className="p-2 text-red-600 hover:bg-red-50 rounded">
+            <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded" onClick={() => router.push(`/admin/results/${result.result_id}/edit`)}>
+              <FaEdit size={16} />
+            </button>
+            <button type="button" className="p-2 text-red-600 hover:bg-red-50 rounded" onClick={() => setShowDeleteModal(result.result_id)}>
               <FaTrash size={16} />
             </button>
           </div>
         </div>
+        {showDeleteModal === result.result_id && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/70 bg-opacity-30 z-50">
+            <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full animate-fadeIn">
+              <h3 className="text-lg font-semibold mb-2">Confirm Deletion</h3>
+              <div className="mb-4 text-gray-600">
+                Are you sure you want to delete the results for <b>{result.election_name}</b>? This action cannot be undone.
+              </div>
+              {error && <div className="bg-red-100 text-red-800 px-4 py-2 rounded mb-2 text-center">{error}</div>}
+              <div className="flex gap-3 justify-end">
+                <button type="button" className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowDeleteModal(null)}>
+                  Cancel
+                </button>
+                <button type="button" className="px-4 py-2 rounded bg-red-700 text-white hover:bg-red-800" onClick={() => handleDelete(result)}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -342,7 +406,8 @@ export default function AdminResultsPage() {
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {filtered.map((result) => (
-            <tr key={result.result_id} className="hover:bg-gray-50">              <td className="px-6 py-4 whitespace-nowrap">
+            <tr key={result.result_id} className="hover:bg-gray-50">
+              <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex flex-col">
                   <div className="text-sm font-medium text-gray-900">{result.election_name}</div>
                   <div className="text-sm text-gray-500 truncate max-w-[200px]">{result.description}</div>
@@ -379,20 +444,35 @@ export default function AdminResultsPage() {
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div className="flex justify-end space-x-2">
-                  <Link href={`/admin/results/${result.result_id}`}>
-                    <button className="p-1 text-blue-600 hover:text-blue-900">
-                      <FaEye size={16} />
-                    </button>
-                  </Link>
-                  <Link href={`/admin/results/${result.result_id}/edit`}>
-                    <button className="p-1 text-amber-600 hover:text-amber-900">
-                      <FaEdit size={16} />
-                    </button>
-                  </Link>
-                  <button className="p-1 text-red-600 hover:text-red-900">
+                  <button type="button" className="p-1 text-blue-600 hover:text-blue-900" onClick={() => router.push(`/admin/results/${result.result_id}`)}>
+                    <FaEye size={16} />
+                  </button>
+                  <button type="button" className="p-1 text-amber-600 hover:text-amber-900" onClick={() => router.push(`/admin/results/${result.result_id}/edit`)}>
+                    <FaEdit size={16} />
+                  </button>
+                  <button type="button" className="p-1 text-red-600 hover:text-red-900" onClick={() => setShowDeleteModal(result.result_id)}>
                     <FaTrash size={16} />
                   </button>
                 </div>
+                {showDeleteModal === result.result_id && (
+                  <div className="fixed inset-0 flex items-center justify-center bg-black/70 bg-opacity-30 z-50">
+                    <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full animate-fadeIn">
+                      <h3 className="text-lg font-semibold mb-2">Confirm Deletion</h3>
+                      <div className="mb-4 text-gray-600">
+                        Are you sure you want to delete the results for <b>{result.election_name}</b>? This action cannot be undone.
+                      </div>
+                      {error && <div className="bg-red-100 text-red-800 px-4 py-2 rounded mb-2 text-center">{error}</div>}
+                      <div className="flex gap-3 justify-end">
+                        <button type="button" className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowDeleteModal(null)}>
+                          Cancel
+                        </button>
+                        <button type="button" className="px-4 py-2 rounded bg-red-700 text-white hover:bg-red-800" onClick={() => handleDelete(result)}>
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </td>
             </tr>
           ))}
@@ -565,6 +645,13 @@ export default function AdminResultsPage() {
           </div>
         </Dialog>
       </Transition>
+
+      {notification && (
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded shadow-lg z-50">
+          {notification}
+          <button type="button" className="ml-4 text-white font-bold" onClick={() => setNotification(null)}>&times;</button>
+        </div>
+      )}
     </AdminLayout>
   );
 }

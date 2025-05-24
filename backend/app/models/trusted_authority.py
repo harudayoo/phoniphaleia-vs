@@ -11,5 +11,9 @@ class TrustedAuthority(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # This field is not part of the database schema but is used programmatically
+    # to associate authorities with elections when creating new authorities
+    election_id = None
+    
     def __repr__(self):
         return f'<TrustedAuthority {self.authority_name}>'

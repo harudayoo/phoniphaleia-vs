@@ -288,8 +288,7 @@ export default function CreateElectionPage() {
         n_personnel: newAuthorityIds.length,
         threshold: Math.ceil(newAuthorityIds.length / 2) + 1,
         creation_timestamp: new Date().toISOString()
-      });
-      const storeRes = await fetch(`${API_URL}/crypto_configs/store-with-shares`, {
+      });      const storeRes = await fetch(`${API_URL}/crypto_configs/store-with-shares`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${adminToken}`,
@@ -298,8 +297,11 @@ export default function CreateElectionPage() {
         body: JSON.stringify({
           election_id: election.election_id,
           public_key: keyGenResult.public_key,
+          crypto_type: 'paillier',
           key_type: 'paillier',
-          meta_data: metaData,
+          threshold: keyGenResult.threshold,
+          security_data: keyGenResult.security_data || {},
+          meta_data: keyGenResult.meta_data || metaData,
           authority_shares: authorityShares
         })
       });
