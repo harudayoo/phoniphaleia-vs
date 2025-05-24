@@ -98,11 +98,9 @@ describe('Vote Verification Flow', () => {
     const isProofValid = result.proof && result.publicSignals 
       ? await verifyVoteProof(result.proof, result.publicSignals)
       : false;
-    expect(isProofValid).toBe(true);
-    
-    // 3. Encrypt votes
-    const encryptedVotes = testVoteData.candidateIds.map(candidateId => {
-      return encryptVote(candidateId, mockElGamalPublicKey);
+    expect(isProofValid).toBe(true);    // 3. Encrypt votes (encrypt value 1 for each vote, not the candidate ID)
+    const encryptedVotes = testVoteData.candidateIds.map(() => {
+      return encryptVote(1, mockElGamalPublicKey); // Encrypt 1, not candidateId
     });
     
     // Verify we have encrypted votes

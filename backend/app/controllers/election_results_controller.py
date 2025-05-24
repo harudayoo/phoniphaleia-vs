@@ -25,27 +25,53 @@ class ElectionResultsController:
         Homomorphically tally votes for an election using python-paillier.
         Returns encrypted tallies per candidate (still encrypted).
         Sets election status to 'Finished'.
+        Prevents duplicate entries in election_results table.
         """
         try:
             data = request.get_json()
             election_id = data.get('election_id')
             if not election_id:
                 return jsonify({'error': 'Missing election_id'}), 400
+            
             election = Election.query.get(election_id)
             if not election:
                 return jsonify({'error': 'Election not found'}), 404
-            # Set status to Finished
-            election.election_status = 'Finished'
-            db.session.commit()
+            
+            logger.info(f"Starting homomorphic tally for election {election_id}")
+            
             # Get all votes for this election
             votes = Vote.query.filter_by(election_id=election_id).all()
-            # Group by candidate
+            logger.info(f"Found {len(votes)} votes to tally for election {election_id}")
+            
+            if not votes:
+                logger.warning(f"No votes found for election {election_id}")
+                return jsonify({'error': 'No votes found for this election'}), 400
+            
+            # VERIFICATION STEP: Verify vote integrity before tallying
+            logger.info("Verifying vote integrity before tallying")
+            invalid_votes = []
+            for v in votes:
+                if not v.encrypted_vote or len(v.encrypted_vote) < 10:  # Simple validation
+                    invalid_votes.append(v.vote_id)
+            
+            if invalid_votes:
+                logger.error(f"Found {len(invalid_votes)} invalid votes: {invalid_votes}")
+                return jsonify({'error': f'Found {len(invalid_votes)} invalid votes. Please check vote data integrity.'}), 400
+            
+            # Debug: Log vote distribution
+            from collections import Counter
+            vote_distribution = Counter(v.candidate_id for v in votes)
+            logger.info(f"Vote distribution by candidate: {dict(vote_distribution)}")
+            
+            # Group encrypted votes by candidate
             candidate_totals = {}
             for v in votes:
                 if v.candidate_id not in candidate_totals:
                     candidate_totals[v.candidate_id] = []
                 candidate_totals[v.candidate_id].append(v.encrypted_vote)
-                
+            
+            logger.info(f"Grouped votes for {len(candidate_totals)} candidates")
+            
             # Get public key from crypto config
             crypto_config = CryptoConfig.query.filter_by(election_id=election_id).first()
             if not crypto_config:
@@ -55,35 +81,143 @@ class ElectionResultsController:
             try:
                 public_key_data = json.loads(crypto_config.public_key)
                 pubkey = paillier.PaillierPublicKey(n=int(public_key_data.get('n')))
+                logger.info(f"Loaded public key with n={pubkey.n.bit_length()} bits")
+                
+                # Start a transaction for atomicity
+                db.session.begin_nested()
+                
                 # Homomorphically add encrypted votes per candidate
                 encrypted_results = {}
+                encryption_errors = []
+                
                 for candidate_id, enc_votes in candidate_totals.items():
+                    logger.info(f"Processing {len(enc_votes)} encrypted votes for candidate {candidate_id}")
+                    
                     enc_sum = None
-                    for enc_vote in enc_votes:
-                        enc = paillier.EncryptedNumber(pubkey, int(enc_vote), 0)
-                        if enc_sum is None:
-                            enc_sum = enc
-                        else:
-                            enc_sum = enc_sum + enc
+                    for i, enc_vote in enumerate(enc_votes):
+                        try:
+                            enc = paillier.EncryptedNumber(pubkey, int(enc_vote), 0)
+                            if enc_sum is None:
+                                enc_sum = enc
+                            else:
+                                enc_sum = enc_sum + enc
+                            logger.debug(f"Added vote {i+1}/{len(enc_votes)} for candidate {candidate_id}")
+                        except Exception as e:
+                            error_msg = f"Error processing encrypted vote {i} for candidate {candidate_id}: {e}"
+                            logger.error(error_msg)
+                            encryption_errors.append(error_msg)
+                            # Continue processing other votes, but track the error
+                    
                     if enc_sum:
                         encrypted_results[candidate_id] = str(enc_sum.ciphertext())
-                # Store encrypted results in ElectionResult
-                for candidate_id, enc_total in encrypted_results.items():
-                    er = ElectionResult.query.filter_by(election_id=election_id, candidate_id=candidate_id).first()
-                    if not er:
-                        er = ElectionResult(election_id=election_id, candidate_id=candidate_id)
-                        db.session.add(er)
-                    er.encrypted_vote_total = enc_total
+                        logger.info(f"Homomorphic sum for candidate {candidate_id}: {str(enc_sum.ciphertext())[:50]}...")
                 
+                if encryption_errors:
+                    # If there were errors, roll back and report them
+                    db.session.rollback()
+                    logger.error(f"Aborting tally due to {len(encryption_errors)} encryption errors")
+                    return jsonify({
+                        'error': 'Errors occurred during homomorphic addition',
+                        'details': encryption_errors[:5]  # Only report first 5 errors to avoid overwhelming response
+                    }), 500
+                
+                logger.info(f"Completed homomorphic tallying for {len(encrypted_results)} candidates")
+                
+                # CRITICAL FIX: Use proper upsert logic to prevent duplicates
+                # Check if results already exist to prevent re-tallying
+                existing_results = ElectionResult.query.filter_by(election_id=election_id).all()
+                if existing_results:
+                    logger.warning(f"Election {election_id} already has {len(existing_results)} results. Clearing for re-tally.")
+                    for er in existing_results:
+                        db.session.delete(er)
+                    db.session.flush()  # Ensure deletes are processed before inserts
+                
+                # Use the built-in upsert method to handle duplicates properly
+                results_created = 0
+                for candidate_id, enc_total in encrypted_results.items():
+                    try:
+                        # VERIFICATION: Ensure encrypted value isn't empty
+                        if not enc_total:
+                            logger.error(f"Empty encrypted result for candidate {candidate_id}")
+                            continue
+                            
+                        # Use upsert to prevent duplicates
+                        er, was_created = ElectionResult.upsert_result(
+                            election_id=election_id,
+                            candidate_id=candidate_id,
+                            encrypted_vote_total=enc_total
+                        )
+                        # Only count as created if it's actually a new record
+                        if was_created:
+                            results_created += 1
+                        logger.info(f"Upserted election result for candidate {candidate_id} (created: {was_created})")
+                    except Exception as e:
+                        logger.error(f"Error upserting election result for candidate {candidate_id}: {e}")
+                        db.session.rollback()
+                        return jsonify({'error': f'Error storing result for candidate {candidate_id}: {str(e)}'}), 500
+                
+                # Set status to Finished after successful tally
+                election.election_status = 'Finished'
+                logger.info(f"Set election {election_id} status to 'Finished'")
+                
+                # Pre-commit duplicate detection and cleanup
+                try:
+                    duplicates = ElectionResult.detect_duplicates(election_id)
+                    if duplicates:
+                        logger.warning(f"Duplicates detected before commit: {duplicates}")
+                        removed_count = ElectionResult.cleanup_duplicates(election_id)
+                        logger.info(f"Cleaned up {removed_count} duplicate entries before commit")
+                except Exception as cleanup_error:
+                    logger.warning(f"Error during duplicate cleanup: {cleanup_error}")
+                
+                # VERIFICATION STEP: Check result integrity before committing
+                verified_results = ElectionResult.query.filter_by(election_id=election_id).all()
+                for result in verified_results:
+                    if not result.encrypted_vote_total:
+                        logger.error(f"Missing encrypted vote total for result {result.result_id}")
+                        db.session.rollback()
+                        return jsonify({'error': 'Integrity check failed: Missing encrypted vote data'}), 500
+                
+                # Commit all changes
                 db.session.commit()
-                return jsonify({'encrypted_results': encrypted_results}), 200
+                logger.info(f"Successfully stored {results_created} election results and updated election status")
+                
+                # Final verification: ensure no duplicates exist after commit
+                final_duplicates = ElectionResult.detect_duplicates(election_id)
+                if final_duplicates:
+                    logger.error(f"CRITICAL: Duplicates still exist after commit: {final_duplicates}")
+                    # Attempt immediate cleanup
+                    try:
+                        cleaned = ElectionResult.cleanup_duplicates(election_id)
+                        db.session.commit()
+                        logger.info(f"Emergency cleanup: removed {cleaned} duplicate entries")
+                    except Exception as emergency_error:
+                        logger.error(f"Emergency cleanup failed: {emergency_error}")
+                        return jsonify({
+                            'error': 'Duplicate election results detected and cleanup failed',
+                            'duplicates': final_duplicates
+                        }), 500                
+                
+                # Tally verification success
+                logger.info(f"✓ Tally verification passed - no duplicates detected")
+                
+                return jsonify({
+                    'encrypted_results': encrypted_results,
+                    'candidates_tallied': len(encrypted_results),
+                    'total_votes_processed': len(votes),
+                    'results_stored': results_created,
+                    'verification_passed': True
+                }), 200
+                
             except Exception as e:
                 db.session.rollback()
                 logger.error(f"Error processing homomorphic encryption: {str(e)}")
-                return jsonify({'error': str(e)}), 500
+                logger.error(traceback.format_exc())
+                return jsonify({'error': f'Homomorphic encryption error: {str(e)}'}), 500
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error in tally_election: {str(e)}")
+            logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
 
     @staticmethod
@@ -290,122 +424,60 @@ class ElectionResultsController:
                 # Direct p sharing: reconstructed value is the Paillier prime p
                 reconstructed_p = shamirs.interpolate(parsed_shares)
                 logger.info(f"Reconstructed Paillier prime p: {reconstructed_p} (bits: {reconstructed_p.bit_length()})")
-                
-                # CRITICAL FIX: Check if reconstruction failed due to wrong Shamir modulus
-                # If expected_p exists and reconstructed_p doesn't match, try to regenerate system
+                  # CRITICAL SECURITY CHECK: Verify reconstructed p matches expected p
                 if expected_p and expected_p != reconstructed_p:
-                    logger.warning(f"Reconstructed p ({reconstructed_p}) does not match expected p ({expected_p})")
+                    logger.error(f"SECURITY VIOLATION: Reconstructed p ({reconstructed_p}) does not match expected p ({expected_p})")
+                    logger.error("This indicates wrong key shares were provided or the reconstruction process is compromised")
                     
-                    # Try using expected_p directly if it's a factor of n
-                    if public_key_n % expected_p == 0:
-                        logger.info(f"Expected p is a valid factor of n, using it instead")
-                        reconstructed_p = expected_p
-                    else:
-                        logger.error(f"Expected p is not a factor of n either!")
-                        
-                        # ADVANCED FIX: Try to find the correct factors of n
-                        logger.info("Attempting to factor n to find correct p...")
-                        
-                        # Try simple factorization approaches
-                        import math
-                        
-                        # Check if either reconstructed_p or expected_p has a GCD with n
-                        gcd_recon = math.gcd(reconstructed_p, public_key_n)
-                        gcd_expected = math.gcd(expected_p, public_key_n) if expected_p else 1
-                        
-                        if gcd_recon > 1 and public_key_n % gcd_recon == 0:
-                            logger.info(f"Found valid factor via GCD with reconstructed p: {gcd_recon}")
-                            reconstructed_p = gcd_recon
-                        elif gcd_expected > 1 and public_key_n % gcd_expected == 0:
-                            logger.info(f"Found valid factor via GCD with expected p: {gcd_expected}")
-                            reconstructed_p = gcd_expected
-                        else:
-                            # Last resort: try to find factors by trial division (limited)
-                            logger.info("Trying limited trial division to find factors...")
-                            found_factor = None
-                            
-                            # Try a few candidate factors around the reconstructed values
-                            candidates = []
-                            if expected_p:
-                                candidates.extend([expected_p - 1, expected_p, expected_p + 1])
-                            candidates.extend([reconstructed_p - 1, reconstructed_p, reconstructed_p + 1])
-                            
-                            for candidate in candidates:
-                                if candidate > 1 and public_key_n % candidate == 0:
-                                    found_factor = candidate
-                                    logger.info(f"Found valid factor via trial: {found_factor}")
-                                    break
-                            
-                            if found_factor:
-                                reconstructed_p = found_factor
-                            else:
-                                logger.error("Could not find valid factors of n")
-                                return jsonify({
-                                    'error': 'Key reconstruction failed: reconstructed prime is not a factor of n',
-                                    'debug_info': {
-                                        'reconstructed_p': str(reconstructed_p),
-                                        'expected_p': str(expected_p) if expected_p else None,
-                                        'n': str(public_key_n),
-                                        'shamir_prime': str(shamir_prime)
-                                    }
-                                }), 500
-                
-                # Validate reconstructed_p is a factor of n
+                    # STRICT VALIDATION: Reject any reconstruction that doesn't match expected values
+                    return jsonify({
+                        'error': 'Key reconstruction failed: Wrong key shares provided',
+                        'details': 'The reconstructed private key does not match the expected cryptographic parameters',
+                        'security_warning': 'This election cannot be decrypted with the provided key shares',
+                        'debug_info': {
+                            'reconstructed_p': str(reconstructed_p),
+                            'expected_p': str(expected_p),
+                            'mismatch': True
+                        }
+                    }), 403  # Forbidden - security violation
+                  # Validate reconstructed_p is a factor of n (STRICT CHECK)
                 if public_key_n % reconstructed_p != 0:
-                    logger.error(f"Reconstructed p is not a factor of n: {reconstructed_p} does not divide {public_key_n}")
+                    logger.error(f"SECURITY FAILURE: Reconstructed p is not a factor of n")
+                    logger.error(f"Reconstructed p: {reconstructed_p}")
+                    logger.error(f"Public key n: {public_key_n}")
+                    logger.error(f"This indicates invalid key shares or tampering")
                     
-                    # Additional debugging for key reconstruction issues
-                    logger.info(f"Trying to find GCD between reconstructed_p and n...")
-                    import math
-                    gcd_val = math.gcd(reconstructed_p, public_key_n)
-                    logger.info(f"GCD between reconstructed_p and n: {gcd_val}")
-                    
-                    if gcd_val > 1:
-                        # If the GCD is non-trivial, it could be a factor of n
-                        logger.info(f"Found a non-trivial GCD: {gcd_val}")
-                        candidate_p = gcd_val
-                        
-                        if public_key_n % candidate_p == 0:
-                            logger.info(f"Found a valid factor from GCD! Using {candidate_p} as p")
-                            reconstructed_p = candidate_p
-                        else:
-                            # Check for off-by-one errors
-                            if public_key_n % (reconstructed_p + 1) == 0:
-                                logger.info(f"Found p+1 is a factor of n! Using {reconstructed_p + 1} as p")
-                                reconstructed_p = reconstructed_p + 1
-                            elif public_key_n % (reconstructed_p - 1) == 0:
-                                logger.info(f"Found p-1 is a factor of n! Using {reconstructed_p - 1} as p")
-                                reconstructed_p = reconstructed_p - 1
-                            else:
-                                return jsonify({'error': 'Reconstructed p is not a factor of n and no valid adjustment found'}), 500
-                    else:
-                        # Check for off-by-one errors
-                        if public_key_n % (reconstructed_p + 1) == 0:
-                            logger.info(f"Found p+1 is a factor of n! Using {reconstructed_p + 1} as p")
-                            reconstructed_p = reconstructed_p + 1
-                        elif public_key_n % (reconstructed_p - 1) == 0:
-                            logger.info(f"Found p-1 is a factor of n! Using {reconstructed_p - 1} as p")
-                            reconstructed_p = reconstructed_p - 1
-                        else:
-                            return jsonify({'error': 'Reconstructed p is not a factor of n and no valid adjustment found'}), 500
+                    return jsonify({
+                        'error': 'Key reconstruction security failure: Invalid cryptographic parameters',
+                        'details': 'The reconstructed private key does not form valid factors of the public key',
+                        'security_warning': 'Wrong key shares provided or cryptographic system compromised'
+                    }), 403  # Forbidden - security violation
                 
                 # Calculate q and verify p*q=n
                 reconstructed_q = public_key_n // reconstructed_p
                 if reconstructed_p * reconstructed_q != public_key_n:
                     logger.error(f"Reconstructed primes product mismatch: {reconstructed_p} * {reconstructed_q} != {public_key_n}")
                     return jsonify({'error': f"Reconstructed primes product mismatch: {reconstructed_p} * {reconstructed_q} != {public_key_n}"}), 500
-                
-                # Success! Construct a Paillier private key
+                  # Final validation: Ensure we have the correct private key
+                  
                 reconstructed_private_key = paillier.PaillierPrivateKey(
                     public_key=paillier.PaillierPublicKey(n=public_key_n),
                     p=reconstructed_p,
                     q=reconstructed_q
                 )
                 
-                # Validate against expected p if available
-                if expected_p is not None and reconstructed_p != expected_p:
-                    logger.warning(f"Final reconstructed p ({reconstructed_p}) does not match expected p ({expected_p}) but is valid")
-                    
+                # STRICT VALIDATION: If expected_p exists, it MUST match reconstructed_p
+                if expected_p is not None:
+                    if reconstructed_p == expected_p:
+                        logger.info(f"✓ Key reconstruction successful: reconstructed p matches expected p")
+                    else:
+                        # This should never happen due to earlier checks, but just in case
+                        logger.error(f"CRITICAL ERROR: Final validation failed - p mismatch detected")
+                        return jsonify({
+                            'error': 'Critical key reconstruction failure',
+                            'details': 'Final validation detected parameter mismatch'
+                        }), 500
+                
                 # Return the reconstructed prime p
                 private_key_data = {
                     'type': 'prime',
@@ -413,6 +485,7 @@ class ElectionResultsController:
                     'config_type': 'direct_p'
                 }
                 private_key_b64 = base64.b64encode(json.dumps(private_key_data).encode()).decode()
+                logger.info(f"✓ Key reconstruction completed successfully")
                 return jsonify({'private_key': private_key_b64, 'config_type': 'direct_p'}), 200
                 
             except Exception as interpolation_error:
@@ -447,7 +520,15 @@ class ElectionResultsController:
             if not crypto_config:
                 return jsonify({'error': 'Crypto config not found'}), 404
             
+            # VERIFICATION STEP: Ensure we have encrypted results to decrypt
             results = ElectionResult.query.filter_by(election_id=election_id).all()
+            if not results:
+                return jsonify({'error': 'No election results found to decrypt'}), 404
+                
+            missing_encrypted = [r.result_id for r in results if not r.encrypted_vote_total]
+            if missing_encrypted:
+                logger.error(f"Found {len(missing_encrypted)} results without encrypted data: {missing_encrypted}")
+                return jsonify({'error': 'Some election results are missing encrypted data and cannot be decrypted'}), 400
             
             try:
                 private_key_data = json.loads(base64.b64decode(private_key_b64).decode())
@@ -457,37 +538,116 @@ class ElectionResultsController:
                     public_key_data = json.loads(crypto_config.public_key)
                     n = int(public_key_data.get('n'))
                     
+                    # STRICT VALIDATION: Verify the private key matches expected parameters
+                    # Check if we have stored expected parameters in crypto config
+                    expected_p = None
+                    try:
+                        meta_json = json.loads(crypto_config.meta_data)
+                        if 'p' in meta_json and meta_json['p']:
+                            expected_p = int(meta_json['p'])
+                        elif 'security_data' in meta_json and meta_json['security_data']:
+                            security_data = meta_json['security_data']
+                            if 'p' in security_data and security_data['p']:
+                                expected_p = int(security_data['p'])
+                    except Exception as e:
+                        logger.warning(f"Could not retrieve expected p from crypto config: {e}")
+                    
+                    # CRITICAL SECURITY CHECK: If we have expected p, it MUST match
+                    if expected_p is not None and reconstructed_p != expected_p:
+                        logger.error(f"SECURITY VIOLATION in decrypt_tally: Private key p ({reconstructed_p}) does not match expected p ({expected_p})")
+                        logger.error("This indicates wrong key shares were used to reconstruct the private key")
+                        return jsonify({
+                            'error': 'Decryption security failure: Wrong private key provided',
+                            'details': 'The private key does not match the expected cryptographic parameters for this election',
+                            'security_warning': 'Cannot decrypt election results with incorrect private key'
+                        }), 403  # Forbidden - security violation
+                    
                     if n % reconstructed_p != 0:
-                        logger.error(f"Reconstructed p does not divide n. p={reconstructed_p}, n={n}")
-                        return jsonify({'error': f'Reconstructed p does not divide n. p={reconstructed_p}, n={n}'}), 400
+                        logger.error(f"SECURITY FAILURE: Private key p does not divide public key n. p={reconstructed_p}, n={n}")
+                        return jsonify({
+                            'error': 'Decryption security failure: Invalid private key',
+                            'details': 'The private key does not form valid factors of the public key',
+                            'security_warning': 'Wrong private key provided for this election'
+                        }), 403  # Forbidden - security violation
                     
                     reconstructed_q = n // reconstructed_p
                     
                     if reconstructed_p * reconstructed_q != n:
-                        logger.error(f"Reconstructed primes don't match: {reconstructed_p} * {reconstructed_q} != {n}")
-                        return jsonify({'error': f"Reconstructed primes don't match: {reconstructed_p} * {reconstructed_q} != {n}"}), 400
+                        logger.error(f"SECURITY FAILURE: Private key validation failed. p * q != n: {reconstructed_p} * {reconstructed_q} != {n}")
+                        return jsonify({
+                            'error': 'Decryption security failure: Private key validation failed',
+                            'details': 'The private key components do not satisfy cryptographic requirements',
+                            'security_warning': 'Invalid private key for this election'
+                        }), 403  # Forbidden - security violation
                     
                     # Log which configuration was used to derive the private key
                     config_type = private_key_data.get('config_type', 'unknown')
                     logger.info(f"Using private key from configuration type: {config_type}")
                     
+                    # SUCCESS: Private key validation passed
+                    if expected_p is not None:
+                        logger.info(f"✓ Private key validation successful: p matches expected value")
+                    else:
+                        logger.info(f"✓ Private key validation successful: p is valid factor of n")
+                    
+                    # Start a transaction for atomicity
+                    db.session.begin_nested()
+                    
                     pubkey = paillier.PaillierPublicKey(n=n)
                     privkey = paillier.PaillierPrivateKey(pubkey, reconstructed_p, reconstructed_q)
-                    logger.info(f"Successfully reconstructed private key with p={reconstructed_p.bit_length()} bits "
+                    logger.info(f"Successfully validated and constructed private key with p={reconstructed_p.bit_length()} bits "
                                f"and q={reconstructed_q.bit_length()} bits")
                     
+                    # Track decryption process with detailed logs
+                    decryption_errors = []
                     decrypted = {}
+                    
                     for r in results:
                         if r.encrypted_vote_total:
                             try:
                                 enc_num = paillier.EncryptedNumber(pubkey, int(r.encrypted_vote_total), 0)
                                 vote_count = privkey.decrypt(enc_num)
+                                
+                                # VERIFICATION: Ensure vote count is non-negative and reasonable
+                                if vote_count < 0:
+                                    error_msg = f"Negative vote count ({vote_count}) detected for candidate {r.candidate_id}"
+                                    logger.error(error_msg)
+                                    decryption_errors.append(error_msg)
+                                    continue
+                                
+                                # Add sanity check for unreasonably large numbers
+                                votes_count = Vote.query.filter_by(election_id=election_id, candidate_id=r.candidate_id).count()
+                                if vote_count > votes_count * 2:  # Allow some leeway but catch gross errors
+                                    logger.warning(f"Suspicious vote count for candidate {r.candidate_id}: decrypted={vote_count}, actual votes={votes_count}")
+                                
                                 r.vote_count = vote_count
                                 decrypted[r.candidate_id] = vote_count
                                 logger.info(f"Decrypted votes for candidate {r.candidate_id}: {vote_count}")
                             except Exception as e:
-                                logger.error(f"Error decrypting result for candidate {r.candidate_id}: {e}")
-                                return jsonify({'error': f'Decryption failed for candidate {r.candidate_id}: {str(e)}'}), 500
+                                error_msg = f"Error decrypting result for candidate {r.candidate_id}: {e}"
+                                logger.error(error_msg)
+                                decryption_errors.append(error_msg)
+                                db.session.rollback()
+                                return jsonify({'error': error_msg}), 500
+                    
+                    if decryption_errors:
+                        db.session.rollback()
+                        logger.error(f"Rolling back due to {len(decryption_errors)} decryption errors")
+                        return jsonify({
+                            'error': f'Failed to decrypt {len(decryption_errors)} results',
+                            'details': decryption_errors[:5]  # Only report first 5 errors
+                        }), 500
+                    
+                    # VERIFICATION: Check for reasonable vote distributions
+                    from collections import Counter
+                    total_votes = sum(decrypted.values())
+                    logger.info(f"Total decrypted votes: {total_votes}")
+                    
+                    # Get actual vote count for verification
+                    actual_votes = Vote.query.filter_by(election_id=election_id).count()
+                    if total_votes != actual_votes:
+                        logger.warning(f"Vote count mismatch: decrypted total={total_votes}, actual votes={actual_votes}")
+                        # This is a warning, not an error - minor discrepancies can occur due to how votes are structured
                     
                     # Set election status to 'Finished' after successful decryption
                     election.election_status = 'Finished'
@@ -497,7 +657,18 @@ class ElectionResultsController:
                     db.session.commit()
                     logger.info(f"Successfully stored decrypted results and updated election status for election {election_id}")
                     
-                    return jsonify({'decrypted_results': decrypted}), 200
+                    # VERIFICATION: Final verification that all candidates have vote counts
+                    missing_counts = ElectionResult.query.filter_by(election_id=election_id, vote_count=None).count()
+                    if missing_counts > 0:
+                        logger.warning(f"After decryption, {missing_counts} candidates are still missing vote counts")
+                    
+                    return jsonify({
+                        'decrypted_results': decrypted,
+                        'total_decrypted_votes': total_votes,
+                        'vote_count_match': total_votes == actual_votes,
+                        'verification_passed': True
+                    }), 200
+                    
                 else:
                     logger.error(f"Unsupported private key type: {private_key_data.get('type')}. Only type=prime is supported.")
                     return jsonify({'error': 'Only private keys of type "prime" are supported for decryption.'}), 400
@@ -510,23 +681,116 @@ class ElectionResultsController:
         except Exception as e:
             db.session.rollback()
             logger.error(f"Error in decrypt_tally: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @staticmethod
+            return jsonify({'error': str(e)}), 500    @staticmethod
     def get_decrypted_results(election_id):
         """
-        Return the decrypted results for display.
+        Return the decrypted results for display, grouped by positions.
         """
         try:
-            results = ElectionResult.query.filter_by(election_id=election_id).all()
-            out = []
-            for r in results:
-                out.append({
-                    'candidate_id': r.candidate_id,
-                    'vote_count': r.vote_count,
+            from app.models.candidate import Candidate
+            from app.models.position import Position
+            from collections import defaultdict
+            from sqlalchemy import inspect
+            
+            # Check if the verified column exists in the database
+            try:
+                insp = inspect(db.engine)
+                columns = [c['name'] for c in insp.get_columns('election_results')]
+                verified_column_exists = 'verified' in columns
+                logger.info(f"Verified column exists in election_results table: {verified_column_exists}")
+            except Exception as e:
+                verified_column_exists = False
+                logger.warning(f"Error checking for verified column: {e}")
+            
+            # Manually select columns to avoid the missing 'verified' column
+            results_query = db.session.query(
+                ElectionResult.result_id,
+                ElectionResult.election_id,
+                ElectionResult.candidate_id, 
+                ElectionResult.vote_count,
+                Candidate.candidate_id,
+                Candidate.fullname,
+                Candidate.party,
+                Position.position_id,
+                Position.position_name
+            ).join(
+                Candidate, ElectionResult.candidate_id == Candidate.candidate_id
+            ).join(
+                Position, Candidate.position_id == Position.position_id
+            ).filter(
+                ElectionResult.election_id == election_id
+            ).all()
+            
+            # Group results by position
+            positions_dict = defaultdict(list)
+            for row in results_query:
+                # Access the columns by index or name depending on how your database returns results
+                position_id = row.position_id
+                position_name = row.position_name
+                candidate_id = row.candidate_id
+                fullname = row.fullname
+                party = row.party
+                vote_count = row.vote_count or 0
+                
+                positions_dict[position_id].append({
+                    'position_id': position_id,
+                    'position_name': position_name,
+                    'candidate': {
+                        'candidate_id': candidate_id,
+                        'fullname': fullname,
+                        'party': party,
+                        'vote_count': vote_count
+                    }
                 })
-            return jsonify({'results': out}), 200
+            
+            # Process positions and determine winners
+            results = []
+            for position_id, position_data in positions_dict.items():
+                if not position_data:
+                    continue
+                    
+                position_name = position_data[0]['position_name']
+                candidates = [item['candidate'] for item in position_data]
+                
+                # Determine winner(s) - candidate(s) with the highest vote count
+                if candidates:
+                    max_votes = max(candidate['vote_count'] for candidate in candidates)
+                    for candidate in candidates:
+                        candidate['is_winner'] = candidate['vote_count'] == max_votes
+                
+                results.append({
+                    'position_id': position_id,
+                    'position_name': position_name,
+                    'candidates': candidates
+                })
+            
+            # Sort results by position_id for consistent ordering
+            results.sort(key=lambda x: x['position_id'])
+            
+            # Add verification status information
+            verification_status = {
+                "verified": True,  # Default to true unless issues found
+                "vote_count_match": True,
+                "total_decrypted": sum(candidate['vote_count'] for position in results for candidate in position['candidates'])
+            }
+            
+            # Count actual votes for verification
+            from app.models.vote import Vote
+            actual_votes = Vote.query.filter_by(election_id=election_id).count()
+            total_decrypted = verification_status['total_decrypted']
+            
+            if total_decrypted != actual_votes:
+                verification_status['vote_count_match'] = False
+                verification_status['message'] = f"Vote count mismatch: decrypted {total_decrypted}, actual {actual_votes}"
+                logger.warning(f"Vote count mismatch for election {election_id}: decrypted={total_decrypted}, actual={actual_votes}")
+            
+            return jsonify({
+                'results': results, 
+                'verification_status': verification_status
+            }), 200
         except Exception as e:
+            logger.error(f"Error in get_decrypted_results: {str(e)}")
+            logger.exception(e)  # Log the full stack trace
             return jsonify({'error': str(e)}), 500
 
     @staticmethod

@@ -1,4 +1,3 @@
-// Election creation page (no sidebar, back button, all fields, candidates section)
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -26,6 +25,21 @@ interface AuthorityShare {
   share_value: string;
 }
 
+// Define interfaces for fetched data
+interface KeyShare {
+  key_share_id: number;
+  crypto_id: number;
+  authority_id: number;
+  share_value: string;
+  created_at?: string;
+}
+interface Authority {
+  authority_id: number;
+  authority_name: string;
+  contact_info?: string;
+  created_at?: string;
+}
+
 // Add this function to handle key pair generation and distribution
 async function handleGenerateKeyPair({
   nPersonnel,
@@ -38,7 +52,14 @@ async function handleGenerateKeyPair({
   threshold: number;
   authorityIds: number[];
   cryptoMethod?: string;
-}) {
+}): Promise<{  public_key: string;
+  private_shares: string[];
+  threshold: number;
+  crypto_type: string;
+  meta_data: Record<string, unknown>;
+  authority_shares: AuthorityShare[];
+  security_data: Record<string, unknown>;
+}> {
   const adminToken = localStorage.getItem('admin_token');
   if (!adminToken) {
     throw new Error('You are not logged in. Please log in as an administrator.');
@@ -114,7 +135,8 @@ async function handleGenerateKeyPair({
       threshold: data.threshold,
       crypto_type: data.crypto_type,
       meta_data: data.meta_data,
-      authority_shares: authorityShares
+      authority_shares: authorityShares,
+      security_data: data.security_data,
     };
   } catch (error) {
     console.error('Key generation error:', error);
@@ -135,11 +157,9 @@ export default function CreateElectionPage() {
   const [queuedAccess, setQueuedAccess] = useState(false);
   const [maxConcurrentVoters, setMaxConcurrentVoters] = useState<number | ''>('');
   const [personnel, setPersonnel] = useState<{ name: string; id?: number }[]>([
-    { name: '' }, { name: '' }, { name: '' }
-  ]);
-  const [publicKey, setPublicKey] = useState('');
-  const [, setPrivateShares] = useState<string[]>([]);
-  const [generating, setGenerating] = useState(false);
+    { name: '' }, { name: '' }, { name: '' }  ]);
+  const [, setPublicKey] = useState(''); // Used to store public key after generation
+  const [, setPrivateShares] = useState<string[]>([]); // Used to store private shares
   const [candidates, setCandidates] = useState<Candidate[]>([
     { fullname: '', party: '', candidate_desc: '', position_id: '' },
     { fullname: '', party: '', candidate_desc: '', position_id: '' },
@@ -148,14 +168,11 @@ export default function CreateElectionPage() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [step, setStep] = useState(0); // 0: General, 1: Authorities, 2: Candidates
   const [showModal, setShowModal] = useState(false);
-  const [modalContent, setModalContent] = useState<{ title: string; message: string; type: 'success' | 'error' }>({ title: '', message: '', type: 'success' });
-  const [showKeyModal, setShowKeyModal] = useState(false);
+  const [modalContent, setModalContent] = useState<{ title: string; message: string; type: 'success' | 'error' }>({ title: '', message: '', type: 'success' });  const [showKeyModal, setShowKeyModal] = useState(false);
   const [keySharesForModal, setKeySharesForModal] = useState<string[]>([]);
   const [keyGenAuthorityNames, setKeyGenAuthorityNames] = useState<string[]>([]);
-  const [showKeyWarning, setShowKeyWarning] = useState(false);
-  // Validation for each step with detailed feedback
   const isGeneralValid = orgId && electionName.trim() && description.trim() && dateStart && endDate;
-  const isAuthoritiesValid = personnel.length >= 3 && personnel.slice(0, 3).every(p => p.name.trim()) && publicKey;
+  const isAuthoritiesValid = personnel.length >= 3 && personnel.slice(0, 3).every(p => p.name.trim());
   const hasValidCandidates = candidates.some(c => c.fullname.trim() && c.position_id);
 
   // Progress calculation
@@ -224,8 +241,48 @@ export default function CreateElectionPage() {
   const removeCandidate = (idx: number) => {
     setCandidates(c => c.length > 3 ? c.filter((_, i) => i !== idx) : c);
   };
+  // Complete election creation after key shares are downloaded
+  const handleCompleteElection = async () => {
+    try {
+      const pendingData = localStorage.getItem('pending_election_data');
+      if (!pendingData) {
+        throw new Error('No pending election data found');
+      }
 
-  // Save all data
+      const { election_id, candidates: candidatesWithPhotos } = JSON.parse(pendingData);
+
+      // Add candidates with photos
+      for (const candidate of candidatesWithPhotos) {
+        const formData = new FormData();
+        formData.append('fullname', candidate.fullname);
+        formData.append('position_id', String(candidate.position_id));
+        if (candidate.party) formData.append('party', candidate.party);
+        if (candidate.candidate_desc) formData.append('candidate_desc', candidate.candidate_desc);
+        if (candidate.photo) formData.append('photo', candidate.photo);
+        const candidateRes = await fetch(`${API_URL}/elections/${election_id}/candidates`, {
+          method: 'POST',
+          body: formData
+        });
+        if (!candidateRes.ok) {
+          const err = await candidateRes.json();
+          throw new Error(err.error || 'Failed to add candidate with photo');
+        }
+      }
+
+      // Clean up all temporary data and show success message
+      localStorage.removeItem('temp_crypto_id');
+      localStorage.removeItem('key_share_mapping');
+      localStorage.removeItem('pending_election_data');
+      setShowKeyModal(false);
+      setModalContent({ title: 'Success', message: 'Election created successfully!', type: 'success' });
+      setShowModal(true);
+      setTimeout(() => router.push('/admin/elections'), 1200);
+    } catch (e: unknown) {
+      setModalContent({ title: 'Error', message: e instanceof Error ? e.message : 'Failed to complete election creation', type: 'error' });
+      setShowModal(true);
+      setShowKeyModal(false);
+    }
+  };  // Save all data
   const handleFinish = async () => {
     try {
       // 1. Create the election (without candidates with photos)
@@ -245,9 +302,7 @@ export default function CreateElectionPage() {
         })
       });
       if (!electionRes.ok) throw new Error('Failed to create election');
-      const election = await electionRes.json();
-
-      // 2. Create trusted authorities for each personnel
+      const election = await electionRes.json();      // 2. Create trusted authorities for each personnel
       const adminToken = localStorage.getItem('admin_token');
       if (!adminToken) throw new Error('You are not logged in. Please log in as an administrator.');
       const validPersonnel = personnel.filter(p => p.name.trim());
@@ -271,9 +326,7 @@ export default function CreateElectionPage() {
         const authority = await authorityRes.json();
         newAuthorityIds.push(authority.authority_id);
       }
-      if (newAuthorityIds.length === 0) throw new Error('Failed to create trusted authorities for this election.');
-
-      // 3. Generate key pair and private shares for the real authorities
+      if (newAuthorityIds.length === 0) throw new Error('Failed to create trusted authorities for this election.');      // 3. Generate key pair and private shares for the authorities
       let keyGenResult;
       try {
         keyGenResult = await handleGenerateKeyPair({
@@ -285,19 +338,20 @@ export default function CreateElectionPage() {
       } catch (error) {
         throw new Error('Failed to generate cryptographic key shares: ' + (error as Error).message);
       }
+      
       if (!keyGenResult || !keyGenResult.public_key || !keyGenResult.private_shares) {
         throw new Error('Key generation failed. No key shares or public key returned.');
       }
+      
       setPublicKey(keyGenResult.public_key);
       setPrivateShares(keyGenResult.private_shares);
 
-      // 4. Store crypto configuration and key shares
+      // 4. Store crypto configuration and key shares for the election
       const authorityShares: AuthorityShare[] = newAuthorityIds.map((authority_id, idx) => ({
         authority_id,
         share_value: keyGenResult.private_shares[idx] || ''
       }));
 
-      
       const storeRes = await fetch(`${API_URL}/crypto_configs/store-with-shares`, {
         method: 'POST',
         headers: {
@@ -314,38 +368,49 @@ export default function CreateElectionPage() {
           meta_data: keyGenResult.meta_data,
           authority_shares: authorityShares
         })
-      });
-      if (!storeRes.ok) {
+      });        if (!storeRes.ok) {
         const err = await storeRes.json();
         throw new Error(err.error || 'Failed to store crypto configuration');
       }
 
-      // 5. Add candidates with photos
-      const candidatesWithPhotos = candidates.filter(c => c.fullname && c.position_id && c.photo);
-      for (const candidate of candidatesWithPhotos) {
-        const formData = new FormData();
-        formData.append('fullname', candidate.fullname);
-        formData.append('position_id', String(candidate.position_id));
-        if (candidate.party) formData.append('party', candidate.party);
-        if (candidate.candidate_desc) formData.append('candidate_desc', candidate.candidate_desc);
-        if (candidate.photo) formData.append('photo', candidate.photo);
-        const candidateRes = await fetch(`${API_URL}/elections/${election.election_id}/candidates`, {
-          method: 'POST',
-          body: formData
-        });
-        if (!candidateRes.ok) {
-          const err = await candidateRes.json();
-          throw new Error(err.error || 'Failed to add candidate with photo');
-        }
+      // 5. First fetch the crypto configuration to get the crypto_id
+      const cryptoConfigRes = await fetch(`${API_URL}/crypto_configs/election/${election.election_id}`, {
+        headers: { 'Authorization': `Bearer ${adminToken}` }
+      });
+      
+      if (!cryptoConfigRes.ok) {
+        throw new Error('Failed to fetch crypto configuration from the database');
       }
+        const cryptoConfig = await cryptoConfigRes.json();
+      const cryptoId = cryptoConfig.crypto_id;
+      
+      // 6. Now fetch key_shares and trusted authorities using the correct crypto_id
+      const [keySharesRes, authoritiesRes] = await Promise.all([
+        fetch(`${API_URL}/key_shares/crypto/${cryptoId}`, {
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        }),
+        fetch(`${API_URL}/crypto_configs/${election.election_id}/trusted-authorities`, {
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        })
+      ]);
+      
+      if (!keySharesRes.ok || !authoritiesRes.ok) {
+        throw new Error('Failed to fetch key shares or authorities from the database');
+      }
+      
+      const keyShares: KeyShare[] = await keySharesRes.json();
+      const authorities: Authority[] = (await authoritiesRes.json()).authorities;      // 6. Show the modal for the generated key pair per trusted authority (with sensitive data warning)
+      setKeyGenAuthorityNames(authorities.map(a => a.authority_name));
+      setKeySharesForModal(keyShares.map(k => k.share_value));
+      setShowKeyModal(true);
 
-      // Clean up all temporary data
-      localStorage.removeItem('temp_crypto_id');
-      localStorage.removeItem('key_share_mapping');
-      setModalContent({ title: 'Success', message: 'Election created successfully!', type: 'success' });
-      setShowModal(true);
-      setTimeout(() => router.push('/admin/elections'), 1200);
+      // Store election data for completion after modal is closed
+      localStorage.setItem('pending_election_data', JSON.stringify({
+        election_id: election.election_id,
+        candidates: candidates.filter(c => c.fullname && c.position_id && c.photo)
+      }));
     } catch (e: unknown) {
+      console.error('Error in handleFinish:', e);
       setModalContent({ title: 'Error', message: e instanceof Error ? e.message : 'Failed to create election', type: 'error' });
       setShowModal(true);
     }
@@ -754,190 +819,38 @@ export default function CreateElectionPage() {
               </div>
             </div>
 
-            <div className="space-y-6">
-              <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="text-yellow-600 text-xl">🔑</span>
-                  <div>
-                    <h4 className="font-semibold text-gray-700 text-lg">Cryptographic Key Generation</h4>
-                    <p className="text-sm text-gray-600">Generate secure key pairs for election encryption</p>
-                  </div>
-                </div>
-                
-                <button
-                  type="button"
-                  className={`
-                    w-full mb-4 px-6 py-4 rounded-lg font-semibold text-lg transition-all duration-300
-                    flex items-center justify-center gap-3 transform hover:scale-105
-                    ${generating || !!publicKey
-                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white shadow-lg hover:shadow-xl'
-                    }
-                  `}
-                  onClick={() => setShowKeyWarning(true)}
-                  disabled={generating || !!publicKey}
-                >
-                  {generating ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-gray-400 border-t-gray-600 rounded-full animate-spin"></div>
-                      Generating Keys...
-                    </>
-                  ) : publicKey ? (
-                    <>
-                      <span className="text-green-600">✅</span>
-                      Key Pair Generated
-                    </>
-                  ) : (
-                    <>
-                      <span>🔑</span>
-                      Generate Key Pair
-                    </>
-                  )}
-                </button>
-
-                <div>
-                  <label className="block text-sm text-gray-700 font-medium mb-2">
-                    Public Key Preview
-                  </label>
-                  <div className="relative">
-                    <input
-                      className="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm font-mono 
-                               bg-gray-50 text-gray-600 pr-10"
-                      value={publicKey || "Public key will appear here after generation..."}
-                      readOnly
-                      disabled
-                    />
-                    {publicKey && (
-                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                        <span className="text-green-500 text-lg">✅</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {publicKey && (
-                <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-green-700">
-                    <span className="text-lg">✅</span>
-                    <span className="font-medium">Key generation completed successfully!</span>
-                  </div>
-                  <p className="text-sm text-green-600 mt-1">
-                    Your election is now ready to proceed to the candidates section.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>          {/* Key Generation Warning Modal */}
-          <Modal
-            isOpen={showKeyWarning}
-            onClose={() => setShowKeyWarning(false)}
-            title="🚨 Key Generation Security Warning"
-            size="md"
-            footer={null}
-          >
-            <div className="space-y-4">
-              <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-500 p-4 rounded">
-                <div className="flex items-start gap-3">
-                  <span className="text-red-500 text-xl">⚠️</span>
-                  <div className="text-red-800">
-                    <p className="font-bold mb-2">Critical Security Information</p>
-                    <p className="text-sm">
-                      The private key shares that will be generated contain critically sensitive security information.
-                      <span className="font-semibold block mt-1">
-                        You must download and store them securely before closing the next dialog.
-                      </span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-l-4 border-blue-500 p-4 rounded">
-                <div className="flex items-start gap-3">
-                  <span className="text-blue-500 text-xl">🔄</span>
-                  <div className="text-blue-800">
-                    <p className="font-bold mb-2">How Key Generation Works</p>
-                    <div className="text-sm space-y-2">
-                      <p>When you continue, the system will:</p>
-                      <ol className="list-decimal list-inside space-y-1 ml-4">
-                        <li>Generate key pairs using the Paillier threshold cryptosystem</li>
-                        <li>Create individual private key shares for each authority</li>
-                        <li>Allow you to download the shares for secure distribution</li>
-                      </ol>
-                      <p className="mt-3 font-medium">
-                        These authorities and keys will be permanently linked to your election upon submission.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 
-                         text-white rounded-lg font-semibold transition-all duration-200 transform hover:scale-105"
-                onClick={async () => {
-                  setShowKeyWarning(false);
-                  setGenerating(true);
-                  try {
-                    const validPersonnel = personnel.filter(p => p.name.trim());
-                    if (validPersonnel.length < 3) {
-                      setModalContent({ title: 'Error', message: 'At least 3 trusted authorities with names are required.', type: 'error' });
-                      setShowModal(true);
-                      setGenerating(false);
-                      return;
-                    }
-                    // Simulate temp authority IDs for modal
-                    const tempAuthorityIds = validPersonnel.map((_, idx) => idx + 1);
-                    const keyGenResult = await handleGenerateKeyPair({
-                      electionId: -1,
-                      nPersonnel: validPersonnel.length,
-                      threshold: Math.ceil(validPersonnel.length / 2) + 1,
-                      authorityIds: tempAuthorityIds,
-                    });
-                    setPublicKey(keyGenResult.public_key);
-                    setKeySharesForModal(keyGenResult.private_shares);
-                    setKeyGenAuthorityNames(validPersonnel.map(p => p.name));
-                    setShowKeyModal(true);
-                  } catch (e) {
-                    setModalContent({ title: 'Error', message: e instanceof Error ? e.message : 'Key generation failed', type: 'error' });
-                    setShowModal(true);
-                  } finally {
-                    setGenerating(false);
-                  }
-                }}
-              >
-                🔑 Continue with Key Generation
-              </button>
-              <button
-                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 
-                         transition-all duration-200"
-                onClick={() => setShowKeyWarning(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          </Modal>
-
+          </div>         
           {/* Enhanced Key Generation Modal */}
           <Modal
             isOpen={showKeyModal}
             onClose={() => setShowKeyModal(false)}
-            title="🔐 Private Key Shares Distribution"
-            size="lg"
-            footer={
+            title="Private Key Shares Distribution"
+            size="lg"            footer={
               <div className="flex justify-between items-center w-full">
-                <div className="text-sm text-gray-600">
-                  💾 Remember to download all key shares before closing
+                <div className="flex items-center gap-4">
+                  <div className="text-sm text-gray-600">
+                    Remember to download all key shares before proceeding
+                  </div>
                 </div>
-                <button 
-                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 
-                           text-white rounded-lg font-semibold transition-all duration-200 transform hover:scale-105" 
-                  onClick={() => setShowKeyModal(false)}
-                >
-                  ✅ I&apos;ve Downloaded All Shares
-                </button>
+                <div className="flex items-center gap-3">
+                  <button 
+                    className="px-6 py-3 bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600 
+                             text-white rounded-lg font-semibold transition-all duration-200 transform hover:scale-105" 
+                    onClick={() => {
+                      setShowKeyModal(false);
+                      localStorage.removeItem('pending_election_data');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 
+                             text-white rounded-lg font-semibold transition-all duration-200 transform hover:scale-105" 
+                    onClick={handleCompleteElection}
+                  >
+                    ✅ Done - Create Election
+                  </button>
+                </div>
               </div>
             }
           >
@@ -945,10 +858,9 @@ export default function CreateElectionPage() {
               <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-500 p-4 rounded">
                 <div className="flex items-start gap-3">
                   <span className="text-red-500 text-xl">🚨</span>
-                  <div className="text-red-800">
-                    <p className="font-bold mb-1">CRITICAL: One-Time Access Only</p>
+                  <div className="text-red-800">                    <p className="font-bold mb-1">CRITICAL: One-Time Access Only</p>
                     <p className="text-sm">
-                      When you close this dialog, you will <span className="font-bold text-red-600">NOT</span> be able to view these private key shares again. 
+                      After you click &quot;Done - Create Election&quot;, you will <span className="font-bold text-red-600">NOT</span> be able to view these private key shares again. 
                       You must generate a completely new key pair if you lose them.
                     </p>
                   </div>
@@ -1114,8 +1026,7 @@ export default function CreateElectionPage() {
                   {candidates.length > 3 && (
                     <button 
                       type="button" 
-                      className="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded-lg
-                               border border-red-200 hover:border-red-300 transition-all duration-200" 
+                      className="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded-lg border border-red-200 hover:border-red-300 transition-all duration-200" 
                       onClick={() => removeCandidate(idx)}
                     >
                       <span className="text-sm">🗑️</span>
@@ -1133,12 +1044,10 @@ export default function CreateElectionPage() {
                           Full Name
                         </label>
                         <input 
-                          className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 
-                                   focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200
-                                   group-hover:border-gray-300" 
+                          className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-gray-300" 
                           value={cand.fullname} 
                           onChange={e => updateCandidate(idx, 'fullname', e.target.value)} 
-                          placeholder="Enter candidate&apos;s full name" 
+                          placeholder="Enter candidate's full name" 
                         />
                       </div>
 
@@ -1148,9 +1057,7 @@ export default function CreateElectionPage() {
                           Party/Affiliation
                         </label>
                         <input 
-                          className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 
-                                   focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200
-                                   group-hover:border-gray-300" 
+                          className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-gray-300" 
                           value={cand.party} 
                           onChange={e => updateCandidate(idx, 'party', e.target.value)} 
                           placeholder="Political party or organization" 
@@ -1164,9 +1071,7 @@ export default function CreateElectionPage() {
                         Position
                       </label>
                       <select 
-                        className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 
-                                 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200
-                                 group-hover:border-gray-300" 
+                        className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-gray-300" 
                         value={cand.position_id} 
                         onChange={e => updateCandidate(idx, 'position_id', Number(e.target.value))}
                       >
@@ -1183,12 +1088,10 @@ export default function CreateElectionPage() {
                         Description/Platform
                       </label>
                       <textarea 
-                        className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 h-24
-                                 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200
-                                 group-hover:border-gray-300 resize-none" 
+                        className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 h-24 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-gray-300 resize-none" 
                         value={cand.candidate_desc} 
                         onChange={e => updateCandidate(idx, 'candidate_desc', e.target.value)} 
-                        placeholder="Candidate&apos;s background, qualifications, or campaign platform..." 
+                        placeholder="Candidate's background, qualifications, or campaign platform..." 
                       />
                     </div>
                   </div>
@@ -1292,13 +1195,11 @@ export default function CreateElectionPage() {
             >
               <span className="text-xl">←</span>
               Back to Authorities
-            </button>
-            <button
+            </button>            <button
               className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 
                        text-white rounded-lg font-semibold text-lg transition-all duration-300 transform hover:scale-105
                        flex items-center gap-3 shadow-lg hover:shadow-xl"
               onClick={handleFinish}
-              disabled={generating || !publicKey}
             >
              
               Create Election

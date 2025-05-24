@@ -75,7 +75,17 @@ export default function TallyElectionPage() {
           throw new Error(errorMessage);
         }
 
-        console.log("Tally succeeded, fetching authorities..."); // Fetch authorities for key shares
+        // Process the tally response
+        const tallyData = await res.json();
+        console.log("Tally succeeded:", tallyData);
+        
+        // Verify the tally was successful
+        if (tallyData.verification_passed) {
+          console.log(`Homomorphic tally verified: ${tallyData.candidates_tallied} candidates, ${tallyData.total_votes_processed} votes`);
+          setNotification(`Successfully tallied ${tallyData.total_votes_processed} votes across ${tallyData.candidates_tallied} candidates`);
+        }
+
+        console.log("Fetching authorities for key shares..."); 
         return fetch(`${API_URL}/election_results/${election_id}/authorities`);
       })
       .then(async (res) => {

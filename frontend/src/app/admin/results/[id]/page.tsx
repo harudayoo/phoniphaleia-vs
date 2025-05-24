@@ -34,21 +34,23 @@ interface ResultDetail {
   }[];
 }
 
-export default function AdminResultDetailPage({ params }: { params: { id: string } }) {
+export default function AdminResultDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  // Convert id to a state variable instead of directly using params.id
+  // Unwrap params using React.use()
+  const resolvedParams = React.use(params);
   const [resultId, setResultId] = useState<number | null>(null);
   
   const [result, setResult] = useState<ResultDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'decryption' | 'verification'>('overview');
   const [, setDecrypted] = useState(false);
+  
   // Initialize resultId from params when the component mounts
   useEffect(() => {
-    if (params.id) {
-      setResultId(parseInt(params.id, 10));
+    if (resolvedParams.id) {
+      setResultId(parseInt(resolvedParams.id, 10));
     }
-  }, [params.id]);
+  }, [resolvedParams.id]);
 
   useEffect(() => {
     const fetchResultDetail = async () => {

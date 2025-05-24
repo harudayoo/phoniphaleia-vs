@@ -15,8 +15,14 @@ sys.path.append(parent_dir)
 try:
     from sympy import nextprime as next_prime
 except ImportError:
-    # Import the optimized next_prime from in_memory_key_controller
-    from app.controllers.in_memory_key_controller import next_prime
+    # Fallback implementation for next_prime
+    def next_prime(n):
+        """Simple next prime implementation"""
+        n += 1
+        while True:
+            if all(n % i != 0 for i in range(2, int(n**0.5) + 1)):
+                return n
+            n += 1
 
 class TestPrimeGeneration(unittest.TestCase):
     """Test prime number generation and key generation"""

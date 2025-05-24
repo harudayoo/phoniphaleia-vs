@@ -197,13 +197,12 @@ export const createEncryptedBallot = async (
     if (!proofResult.isValid || !proofResult.proof || !proofResult.publicSignals) {
       throw new Error('Failed to generate valid proof');
     }
-    
-    // Encrypt votes using only Paillier
+      // Encrypt votes using only Paillier
     const encryptedVotes = input.candidateIds.map((candidateId, index) => {
       return {
         position_id: input.positionIds[index],
         candidate_id: candidateId,
-        encrypted_vote: encryptVote(candidateId, publicKey)
+        encrypted_vote: encryptVote(1, publicKey) // Encrypt the value 1, not the candidate ID
       };
     });
     

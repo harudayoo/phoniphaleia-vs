@@ -4,22 +4,37 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Loader4 from "@/components/Loader4";
 import AdminLayout from "@/layouts/AdminLayout";
 import ArrowUpScrollToTop from "@/components/ArrowUpScrollToTop";
-import { FaDownload, FaShareAlt, FaArrowLeft, FaChartBar, FaCheckCircle } from "react-icons/fa";
+import { FaDownload, FaShareAlt, FaArrowLeft, FaChartBar, FaCheckCircle, FaTrophy } from "react-icons/fa";
 
-interface DecryptedResult {
+interface Candidate {
   candidate_id: number;
+  fullname: string;
+  party?: string;
   vote_count: number;
+  is_winner: boolean;
+}
+
+interface PositionResult {
+  position_id: number;
+  position_name: string;
+  candidates: Candidate[];
 }
 
 export default function DecryptedResultsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const election_id = searchParams?.get("election_id");
-  const [results, setResults] = useState<DecryptedResult[]>([]);
+  const [results, setResults] = useState<PositionResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<{
+    verified: boolean;
+    vote_count_match: boolean;
+    total_decrypted: number;
+    message?: string;
+  } | null>(null);
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
   // Handle scroll detection for scroll-to-top button
@@ -52,10 +67,18 @@ export default function DecryptedResultsPage() {
         return res.json();
       })
       .then((data) => {
+        console.log("Received decrypted results:", data);
         setResults(data.results || []);
+        
+        // Check for and display verification status if available
+        if (data.verification_status) {
+          setVerificationStatus(data.verification_status);
+        }
+        
         setLoading(false);
       })
       .catch((e) => {
+        console.error("Error fetching decrypted results:", e);
         setError(e.message);
         setLoading(false);
       });
@@ -63,10 +86,23 @@ export default function DecryptedResultsPage() {
 
   // Export as CSV
   const handleExport = () => {
-    const csv = [
-      "Candidate ID,Vote Count",
-      ...results.map(r => `${r.candidate_id},${r.vote_count}`)
-    ].join("\n");
+    const csvData = [
+      "Position,Candidate,Party,Vote Count,Winner"
+    ];
+    
+    results.forEach(position => {
+      if (position.candidates && Array.isArray(position.candidates)) {
+        position.candidates.forEach(candidate => {
+          if (candidate) {
+            csvData.push(
+              `"${position.position_name || ''}","${candidate.fullname || ''}","${candidate.party || ''}",${candidate.vote_count || 0},${candidate.is_winner ? 'Yes' : 'No'}`
+            );
+          }
+        });
+      }
+    });
+    
+    const csv = csvData.join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -88,13 +124,16 @@ export default function DecryptedResultsPage() {
       alert("Sharing is not supported on this device/browser.");
     }
   };
-
-  // Calculate total votes
-  const totalVotes = results.reduce((sum, r) => sum + r.vote_count, 0);
+  // Get winners across all positions with null checks
+  const winners = results.flatMap(position => 
+    (position.candidates || [])
+      .filter(c => c && c.is_winner)
+      .map(c => ({ ...c, position_name: position.position_name }))
+  );
 
   return (
     <AdminLayout>
-      <div className="max-w-2xl mx-auto mt-8 space-y-6">
+      <div className="max-w-4xl mx-auto mt-8 space-y-6">
         {/* Header with return button */}
         <div className="flex items-center justify-between mb-6">
           <button
@@ -175,71 +214,166 @@ export default function DecryptedResultsPage() {
                   <p className="text-gray-600">All votes have been successfully decrypted and tallied</p>
                 </div>
 
-                {/* Summary card */}
-                <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-gray-800">{totalVotes}</div>
-                    <div className="text-gray-600 font-medium">Total Votes Cast</div>
+                {/* Summary cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-gray-800">{results.length}</div>
+                      <div className="text-gray-600 font-medium">Positions</div>
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                    <div className="text-center">
+                      <div className="text-3xl font-bold text-gray-800">{winners.length}</div>
+                      <div className="text-gray-600 font-medium">Winners</div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Results table */}
-                <div className="bg-gray-50 rounded-xl p-6 border border-gray-200">
-                  <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <FaChartBar className="w-5 h-5 text-green-600" />
-                    Vote Distribution
-                  </h4>
-                  
-                  {results.length > 0 ? (
-                    <div className="overflow-hidden rounded-lg border border-gray-200">
-                      <table className="w-full">
-                        <thead className="bg-gray-100">
-                          <tr>
-                            <th className="text-left py-4 px-6 font-semibold text-gray-700">Candidate ID</th>
-                            <th className="text-left py-4 px-6 font-semibold text-gray-700">Vote Count</th>
-                            <th className="text-left py-4 px-6 font-semibold text-gray-700">Percentage</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                          {results.map((r, idx) => {
-                            const percentage = totalVotes > 0 ? ((r.vote_count / totalVotes) * 100).toFixed(1) : "0.0";
-                            return (
-                              <tr key={r.candidate_id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                <td className="py-4 px-6 border-t border-gray-200">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-                                      {r.candidate_id}
-                                    </div>
-                                    <span className="font-medium text-gray-700">Candidate {r.candidate_id}</span>
-                                  </div>
-                                </td>
-                                <td className="py-4 px-6 border-t border-gray-200">
-                                  <span className="text-xl font-bold text-gray-800">{r.vote_count}</span>
-                                </td>
-                                <td className="py-4 px-6 border-t border-gray-200">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                      <div 
-                                        className="bg-green-600 h-2 rounded-full transition-all duration-500"
-                                        style={{ width: `${percentage}%` }}
-                                      ></div>
-                                    </div>
-                                    <span className="text-sm font-semibold text-gray-600 min-w-[3rem]">{percentage}%</span>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                {/* Winners summary */}
+                {winners.length > 0 && (
+                  <div className="bg-yellow-50 rounded-xl p-6 border border-yellow-200">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <FaTrophy className="w-5 h-5 text-yellow-600" />
+                      Election Winners
+                    </h4>
+                    <div className="space-y-2">
+                      {winners.map((winner, idx) => (
+                        <div key={idx} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-yellow-200">
+                          <div className="w-8 h-8 bg-yellow-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                            <FaTrophy className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="font-semibold text-gray-800">{winner.fullname}</div>
+                            <div className="text-sm text-gray-600">{winner.position_name} • {winner.vote_count} votes</div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <FaChartBar className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                      <p>No decrypted results available</p>
+                  </div>
+                )}
+
+                {/* Verification status */}
+                {verificationStatus && (
+                  <div className={`bg-${verificationStatus.verified ? 'green' : 'amber'}-50 rounded-xl p-6 border border-${verificationStatus.verified ? 'green' : 'amber'}-200`}>
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                      <FaCheckCircle className={`w-5 h-5 text-${verificationStatus.verified ? 'green' : 'amber'}-600`} />
+                      Verification Status
+                    </h4>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                        <div className="font-medium text-gray-800">Decryption verification</div>
+                        <div className={`inline-flex items-center gap-1 px-2 py-1 bg-${verificationStatus.verified ? 'green' : 'amber'}-100 text-${verificationStatus.verified ? 'green' : 'amber'}-800 rounded-full text-xs font-semibold`}>
+                          {verificationStatus.verified ? "Passed" : "Warning"}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                        <div className="font-medium text-gray-800">Vote count integrity</div>
+                        <div className={`inline-flex items-center gap-1 px-2 py-1 bg-${verificationStatus.vote_count_match ? 'green' : 'amber'}-100 text-${verificationStatus.vote_count_match ? 'green' : 'amber'}-800 rounded-full text-xs font-semibold`}>
+                          {verificationStatus.vote_count_match ? "Validated" : "Minor discrepancy"}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                        <div className="font-medium text-gray-800">Total votes decrypted</div>
+                        <div className="text-sm font-bold text-gray-800">{verificationStatus.total_decrypted}</div>
+                      </div>
+                      {verificationStatus.message && (
+                        <div className="p-3 bg-white rounded-lg border border-gray-200">
+                          <div className="font-medium text-gray-800 mb-1">Message</div>
+                          <div className="text-sm text-gray-600">{verificationStatus.message}</div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {/* Results by position */}
+                {results.length > 0 ? (
+                  <div className="space-y-6">
+                    <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                      <FaChartBar className="w-5 h-5 text-green-600" />
+                      Results by Position
+                    </h4>
+                      {results.map((position) => {
+                      const candidates = position.candidates || [];
+                      const positionTotalVotes = candidates.reduce((sum, c) => sum + (c?.vote_count || 0), 0);
+                      
+                      return (
+                        <div key={position.position_id} className="bg-gray-50 rounded-xl p-6 border border-gray-200">
+                          <h5 className="text-lg font-semibold text-gray-800 mb-4">{position.position_name}</h5>
+                          
+                          <div className="overflow-hidden rounded-lg border border-gray-200">
+                            <table className="w-full">
+                              <thead className="bg-gray-100">
+                                <tr>
+                                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Candidate</th>
+                                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Party</th>
+                                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Votes</th>
+                                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Percentage</th>
+                                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white">
+                                {candidates
+                                  .filter(candidate => candidate != null)
+                                  .sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0))
+                                  .map((candidate, idx) => {                                    const voteCount = candidate.vote_count || 0;
+                                    const percentage = positionTotalVotes > 0 ? ((voteCount / positionTotalVotes) * 100).toFixed(1) : "0.0";
+                                    return (
+                                      <tr key={`${position.position_id}-${candidate.candidate_id}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                        <td className="py-3 px-4 border-t border-gray-200">
+                                          <div className="flex items-center gap-2">
+                                            <div className={`w-8 h-8 ${candidate.is_winner ? 'bg-yellow-600' : 'bg-blue-600'} text-white rounded-full flex items-center justify-center text-sm font-bold`}>
+                                              {candidate.is_winner ? <FaTrophy className="w-4 h-4" /> : candidate.candidate_id}
+                                            </div>
+                                            <span className="font-medium text-gray-700">{candidate.fullname || 'Unknown Candidate'}</span>
+                                          </div>
+                                        </td>
+                                        <td className="py-3 px-4 border-t border-gray-200">
+                                          <span className="text-gray-600">{candidate.party || '-'}</span>
+                                        </td>
+                                        <td className="py-3 px-4 border-t border-gray-200">
+                                          <span className="text-xl font-bold text-gray-800">{voteCount}</span>
+                                        </td>
+                                        <td className="py-3 px-4 border-t border-gray-200">
+                                          <div className="flex items-center gap-3">
+                                            <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[100px]">
+                                              <div 
+                                                className={`${candidate.is_winner ? 'bg-yellow-600' : 'bg-blue-600'} h-2 rounded-full transition-all duration-500`}
+                                                style={{ width: `${percentage}%` }}
+                                              ></div>
+                                            </div>
+                                            <span className="text-sm font-semibold text-gray-600 min-w-[3rem]">{percentage}%</span>
+                                          </div>
+                                        </td>
+                                        <td className="py-3 px-4 border-t border-gray-200">
+                                          {candidate.is_winner ? (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">
+                                              <FaTrophy className="w-3 h-3" />
+                                              Winner
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold">
+                                              Candidate
+                                            </span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <FaChartBar className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No decrypted results available</p>
+                  </div>
+                )}
 
                 {/* Action buttons */}
                 <div className="flex gap-3 justify-center">

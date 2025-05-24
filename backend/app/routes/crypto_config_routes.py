@@ -1,6 +1,5 @@
 from flask import Blueprint, request, jsonify
 from app.controllers.crypto_config_controller import CryptoConfigController
-from app.controllers.in_memory_key_controller import InMemoryKeyController
 from app.utils.auth import admin_required, trusted_authority_required
 
 crypto_config_bp = Blueprint('crypto_config', __name__, url_prefix='/api')
@@ -89,7 +88,7 @@ def reconstruct_key():
 @admin_required
 def check_key_shares_status():
     """Check status of key shares for an election"""
-    return InMemoryKeyController.check_key_shares_status()
+    return CryptoConfigController.check_key_shares_status()
 
 @crypto_config_bp.route('/crypto_configs/security-keys', methods=['GET'])
 def get_security_keys():

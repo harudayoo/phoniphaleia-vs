@@ -345,10 +345,9 @@ export default function CastVotePage() {
                   <h3 className="font-semibold text-xl text-gray-800">{pos.position_name}</h3>
                   {pos.description && <div className="text-gray-500 mt-1 text-sm">{pos.description}</div>}
                 </motion.div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">{pos.candidates.map(cand => (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">{pos.candidates.map((cand, candidateIdx) => (
                     <motion.label 
-                      key={cand.candidate_id}
+                      key={`${pos.position_id}-${cand.candidate_id}-${candidateIdx}`}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ 

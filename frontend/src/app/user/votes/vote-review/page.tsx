@@ -70,14 +70,14 @@ export default function VoteReviewPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-yellow-50 via-yellow-100 to-yellow-200 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-gray-100 to-slate-200 relative overflow-hidden">
       <Image src="/usep-bg.jpg" alt="bg" fill style={{ objectFit: 'cover', opacity: 0.08, zIndex: 0 }} />
       <div className="z-10 flex flex-col items-center w-full">
         <SystemLogo2 width={180} className="mb-8 drop-shadow-lg" />
         <div className="max-w-xl w-full bg-white/90 backdrop-blur-md rounded-2xl p-10 shadow-2xl border border-yellow-200 mx-auto flex flex-col items-center"
           style={{ maxHeight: '80vh', overflowY: 'auto' }}
         >
-          <h2 className="text-3xl font-extrabold text-center mb-8 text-yellow-700 tracking-tight drop-shadow-sm">Your Submitted Votes</h2>
+          <h2 className="text-3xl font-extrabold text-center mb-8 text-green-700 tracking-tight drop-shadow-sm">Your Submitted Votes</h2>
           {loading ? (
             <div className="flex flex-col items-center">
               <Loader4 size={90} className="mb-6" />

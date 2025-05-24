@@ -451,7 +451,9 @@ class ElectionController:
             return jsonify(list(grouped.values()))
         except Exception as ex:
             print('Error in get_candidates_by_election:', ex)
-            return jsonify({'error': 'Failed to fetch candidates'}), 500    @staticmethod
+            return jsonify({'error': 'Failed to fetch candidates'}), 500    
+    
+    @staticmethod
     def submit_vote(election_id):
         """Submit a vote for an election. Enforce one per position, one per election per voter."""
         try:
@@ -464,7 +466,8 @@ class ElectionController:
                 print('DEBUG submit_vote error: missing student_id or votes')
                 return jsonify({'error': 'Missing student_id or votes'}), 400
                 
-            # Validate that all votes have required encrypted_vote field
+            # For encrypted voting, we store a standardized encrypted value representing 1 vote
+            # The encrypted_vote field should contain the encrypted value of 1, not the candidate choice
             for v in votes:
                 if not v.get('encrypted_vote'):
                     print('DEBUG submit_vote error: missing encrypted_vote for candidate', v.get('candidate_id'))
@@ -486,6 +489,7 @@ class ElectionController:
                 seen_positions.add(pos_id)
                 
             # Save votes with proper encrypted data
+            # Each vote represents one vote for the chosen candidate
             for v in votes:
                 print('DEBUG submit_vote saving vote for candidate:', v.get('candidate_id'))
                 
@@ -494,11 +498,12 @@ class ElectionController:
                 if 'zkp_proof' in v and v['zkp_proof']:
                     zkp_status = 'verified_with_proof'
                 
+                # Store the encrypted vote (which should be the encryption of value 1)
                 vote = Vote(
                     election_id=election_id,
                     student_id=student_id,
                     candidate_id=v['candidate_id'],
-                    encrypted_vote=v['encrypted_vote'],  # Store the encrypted vote
+                    encrypted_vote=v['encrypted_vote'],  # This should be encryption of 1
                     zkp_proof=zkp_status,
                     verification_receipt='sent',
                     vote_status='cast'

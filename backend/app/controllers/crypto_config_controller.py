@@ -949,3 +949,61 @@ class CryptoConfigController:
         except Exception as e:
             logging.exception("Failed to fetch trusted authorities for election")
             return jsonify({'error': str(e)}), 500
+
+    @staticmethod
+    def check_key_shares_status():
+        """
+        Check the status of key shares for an election.
+        """
+        try:
+            from flask import request
+            election_id = request.args.get('election_id')
+            
+            if not election_id:
+                return jsonify({'error': 'Election ID is required'}), 400
+                
+            # Import what we need
+            from app.models.crypto_config import CryptoConfig
+            from app.models.key_share import KeyShare
+            from app.models.election import Election
+            
+            # Verify the election exists
+            election = Election.query.get(election_id)
+            if not election:
+                return jsonify({'error': f'Election {election_id} not found'}), 404
+                
+            # Get crypto config for this election
+            crypto_config = CryptoConfig.query.filter_by(election_id=election_id).first()
+            if not crypto_config:
+                return jsonify({
+                    'election_id': election_id,
+                    'crypto_config': None,
+                    'key_shares': [],
+                    'message': 'No crypto configuration found for this election'
+                }), 200
+            
+            # Get key shares for this crypto config
+            key_shares = KeyShare.query.filter_by(crypto_id=crypto_config.crypto_id).all()
+            
+            shares_data = []
+            for share in key_shares:
+                shares_data.append({
+                    'key_share_id': share.key_share_id,
+                    'authority_id': share.authority_id,
+                    'share_value_length': len(share.share_value) if share.share_value else 0
+                })
+            
+            return jsonify({
+                'election_id': election_id,
+                'crypto_config': {
+                    'crypto_id': crypto_config.crypto_id,
+                    'key_type': crypto_config.key_type,
+                    'status': crypto_config.status
+                },
+                'key_shares': shares_data,
+                'message': f'Found {len(shares_data)} key shares for this election'
+            }), 200
+                
+        except Exception as e:
+            logger.error(f"Error checking key shares status: {str(e)}")
+            return jsonify({'error': f"Failed to check key shares status: {str(e)}"}), 500

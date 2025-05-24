@@ -175,13 +175,13 @@ export default function VoteVerifyPage() {
         setOverallStatus('failed');
         return;
       }
-      
-      // All checks passed, encrypt and submit the vote
+        // All checks passed, encrypt and submit the vote
       // Encrypt each vote using the Paillier public key
+      // Note: We encrypt the value 1 to represent one vote for the candidate
       const encryptedVotes = votesToVerify.map(vote => ({
         position_id: vote.position_id,
         candidate_id: vote.candidate_id,
-        encrypted_vote: encryptPaillierVote(key, vote.candidate_id)
+        encrypted_vote: encryptPaillierVote(key, 1) // Encrypt the value 1, not the candidate ID
       }));
       // Submit the verified and encrypted votes to the backend
       const submitRes = await fetch(`${API_URL}/elections/${eId}/vote`, {
