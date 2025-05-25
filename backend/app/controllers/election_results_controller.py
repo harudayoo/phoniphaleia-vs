@@ -158,10 +158,10 @@ class ElectionResultsController:
                         logger.error(f"Error upserting election result for candidate {candidate_id}: {e}")
                         db.session.rollback()
                         return jsonify({'error': f'Error storing result for candidate {candidate_id}: {str(e)}'}), 500
-                
-                # Set status to Finished after successful tally
+                  # Set status to Finished after successful tally
                 election.election_status = 'Finished'
-                logger.info(f"Set election {election_id} status to 'Finished'")
+                election.date_end = datetime.utcnow().date()  # Update end date to when election actually finished
+                logger.info(f"Set election {election_id} status to 'Finished' and updated end date to {election.date_end}")
                 
                 # Pre-commit duplicate detection and cleanup
                 try:
@@ -651,10 +651,10 @@ class ElectionResultsController:
                     if total_votes != actual_votes:
                         logger.warning(f"Vote count mismatch: decrypted total={total_votes}, actual votes={actual_votes}")
                         # This is a warning, not an error - minor discrepancies can occur due to how votes are structured
-                    
-                    # Set election status to 'Finished' after successful decryption
+                      # Set election status to 'Finished' after successful decryption
                     election.election_status = 'Finished'
-                    logger.info(f"Setting election {election_id} status to 'Finished'")
+                    election.date_end = datetime.utcnow().date()  # Update end date to when election actually finished
+                    logger.info(f"Setting election {election_id} status to 'Finished' and updated end date to {election.date_end}")
                       # Commit all changes (decrypted results and election status)
                     db.session.commit()
                     logger.info(f"Successfully stored decrypted results and updated election status for election {election_id}")

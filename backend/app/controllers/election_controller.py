@@ -205,36 +205,42 @@ class ElectionController:
                 date_end = data['date_end']
                 if isinstance(date_end, str):
                     date_end = datetime.fromisoformat(date_end).date()
-                election.date_end = date_end
-
-            # Update other fields if present in request
+                election.date_end = date_end            # Update other fields if present in request
             if 'election_name' in data:
                 election.election_name = data['election_name']
             if 'election_desc' in data:
                 election.election_desc = data['election_desc']
             if 'org_id' in data:
                 election.org_id = data['org_id']
+            if 'election_status' in data:
+                # If manually setting status to 'Finished', update the end date
+                if data['election_status'] == 'Finished' and election.election_status != 'Finished':
+                    election.date_end = datetime.utcnow().date()
+                election.election_status = data['election_status']
             if 'queued_access' in data:
                 election.queued_access = data['queued_access']
             if 'max_concurrent_voters' in data:
-                election.max_concurrent_voters = data['max_concurrent_voters']
-
-            # Ensure date fields are datetime.date for comparison
-            ds = election.date_start
-            de = election.date_end
-            if isinstance(ds, str):
-                ds = datetime.fromisoformat(ds).date()
-            if isinstance(de, str):
-                de = datetime.fromisoformat(de).date()
-            now = datetime.utcnow().date()
-            if ds > now:
-                status = 'Upcoming'
-            elif ds <= now <= de:
-                status = 'Ongoing'
-            elif now > de:
-                status = 'Finished'
-            else:
-                status = election.election_status
+                election.max_concurrent_voters = data['max_concurrent_voters']            # If no explicit status was provided, auto-determine status based on dates
+            if 'election_status' not in data:
+                ds = election.date_start
+                de = election.date_end
+                if isinstance(ds, str):
+                    ds = datetime.fromisoformat(ds).date()
+                if isinstance(de, str):
+                    de = datetime.fromisoformat(de).date()
+                now = datetime.utcnow().date()
+                if ds > now:
+                    status = 'Upcoming'
+                elif ds <= now <= de:
+                    status = 'Ongoing'
+                elif now > de:
+                    status = 'Finished'
+                    # Auto-update end date when status becomes 'Finished' due to date
+                    if election.election_status != 'Finished':
+                        election.date_end = now
+                else:
+                    status = election.election_status
+                election.election_status = status
             election.election_status = status
 
             db.session.commit()
@@ -510,12 +516,26 @@ class ElectionController:
                 )
                 db.session.add(vote)
                 
+            # Update voters_count in the election
+            election = Election.query.get(election_id)
+            if election:
+                election.voters_count = (election.voters_count or 0) + 1
+                
+                # Update participation rate if we can calculate eligible voters
+                if election.organization and election.organization.college_id:
+                    eligible_voters = Voter.query.filter_by(college_id=election.organization.college_id).count()
+                    if eligible_voters > 0:
+                        election.participation_rate = (election.voters_count / eligible_voters) * 100
+                
+                print(f'DEBUG updated voters_count to {election.voters_count}')
+                
             db.session.commit()
             print('DEBUG submit_vote success')
             return jsonify({
                 'message': 'Vote submitted successfully',
                 'votes_count': len(votes),
-                'election_id': election_id
+                'election_id': election_id,
+                'total_voters': election.voters_count if election else None
             })
             
         except Exception as ex:
