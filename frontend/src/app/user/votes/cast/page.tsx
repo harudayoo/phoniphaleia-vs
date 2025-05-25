@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -25,7 +25,7 @@ interface Position {
   candidates: Candidate[];
 }
 
-export default function CastVotePage() {
+function CastVoteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const electionId = searchParams.get('election_id');
@@ -515,9 +515,40 @@ export default function CastVotePage() {
           onClose={() => setShowCandidate(null)}
         />
       </div>
-      
-      {/* Scroll to top button */}
+        {/* Scroll to top button */}
       <ArrowUpScrollToTop show={showScrollToTop} />
     </div>
+  );
+}
+
+export default function CastVotePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen relative flex flex-col items-center justify-start py-8 px-4 md:px-6" style={{
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        <Image src="/usep-bg.jpg" alt="bg" fill style={{ objectFit: 'cover', opacity: 0.1, zIndex: 0 }} />
+        <div
+          className="absolute inset-0 z-10 pointer-events-none"
+          style={{
+            background: `linear-gradient(120deg,
+              rgba(255,230,230,0.35) 0%,
+              rgba(255,230,230,0.18) 10%,
+              rgba(255,255,255,0.08) 40%,
+              rgba(255,255,255,0.02) 70%,
+              rgba(255,255,255,0.0) 100%)`,
+          }}
+        />
+        <div className="relative z-20 w-full max-w-3xl mx-auto flex flex-col items-center">
+          <div className="text-center py-16 w-full">
+            <div className="rounded-full h-12 w-12 border-b-2 border-blue-700 mx-auto mb-4 animate-spin"></div>
+            <p className="text-lg text-gray-700">Loading voting interface...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <CastVoteContent />
+    </Suspense>
   );
 }

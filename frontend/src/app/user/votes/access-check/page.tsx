@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Loader4 from '@/components/Loader4';
 import SystemLogo2 from '@/components/SystemLogo2';
@@ -25,7 +25,7 @@ const steps = [
   'Authenticating voting eligibility',
 ];
 
-export default function AccessCheckPage() {
+function AccessCheckContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useUser();
@@ -186,8 +186,26 @@ export default function AccessCheckPage() {
               <div className="mt-2 text-sm text-gray-500">Please wait while we check your access to this election.</div>
             </>
           )}
+        </div>      </div>
+    </div>
+  );
+}
+
+export default function AccessCheckPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-screen w-full" style={{ minHeight: '100vh', width: '100vw', background: 'linear-gradient(135deg, #f9fafb 100%, #f9fafb 100%, #fef9c3 50%, #fef9c3 100%)' }}>
+        <SystemLogo2 width={200} className="mb-8" />
+        <div className="flex flex-col items-center justify-center">
+          <Loader4 size={150} className="mb-6" />
+          <div className="mt-2 text-lg font-semibold text-gray-700 min-h-[2.5rem] text-center">
+            <span className="block animate-pulse">Loading...</span>
+            <div className="mt-2 text-sm text-gray-500">Please wait while we prepare your voting access.</div>
+          </div>
         </div>
       </div>
-    </div>
+    }>
+      <AccessCheckContent />
+    </Suspense>
   );
 }

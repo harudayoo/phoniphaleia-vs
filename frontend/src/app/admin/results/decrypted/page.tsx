@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Loader4 from "@/components/Loader4";
 import AdminLayout from "@/layouts/AdminLayout";
@@ -20,7 +20,7 @@ interface PositionResult {
   candidates: Candidate[];
 }
 
-export default function DecryptedResultsPage() {
+function DecryptedResultsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const election_id = searchParams?.get("election_id");
@@ -427,10 +427,43 @@ export default function DecryptedResultsPage() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Scroll to top button */}
+      </div>      {/* Scroll to top button */}
       <ArrowUpScrollToTop show={showScrollToTop} />
     </AdminLayout>
+  );
+}
+
+export default function DecryptedResultsPage() {
+  return (
+    <Suspense fallback={
+      <AdminLayout>
+        <div className="max-w-6xl mx-auto mt-8 space-y-6">
+          <div className="flex items-center justify-between mb-6">
+            <button className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-all duration-200">
+              <FaArrowLeft className="w-4 h-4" />
+              <span className="font-medium">Back to Results</span>
+            </button>
+            <div className="text-sm text-gray-500">Loading...</div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-green-600 to-green-700 px-8 py-6">
+              <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                <FaChartBar className="w-6 h-6" />
+                Decrypted Election Results
+              </h1>
+              <p className="text-green-100 mt-2">Final verified results from the election</p>
+            </div>
+
+            <div className="p-8 text-center">
+              <Loader4 size={80} />
+              <p className="text-gray-600 mt-4">Loading decrypted results...</p>
+            </div>
+          </div>
+        </div>
+      </AdminLayout>
+    }>
+      <DecryptedResultsContent />
+    </Suspense>
   );
 }

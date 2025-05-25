@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
 import Header from '@/components/Header';
@@ -15,7 +15,7 @@ interface ErrorResponse {
   message?: string;
 }
 
-export default function AdminOTPVerification() {
+function AdminOTPVerificationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [otp, setOtp] = useState('');
@@ -159,8 +159,33 @@ export default function AdminOTPVerification() {
             </div>
           </div>
         </div>
-      </main>
-      <Footer />
+      </main>      <Footer />
     </div>
+  );
+}
+
+export default function AdminOTPVerification() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen bg-gray-50">
+        <Header />
+        <main className="flex-grow flex items-center justify-center p-4">
+          <div className="flex w-full justify-center items-center">
+            <div className="w-full max-w-md">
+              <div className="border border-gray-200 rounded-lg shadow-sm bg-white p-6 md:p-8">
+                <h2 className="text-2xl font-bold mb-6 text-gray-800 text-center">Admin OTP Verification</h2>
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-800 mx-auto"></div>
+                  <p className="text-gray-600 mt-4">Loading...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    }>
+      <AdminOTPVerificationContent />
+    </Suspense>
   );
 }

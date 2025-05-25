@@ -1,6 +1,6 @@
 // Vote Review Page - displays submitted votes and allows sending a vote receipt
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Loader4 from '@/components/Loader4';
@@ -16,7 +16,7 @@ interface ReviewVote {
   position_name: string;
 }
 
-export default function VoteReviewPage() {
+function VoteReviewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [votes, setVotes] = useState<ReviewVote[]>([]);
@@ -121,9 +121,30 @@ export default function VoteReviewPage() {
               {success && <div className="text-green-700 text-center mt-3 font-semibold animate-fade-in">{success}</div>}
               {emailSent && <div className="text-gray-500 text-center text-xs mt-2">You will be redirected to the elections page shortly.</div>}
             </>
-          )}
-        </div>
+          )}        </div>
       </div>
     </div>
+  );
+}
+
+export default function VoteReviewPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-gray-100 to-slate-200 relative overflow-hidden">
+        <Image src="/usep-bg.jpg" alt="bg" fill style={{ objectFit: 'cover', opacity: 0.08, zIndex: 0 }} />
+        <div className="z-10 flex flex-col items-center w-full">
+          <SystemLogo2 width={180} className="mb-8 drop-shadow-lg" />
+          <div className="max-w-xl w-full bg-white/90 backdrop-blur-md rounded-2xl p-10 shadow-2xl border border-yellow-200 mx-auto flex flex-col items-center">
+            <h2 className="text-3xl font-extrabold text-center mb-8 text-green-700 tracking-tight drop-shadow-sm">Your Submitted Votes</h2>
+            <div className="flex flex-col items-center">
+              <Loader4 size={90} className="mb-6" />
+              <p className="text-gray-600 font-semibold text-center text-lg">Loading...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <VoteReviewContent />
+    </Suspense>
   );
 }

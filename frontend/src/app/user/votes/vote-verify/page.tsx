@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Loader4 from '@/components/Loader4';
@@ -27,7 +27,7 @@ interface VerificationStatus {
   followsRules: 'pending' | 'verified' | 'failed';
 }
 
-export default function VoteVerifyPage() {
+function VoteVerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useUser();  // State for tracking the current election and votes
@@ -381,8 +381,40 @@ function VerificationStep({ title, status }: { title: string, status: 'pending' 
             <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
           </svg>
         )}
-      </div>
-      <span className={`text-sm font-medium ${textColor}`}>{title}</span>
+      </div>      <span className={`text-sm font-medium ${textColor}`}>{title}</span>
     </div>
+  );
+}
+
+export default function VoteVerifyPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col items-center justify-center"
+        style={{ 
+          minHeight: '100vh', 
+          width: '100vw', 
+          background: 'linear-gradient(135deg, #f9fafb 100%, #f9fafb 100%, #fef9c3 50%, #fef9c3 100%)' 
+        }}
+      >
+        <Image src="/usep-bg.jpg" alt="bg" fill style={{ objectFit: 'cover', opacity: 0.08, zIndex: 0 }} />
+        <div className="z-10 flex flex-col items-center w-full">
+          <SystemLogo2 width={200} className="mb-8" />
+          <div
+            className="max-w-3xl w-full bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg border border-gray-200 mx-auto"
+            style={{ maxHeight: '80vh', overflowY: 'auto' }}
+          >
+            <h2 className="text-2xl font-bold text-center mb-6">Vote Verification</h2>
+            <div className="flex flex-col items-center">
+              <Loader4 size={100} className="mb-6" />
+              <p className="text-gray-700 font-medium text-center">
+                Loading verification process...
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <VoteVerifyContent />
+    </Suspense>
   );
 }

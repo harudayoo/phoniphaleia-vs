@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Loader4 from "@/components/Loader4";
 import AdminLayout from "@/layouts/AdminLayout";
@@ -11,7 +11,7 @@ interface Authority {
   authority_name: string;
 }
 
-export default function TallyElectionPage() {
+function TallyElectionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const election_id = searchParams?.get("election_id") || "";
@@ -465,10 +465,33 @@ export default function TallyElectionPage() {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Scroll to top button */}
+      </div>      {/* Scroll to top button */}
       <ArrowUpScrollToTop show={showScrollToTop} />
     </AdminLayout>
+  );
+}
+
+export default function TallyElectionPage() {
+  return (
+    <Suspense fallback={
+      <AdminLayout>
+        <div className="max-w-4xl mx-auto mt-8 space-y-6">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
+              <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                <FaLock className="w-6 h-6" />
+                Tally Election Results
+              </h1>
+            </div>
+            <div className="p-8 text-center">
+              <Loader4 size={80} />
+              <p className="text-gray-600 mt-4">Loading...</p>
+            </div>
+          </div>
+        </div>
+      </AdminLayout>
+    }>
+      <TallyElectionContent />
+    </Suspense>
   );
 }
