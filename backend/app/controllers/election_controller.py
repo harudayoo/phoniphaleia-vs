@@ -14,7 +14,7 @@ import uuid
 import json
 from werkzeug.utils import secure_filename
 
-class ElectionController:
+class ElectionController:    
     @staticmethod
     def get_all():
         try:
@@ -22,15 +22,21 @@ class ElectionController:
             result = []
             now = datetime.utcnow().date()
             for e in elections:
-                # Determine status
-                if e.date_start > now:
-                    status = 'Upcoming'
-                elif e.date_start <= now <= e.date_end:
-                    status = 'Ongoing'
-                elif now > e.date_end:
+                # Use the stored election_status as the primary source of truth
+                # Only update status if it's clearly outdated based on dates
+                status = e.election_status
+                
+                # Auto-update status if dates indicate it should change
+                if now > e.date_end and e.election_status not in ['Finished', 'Canceled']:
+                    # Election has ended but status hasn't been updated - fix it
                     status = 'Finished'
-                else:
-                    status = e.election_status  # fallback
+                    e.election_status = 'Finished'
+                    db.session.add(e)  # Mark for update
+                elif e.date_start > now and e.election_status not in ['Upcoming', 'Canceled']:
+                    # Election hasn't started yet
+                    status = 'Upcoming'
+                    e.election_status = 'Upcoming'
+                    db.session.add(e)  # Mark for update
                 # Fetch college_name and college_id from organization relationship
                 college_name = None
                 college_id = None
@@ -93,9 +99,15 @@ class ElectionController:
                         'org_id': e.organization.org_id,
                         'org_name': e.organization.org_name,
                         'college_name': e.organization.college.college_name if e.organization.college else None
-                    }
-                
+                    }                
                 result.append(election_data)
+            
+            # Commit any status updates we made
+            try:
+                db.session.commit()
+            except Exception as commit_ex:
+                db.session.rollback()
+                print(f"Warning: Could not update election statuses: {commit_ex}")
             
             return jsonify(result)
         except Exception as ex:

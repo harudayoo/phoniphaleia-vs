@@ -665,12 +665,13 @@ class ElectionResultsController:
                         logger.info(f"Vote count verification passed for election {election_id}")
                     else:
                         logger.warning(f"Vote count verification found issues for election {election_id}: {issues}")
-                    
-                    # VERIFICATION: Final verification that all candidates have vote counts
+                      # VERIFICATION: Final verification that all candidates have vote counts
                     missing_counts = ElectionResult.query.filter_by(election_id=election_id, vote_count=None).count()
                     if missing_counts > 0:
                         logger.warning(f"After decryption, {missing_counts} candidates are still missing vote counts")
-                        return jsonify({
+                    
+                    # Return success response for all cases
+                    return jsonify({
                         'decrypted_results': decrypted,
                         'total_decrypted_votes': total_votes,
                         'vote_count_match': total_votes == actual_votes,
@@ -679,16 +680,17 @@ class ElectionResultsController:
                     
                 else:
                     logger.error(f"Unsupported private key type: {private_key_data.get('type')}. Only type=prime is supported.")
-                    return jsonify({'error': 'Only private keys of type "prime" are supported for decryption.'}), 400
+                    return jsonify({'error': 'Only private keys of type "prime" are supported for decryption.'}), 400            
             except json.JSONDecodeError:
                 logger.error("Failed to decode private key JSON.")
                 return jsonify({'error': 'Failed to decode private key JSON.'}), 400
             except Exception as e:
                 logger.error(f"Failed to decode private key in any format: {e}")
                 return jsonify({'error': f'Failed to decode private key: {str(e)}'}), 400
-        except Exception as e:            db.session.rollback()
-        logger.error(f"Error in decrypt_tally: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error in decrypt_tally: {str(e)}")
+            return jsonify({'error': str(e)}), 500
             
     @staticmethod
     def get_decrypted_results(election_id):

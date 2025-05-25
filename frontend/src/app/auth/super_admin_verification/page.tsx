@@ -123,6 +123,11 @@ function SuperAdminOTPVerificationContent() {
               )}
               <form className="space-y-4 text-gray-500" onSubmit={handleSubmit}>
                 <div className="flex flex-col items-center">
+                  <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md w-full">
+                    <p className="text-sm text-blue-700 text-center">
+                      <span className="font-medium">Can&apos;t find the OTP?</span> Please check your spam or junk folder.
+                    </p>
+                  </div>
                   <label htmlFor="otp" className="sr-only">
                     OTP
                   </label>

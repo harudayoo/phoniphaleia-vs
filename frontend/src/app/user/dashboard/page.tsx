@@ -132,27 +132,35 @@ export default function UserDashboard() {
             isBeforeStart: today < startDate,
             isAfterEnd: today > endDate,
             isOngoing: startDate <= today && today <= endDate
-          });
-
-          // Determine election status based on dates AND the election_status field
-          if (election.election_status === 'Ongoing' || 
-             (startDate <= today && today <= endDate)) {
-            // Election is ongoing - either based on API status or our date calculation
-            console.log(`Election ${election.election_name} is ONGOING`);
+          });          // Determine election status based on API status first, then dates as fallback
+          // Priority: API status takes precedence over date calculation
+          if (election.election_status === 'Finished' || election.election_status === 'Canceled') {
+            // Election is finished/canceled - API status overrides date calculation
+            console.log(`Election ${election.election_name} is COMPLETED (API status: ${election.election_status})`);
+            completed++;
+          } else if (election.election_status === 'Ongoing') {
+            // Election is explicitly marked as ongoing in the API
+            console.log(`Election ${election.election_name} is ONGOING (API status: ${election.election_status})`);
             ongoing++;
             ongoingElectionsList.push(election);
           } else if (election.election_status === 'Upcoming' || today < startDate) {
             // Election hasn't started yet
-            console.log(`Election ${election.election_name} is UPCOMING`);
+            console.log(`Election ${election.election_name} is UPCOMING (API status: ${election.election_status})`);
             upcoming++;
-          } else if (election.election_status === 'Finished' || election.election_status === 'Canceled' || today > endDate) {
-            // Election has ended
-            console.log(`Election ${election.election_name} is COMPLETED`);
+          } else if (today > endDate || election.election_status === 'Completed') {
+            // Election has ended based on date or is marked as completed
+            console.log(`Election ${election.election_name} is COMPLETED (API status: ${election.election_status} or date-based)`);
             completed++;
           } else {
-            // Fallback - if we can't determine the status, consider it upcoming
-            console.warn(`Could not determine status for election ${election.election_name}, defaulting to upcoming`);
-            upcoming++;
+            // For any unknown status, use date-based logic as fallback
+            if (startDate <= today && today <= endDate) {
+              console.log(`Election ${election.election_name} is ONGOING (date-based fallback, API status: ${election.election_status})`);
+              ongoing++;
+              ongoingElectionsList.push(election);
+            } else {
+              console.warn(`Could not determine status for election ${election.election_name}, defaulting to upcoming`);
+              upcoming++;
+            }
           }
         }
 
