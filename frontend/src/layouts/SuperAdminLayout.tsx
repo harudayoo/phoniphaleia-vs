@@ -7,8 +7,6 @@ import {
   Users,
   ClipboardList,
   Settings2,
-  User,
-  Bell,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSuperAdmin, SuperAdminProvider } from '@/contexts/SuperAdminContext';

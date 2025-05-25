@@ -81,14 +81,15 @@ class UserController:
             return jsonify({'message': 'Support ticket submitted successfully.'}), 200
         except Exception as e:
             current_app.logger.error(f"Support ticket error: {str(e)}")
-            return jsonify({'message': 'Failed to submit support ticket.'}), 500
-
-    @staticmethod
+            return jsonify({'message': 'Failed to submit support ticket.'}), 500    @staticmethod
     def update_photo():
         from flask import request, jsonify, current_app
         from app.models.voter import Voter
         from app import db
         import os, jwt, time, json
+        # Handle CORS preflight
+        if request.method == 'OPTIONS':
+            return '', 200
         # Try to get token from Authorization header or cookie
         user_token = request.headers.get('Authorization', '').replace('Bearer ', '')
         if not user_token:

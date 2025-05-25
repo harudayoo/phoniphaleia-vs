@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, ReactNode } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import Sidebar from '@/components/Sidebar';
 import SystemLogo2 from '@/components/SystemLogo2';
 import {
@@ -189,11 +190,11 @@ function UserLayoutInner({ children }: UserLayoutProps) {
                     key={user.photo_url + user.student_id} // Force re-render on user/photo change
                   >
                     {(() => { console.log('User photo_url:', user.photo_url); return null; })()}
-                    <img
+                    <Image
                       src={
                         user.photo_url.startsWith('http')
                           ? user.photo_url
-                          : `${process.env.NEXT_PUBLIC_API_URL?.replace(/\/api$/, '') || 'http://localhost:5000'}${user.photo_url}`
+                          : `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}${user.photo_url}`
                       }
                       alt={`${user.first_name}'s photo`}
                       width={48}
@@ -203,6 +204,7 @@ function UserLayoutInner({ children }: UserLayoutProps) {
                         (e.target as HTMLImageElement).src = "/LogoNoText.png";
                       }}
                       style={{ display: 'block' }}
+                      unoptimized={true}
                     />
                   </motion.div>
                   

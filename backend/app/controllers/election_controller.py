@@ -560,8 +560,8 @@ class ElectionController:
 
             photo_path = None
             if photo and AuthController.allowed_file(photo.filename):
-                # Ensure the uploads/photos directory exists at the project root
-                uploads_dir = os.path.join(os.getcwd(), 'uploads')
+                # Use the configured uploads directory
+                uploads_dir = current_app.config.get('UPLOADS_FOLDER')
                 photos_dir = os.path.join(uploads_dir, 'photos')
                 os.makedirs(photos_dir, exist_ok=True)
                 unique_filename = f"{uuid.uuid4().hex}_{secure_filename(photo.filename)}"

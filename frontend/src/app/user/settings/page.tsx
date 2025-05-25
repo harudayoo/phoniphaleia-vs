@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 import UserLayout from '@/layouts/UserLayout';
 import { useUser } from '@/contexts/UserContext';
 import { Bell, Lock, User, Mail, AlertTriangle, Eye, EyeOff } from 'lucide-react';
@@ -393,11 +394,15 @@ export default function UserSettingsPage() {
         <form onSubmit={handlePhotoUpload} className="space-y-4">
           {photoFile && (
             <div className="flex flex-col items-center gap-3">
-              <img
+              <Image
                 src={URL.createObjectURL(photoFile)}
                 alt="Preview"
+                width={128}
+                height={128}
                 className="max-h-48 max-w-full rounded-full shadow border-2 border-blue-200 object-cover"
                 style={{ width: 128, height: 128 }}
+                unoptimized={true}
+                priority={false}
               />
               <span className="text-gray-500 text-xs">Preview</span>
             </div>

@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import AdminLayout from '@/layouts/AdminLayout';
 import { FaEdit, FaTrash, FaEye, FaUser } from 'react-icons/fa';
 import { Filter, Calendar, Users, Award } from 'lucide-react';
@@ -875,18 +876,29 @@ export default function AdminElectionsPage() {
                     if (seen.has(p.position_id)) return false;
                     seen.add(p.position_id);
                     return true;
-                  });                  return (
+                  });
+                  
+                  return (
                     <div key={idx} className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end border-b pb-4 mb-4">
-                      {/* Photo Display (Left Side) */}                      <div className="flex items-center justify-center">                        <div className="w-20 h-20 rounded-md overflow-hidden bg-gray-100 border border-gray-200 relative">                          {(cand.photo_url || cand.photo) ? (                            cand.photo ? (
-                              <img 
+                      {/* Photo Display (Left Side) */}                      
+                      <div className="flex items-center justify-center">                        
+                        <div className="w-20 h-20 rounded-md overflow-hidden bg-gray-100 border border-gray-200 relative">
+                          {(cand.photo_url || cand.photo) ? (
+                            cand.photo ? (
+                              <Image 
                                 src={URL.createObjectURL(cand.photo)}
                                 alt={`Photo of ${cand.fullname || 'candidate'}`}
+                                width={80}
+                                height={80}
                                 className="w-full h-full object-cover"
+                                unoptimized={true}
                               />
                             ) : (
-                              <img 
+                              <Image 
                                 src={cand.photo_url!}
                                 alt={`Photo of ${cand.fullname || 'candidate'}`}
+                                width={80}
+                                height={80}
                                 className="w-full h-full object-cover"
                               />
                             )
@@ -902,10 +914,9 @@ export default function AdminElectionsPage() {
                       <div className="md:col-span-2">
                         <label className="block text-sm text-gray-700 font-medium mb-1">Full Name</label>
                         <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.fullname} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'fullname', e.target.value)} placeholder="Candidate Name" />
-                      </div>
-                      <div>
+                      </div>                      <div>
                         <label className="block text-sm text-gray-700 font-medium mb-1">Party</label>
-                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.party} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'party', e.target.value)} placeholder="Party" />
+                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.party || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'party', e.target.value)} placeholder="Party" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 font-medium mb-1">Position</label>
@@ -954,10 +965,9 @@ export default function AdminElectionsPage() {
                           </svg>
                           Remove
                         </button>
-                      </div>
-                      <div className="md:col-span-5 mt-2">
+                      </div>                      <div className="md:col-span-5 mt-2">
                         <label className="block text-sm text-gray-700 font-medium mb-1">Description</label>
-                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.candidate_desc} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'candidate_desc', e.target.value)} placeholder="Description" />
+                        <input className="w-full border text-gray-700 rounded px-3 py-2" value={cand.candidate_desc || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleUpdateCandidate(idx, 'candidate_desc', e.target.value)} placeholder="Description" />
                       </div>
                     </div>
                   );

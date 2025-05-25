@@ -240,8 +240,7 @@ export default function CreateElectionPage() {
   // Remove candidate
   const removeCandidate = (idx: number) => {
     setCandidates(c => c.length > 3 ? c.filter((_, i) => i !== idx) : c);
-  };
-  // Complete election creation after key shares are downloaded
+  };  // Complete election creation after key shares are downloaded
   const handleCompleteElection = async () => {
     try {
       const pendingData = localStorage.getItem('pending_election_data');
@@ -249,25 +248,11 @@ export default function CreateElectionPage() {
         throw new Error('No pending election data found');
       }
 
-      const { election_id, candidates: candidatesWithPhotos } = JSON.parse(pendingData);
+      // Parse the data just to validate it exists, but we don't need to use it
+      JSON.parse(pendingData);
 
-      // Add candidates with photos
-      for (const candidate of candidatesWithPhotos) {
-        const formData = new FormData();
-        formData.append('fullname', candidate.fullname);
-        formData.append('position_id', String(candidate.position_id));
-        if (candidate.party) formData.append('party', candidate.party);
-        if (candidate.candidate_desc) formData.append('candidate_desc', candidate.candidate_desc);
-        if (candidate.photo) formData.append('photo', candidate.photo);
-        const candidateRes = await fetch(`${API_URL}/elections/${election_id}/candidates`, {
-          method: 'POST',
-          body: formData
-        });
-        if (!candidateRes.ok) {
-          const err = await candidateRes.json();
-          throw new Error(err.error || 'Failed to add candidate with photo');
-        }
-      }
+      // All candidates have already been processed during election creation
+      // This function now only handles cleanup and navigation
 
       // Clean up all temporary data and show success message
       localStorage.removeItem('temp_crypto_id');
@@ -282,10 +267,9 @@ export default function CreateElectionPage() {
       setShowModal(true);
       setShowKeyModal(false);
     }
-  };  // Save all data
+  };// Save all data
   const handleFinish = async () => {
-    try {
-      // 1. Create the election (without candidates with photos)
+    try {      // 1. Create the election (without candidates with photos, they'll be added later)
       const electionRes = await fetch(`${API_URL}/elections`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -302,7 +286,27 @@ export default function CreateElectionPage() {
         })
       });
       if (!electionRes.ok) throw new Error('Failed to create election');
-      const election = await electionRes.json();      // 2. Create trusted authorities for each personnel
+      const election = await electionRes.json();
+
+      // 1.5. Add candidates with photos immediately after election creation
+      const candidatesWithPhotos = candidates.filter(c => c.fullname && c.position_id && c.photo);
+      for (const candidate of candidatesWithPhotos) {
+        const formData = new FormData();
+        formData.append('fullname', candidate.fullname);
+        formData.append('position_id', String(candidate.position_id));
+        if (candidate.party) formData.append('party', candidate.party);
+        if (candidate.candidate_desc) formData.append('candidate_desc', candidate.candidate_desc);
+        if (candidate.photo) formData.append('photo', candidate.photo);
+        
+        const candidateRes = await fetch(`${API_URL}/elections/${election.election_id}/candidates`, {
+          method: 'POST',
+          body: formData
+        });
+        if (!candidateRes.ok) {
+          const err = await candidateRes.json();
+          throw new Error(err.error || 'Failed to add candidate with photo');
+        }
+      }// 2. Create trusted authorities for each personnel
       const adminToken = localStorage.getItem('admin_token');
       if (!adminToken) throw new Error('You are not logged in. Please log in as an administrator.');
       const validPersonnel = personnel.filter(p => p.name.trim());
@@ -402,12 +406,10 @@ export default function CreateElectionPage() {
       const authorities: Authority[] = (await authoritiesRes.json()).authorities;      // 6. Show the modal for the generated key pair per trusted authority (with sensitive data warning)
       setKeyGenAuthorityNames(authorities.map(a => a.authority_name));
       setKeySharesForModal(keyShares.map(k => k.share_value));
-      setShowKeyModal(true);
-
-      // Store election data for completion after modal is closed
+      setShowKeyModal(true);      // Store election data for completion after modal is closed (no candidates with photos needed)
       localStorage.setItem('pending_election_data', JSON.stringify({
         election_id: election.election_id,
-        candidates: candidates.filter(c => c.fullname && c.position_id && c.photo)
+        candidates: [] // All candidates have been processed already
       }));
     } catch (e: unknown) {
       console.error('Error in handleFinish:', e);
@@ -749,9 +751,7 @@ export default function CreateElectionPage() {
                 </div>
               </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          </div>        <div className="w-full">
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h4 className="font-semibold text-gray-700 text-lg flex items-center gap-2">
@@ -769,9 +769,7 @@ export default function CreateElectionPage() {
                   <Plus size={16} /> 
                   Add Personnel
                 </button>
-              </div>
-
-              <div className="space-y-4">
+              </div>              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {personnel.map((p, idx) => (
                   <div key={idx} className="group">
                     <div className="flex gap-3 items-center">
@@ -819,13 +817,14 @@ export default function CreateElectionPage() {
               </div>
             </div>
 
-          </div>         
+          </div>
           {/* Enhanced Key Generation Modal */}
           <Modal
             isOpen={showKeyModal}
             onClose={() => setShowKeyModal(false)}
             title="Private Key Shares Distribution"
-            size="lg"            footer={
+            size="xxxl"            
+            footer={
               <div className="flex justify-between items-center w-full">
                 <div className="flex items-center gap-4">
                   <div className="text-sm text-gray-600">
@@ -848,7 +847,7 @@ export default function CreateElectionPage() {
                              text-white rounded-lg font-semibold transition-all duration-200 transform hover:scale-105" 
                     onClick={handleCompleteElection}
                   >
-                    ✅ Done - Create Election
+                   Create Election
                   </button>
                 </div>
               </div>

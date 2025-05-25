@@ -313,7 +313,7 @@ class AuthController:
         """Send OTP email to voters"""
         try:
             # Read the OTP email template from the external file
-            template_path = os.path.join(current_app.root_path, '..', '..', 'frontend', 'src', 'templates', 'OtpEmail.tsx')
+            template_path = os.path.join(current_app.root_path, '..', '..', 'frontend', 'src', 'templates', 'OtpEmail.html')
             
             with open(template_path, 'r') as template_file:
                 template_content = template_file.read()
@@ -349,7 +349,7 @@ class AuthController:
         """Send OTP email to admins"""
         try:
             # Read the OTP email template from the external file
-            template_path = os.path.join(current_app.root_path, '..', '..', 'frontend', 'src', 'templates', 'OtpEmail.tsx')    
+            template_path = os.path.join(current_app.root_path, '..', '..', 'frontend', 'src', 'templates', 'OtpEmail.html')    
             
             with open(template_path, 'r') as template_file:
                 template_content = template_file.read()

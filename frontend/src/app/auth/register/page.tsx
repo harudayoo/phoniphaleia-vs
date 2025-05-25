@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
+import Image from 'next/image';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
@@ -213,10 +214,13 @@ export default function Register() {
       idPicture && (
           <div className="mt-4">
               <p className="text-sm text-gray-600">Preview:</p>
-              <img
+              <Image
                   src={URL.createObjectURL(idPicture)}
                   alt="ID Preview"
-                  className="w-32 h-32 object-cover rounded-md border"
+                  width={128}
+                  height={128}
+                  className="object-cover rounded-md border"
+                  unoptimized={true}
               />
           </div>
       )

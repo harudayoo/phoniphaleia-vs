@@ -1,4 +1,3 @@
-// Voting cast page for a specific election
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -65,18 +64,28 @@ export default function CastVotePage() {
             // Map photo_path to photo_url for frontend compatibility
             let photoUrl = cand.photo_url || cand.photo_path;
             if (photoUrl) {
-              if (photoUrl.startsWith('/api/')) {
+              // Clean up the URL construction
+              if (photoUrl.startsWith('http://') || photoUrl.startsWith('https://')) {
+                // Already a full URL, use as is
+                photoUrl = photoUrl;
+              } else if (photoUrl.startsWith('/api/')) {
+                // Remove /api prefix and add base URL
                 photoUrl = `${API_URL}${photoUrl.substring(4)}`;
-              } else if (photoUrl.startsWith('photos/')) {
-                photoUrl = `${API_URL}/uploads/${photoUrl}`;
-              } else if (photoUrl.startsWith('uploads/photos/')) {
-                photoUrl = `${API_URL}/uploads/photos/${photoUrl.split('/').pop()}`;
-              } else if (photoUrl.startsWith('uploads/')) {
-                photoUrl = `${API_URL}/uploads/${photoUrl.split('/').pop()}`;
-              } else if (!photoUrl.startsWith('http')) {
-                photoUrl = `${API_URL}/uploads/${photoUrl}`;
+              } else if (photoUrl.startsWith('/uploads/')) {
+                // Add base URL to uploads path
+                photoUrl = `${API_URL}${photoUrl}`;
+              } else if (photoUrl.includes('uploads/')) {
+                // Extract filename and construct proper path
+                const filename = photoUrl.split('/').pop();
+                photoUrl = `${API_URL}/uploads/photos/${filename}`;
+              } else {
+                // Assume it's just a filename
+                photoUrl = `${API_URL}/uploads/photos/${photoUrl}`;
               }
             }
+            
+            console.log('Candidate photo URL:', cand.fullname, photoUrl); // Debug log
+            
             return {
               ...cand,
               photo_url: photoUrl
@@ -381,15 +390,39 @@ export default function CastVotePage() {
                               whileHover={{ scale: 1.1 }}
                               transition={{ type: "spring", stiffness: 300, damping: 20 }}
                             >
-                              <img 
+                              <Image 
                                 src={cand.photo_url} 
                                 alt={`Photo of ${cand.fullname}`}
+                                width={80}
+                                height={80}
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
-                                  e.currentTarget.src = '/user-placeholder.png'; 
-                                  e.currentTarget.onerror = null;
+                                  console.log('Image failed to load:', cand.photo_url);
+                                  const target = e.currentTarget as HTMLImageElement;
+                                  target.src = '/user-placeholder.png'; 
+                                  target.onerror = null;
                                 }}
+                                onLoad={() => console.log('Image loaded successfully:', cand.photo_url)}
+                                unoptimized={true}
+                                priority={false}
+                                placeholder="blur"
+                                blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R+Rj5m9beMZcjOFdgNZqOE2eU5iq9lzYwf8Vf3v/Z"
                               />
+                            </motion.div>
+                          </div>
+                        )}
+                        
+                        {!cand.photo_url && (
+                          <div className="mr-4 flex-shrink-0">
+                            <motion.div 
+                              className="w-20 h-20 rounded-full overflow-hidden border-2 border-gray-200 bg-gray-100 flex items-center justify-center"
+                              whileHover={{ scale: 1.1 }}
+                              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" className="text-gray-400" viewBox="0 0 16 16">
+                                <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                                <path fillRule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
+                              </svg>
                             </motion.div>
                           </div>
                         )}
