@@ -14,58 +14,16 @@ import {
 
 // Import reusable components
 import PageHeader from '@/components/admin/PageHeader';
-
-interface SystemSettings {
-  general: {
-    systemName: string;
-    contactEmail: string;
-    supportPhone: string;
-    maintenanceMode: boolean;
-    copyrightText: string;
-  };
-  elections: {
-    defaultDuration: number;
-    reminderHours: number;
-    resultDelay: number;
-    minimumCandidates: number;
-    requireConfirmation: boolean;
-  };
-  security: {
-    sessionTimeout: number;
-    failedAttempts: number;
-    passwordExpiryDays: number;
-    mfaRequired: boolean;
-    ipRestriction: boolean;
-  };
-  notifications: {
-    emailNotifications: boolean;
-    adminAlerts: boolean;
-    resultNotifications: boolean;
-    systemAlerts: boolean;
-  };
-  users: {
-    autoApprove: boolean;
-    allowSelfRegistration: boolean;
-    inactivityDays: number;
-    maxAdminUsers: number;
-  };
-  backup: {
-    autoBackup: boolean;
-    backupFrequency: number;
-    retentionDays: number;
-    includeAttachments: boolean;
-  };
-}
+import systemSettingsService, { SystemSettings } from '@/services/systemSettingsService';
 
 export default function AdminSettingsPage() {
-  const [activeTab, setActiveTab] = useState('general');
-  const [settings, setSettings] = useState<SystemSettings>({
+  const [activeTab, setActiveTab] = useState('general');  const [settings, setSettings] = useState<SystemSettings>({
     general: {
-      systemName: 'Phoniphaleia Voting System',
-      contactEmail: 'admin@phoniphaleia.edu',
-      supportPhone: '(555) 123-4567',
+      systemName: '',
+      contactEmail: '',
+      supportPhone: '',
       maintenanceMode: false,
-      copyrightText: '© 2025 Phoniphaleia University. All rights reserved.',
+      copyrightText: '',
     },
     elections: {
       defaultDuration: 7,
@@ -78,7 +36,7 @@ export default function AdminSettingsPage() {
       sessionTimeout: 30,
       failedAttempts: 5,
       passwordExpiryDays: 90,
-      mfaRequired: true,
+      mfaRequired: false,
       ipRestriction: false,
     },
     notifications: {
@@ -103,14 +61,68 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [error, setError] = useState('');
-
-  // Simulate fetching settings
+  const [error, setError] = useState('');  // Fetch settings from API
   useEffect(() => {
-    // In a real app, this would fetch from an API
-    setTimeout(() => {
-      setLoading(false);
-    }, 800);
+    const fetchSettings = async () => {
+      try {
+        setLoading(true);
+        const data = await systemSettingsService.getAllSettings();
+        
+        // Ensure all categories exist with fallback to defaults
+        const mergedSettings: SystemSettings = {
+          general: {
+            systemName: data?.general?.systemName || '',
+            contactEmail: data?.general?.contactEmail || '',
+            supportPhone: data?.general?.supportPhone || '',
+            maintenanceMode: data?.general?.maintenanceMode || false,
+            copyrightText: data?.general?.copyrightText || '',
+          },
+          elections: {
+            defaultDuration: data?.elections?.defaultDuration || 7,
+            reminderHours: data?.elections?.reminderHours || 24,
+            resultDelay: data?.elections?.resultDelay || 2,
+            minimumCandidates: data?.elections?.minimumCandidates || 2,
+            requireConfirmation: data?.elections?.requireConfirmation !== undefined ? data.elections.requireConfirmation : true,
+          },
+          security: {
+            sessionTimeout: data?.security?.sessionTimeout || 30,
+            failedAttempts: data?.security?.failedAttempts || 5,
+            passwordExpiryDays: data?.security?.passwordExpiryDays || 90,
+            mfaRequired: data?.security?.mfaRequired || false,
+            ipRestriction: data?.security?.ipRestriction || false,
+          },
+          notifications: {
+            emailNotifications: data?.notifications?.emailNotifications !== undefined ? data.notifications.emailNotifications : true,
+            adminAlerts: data?.notifications?.adminAlerts !== undefined ? data.notifications.adminAlerts : true,
+            resultNotifications: data?.notifications?.resultNotifications !== undefined ? data.notifications.resultNotifications : true,
+            systemAlerts: data?.notifications?.systemAlerts !== undefined ? data.notifications.systemAlerts : true,
+          },
+          users: {
+            autoApprove: data?.users?.autoApprove || false,
+            allowSelfRegistration: data?.users?.allowSelfRegistration !== undefined ? data.users.allowSelfRegistration : true,
+            inactivityDays: data?.users?.inactivityDays || 180,
+            maxAdminUsers: data?.users?.maxAdminUsers || 5,
+          },
+          backup: {
+            autoBackup: data?.backup?.autoBackup !== undefined ? data.backup.autoBackup : true,
+            backupFrequency: data?.backup?.backupFrequency || 1,
+            retentionDays: data?.backup?.retentionDays || 30,
+            includeAttachments: data?.backup?.includeAttachments !== undefined ? data.backup.includeAttachments : true,
+          }
+        };
+        
+        setSettings(mergedSettings);
+        console.log('Settings loaded successfully:', mergedSettings);
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+        setError('Failed to load settings. Using default values.');
+        // Keep the default settings that were set in useState
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSettings();
   }, []);
 
   const handleChange = (section: keyof SystemSettings, field: string, value: string | number | boolean) => {
@@ -122,15 +134,13 @@ export default function AdminSettingsPage() {
       }
     }));
   };
-  
-  const saveSettings = async () => {
+    const saveSettings = async () => {
     try {
       setSaving(true);
       setError('');
       
-      // In a real app, this would post to an API
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Save settings via API
+      await systemSettingsService.updateSettings(settings);
       
       setSaving(false);
       setSaveSuccess(true);
@@ -239,7 +249,7 @@ export default function AdminSettingsPage() {
                         type="text"
                         value={settings.general.systemName}
                         onChange={(e) => handleChange('general', 'systemName', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                     
@@ -251,7 +261,7 @@ export default function AdminSettingsPage() {
                         type="email"
                         value={settings.general.contactEmail}
                         onChange={(e) => handleChange('general', 'contactEmail', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                     
@@ -263,7 +273,7 @@ export default function AdminSettingsPage() {
                         type="text"
                         value={settings.general.supportPhone}
                         onChange={(e) => handleChange('general', 'supportPhone', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                     
@@ -275,7 +285,7 @@ export default function AdminSettingsPage() {
                         type="text"
                         value={settings.general.copyrightText}
                         onChange={(e) => handleChange('general', 'copyrightText', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                   </div>
@@ -318,7 +328,7 @@ export default function AdminSettingsPage() {
                         max="30"
                         value={settings.elections.defaultDuration}
                         onChange={(e) => handleChange('elections', 'defaultDuration', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                     
@@ -332,7 +342,7 @@ export default function AdminSettingsPage() {
                         max="72"
                         value={settings.elections.reminderHours}
                         onChange={(e) => handleChange('elections', 'reminderHours', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                     
@@ -346,7 +356,7 @@ export default function AdminSettingsPage() {
                         max="48"
                         value={settings.elections.resultDelay}
                         onChange={(e) => handleChange('elections', 'resultDelay', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                     
@@ -360,7 +370,7 @@ export default function AdminSettingsPage() {
                         max="10"
                         value={settings.elections.minimumCandidates}
                         onChange={(e) => handleChange('elections', 'minimumCandidates', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                   </div>
@@ -396,7 +406,7 @@ export default function AdminSettingsPage() {
                         max="120"
                         value={settings.security.sessionTimeout}
                         onChange={(e) => handleChange('security', 'sessionTimeout', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                     
@@ -410,7 +420,7 @@ export default function AdminSettingsPage() {
                         max="10"
                         value={settings.security.failedAttempts}
                         onChange={(e) => handleChange('security', 'failedAttempts', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                     
@@ -424,7 +434,7 @@ export default function AdminSettingsPage() {
                         max="365"
                         value={settings.security.passwordExpiryDays}
                         onChange={(e) => handleChange('security', 'passwordExpiryDays', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                   </div>
@@ -548,7 +558,7 @@ export default function AdminSettingsPage() {
                         max="20"
                         value={settings.users.maxAdminUsers}
                         onChange={(e) => handleChange('users', 'maxAdminUsers', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
                     
@@ -562,7 +572,7 @@ export default function AdminSettingsPage() {
                         max="365"
                         value={settings.users.inactivityDays}
                         onChange={(e) => handleChange('users', 'inactivityDays', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Users will be marked inactive after this many days without login
@@ -616,7 +626,7 @@ export default function AdminSettingsPage() {
                         max="30"
                         value={settings.backup.backupFrequency}
                         onChange={(e) => handleChange('backup', 'backupFrequency', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                         disabled={!settings.backup.autoBackup}
                       />
                     </div>
@@ -631,7 +641,7 @@ export default function AdminSettingsPage() {
                         max="365"
                         value={settings.backup.retentionDays}
                         onChange={(e) => handleChange('backup', 'retentionDays', parseInt(e.target.value))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                        className="w-full px-3 py-2 border text-gray-500 border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Backups older than this will be automatically deleted
