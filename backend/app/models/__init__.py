@@ -16,6 +16,8 @@ from .election_result import ElectionResult
 from .admin import Admin
 from .archived_result import ArchivedResult
 from .documentation import Documentation
+from .pending_admin import PendingAdmin
+from .super_admin import SuperAdmin
 
 # Export all models for easy access
 __all__ = [
@@ -34,4 +36,6 @@ __all__ = [
     'Admin',
     'ArchivedResult',
     'Documentation',
+    'PendingAdmin',
+    'SuperAdmin',
 ]

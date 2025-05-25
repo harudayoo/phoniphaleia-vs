@@ -6,10 +6,10 @@ from sqlalchemy.orm import validates
 from sqlalchemy import DateTime
 import random
 
-class Admin(db.Model):
-    __tablename__ = 'admin'
+class SuperAdmin(db.Model):
+    __tablename__ = 'super_admin'
 
-    admin_id = db.Column(db.Integer, primary_key=True)
+    super_admin_id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), nullable=False, unique=True)
     id_number = db.Column(db.String(10), nullable=False)
     lastname = db.Column(db.String(100), nullable=False)
@@ -17,7 +17,6 @@ class Admin(db.Model):
     middlename = db.Column(db.String(100))
     username = db.Column(db.String(50), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), default='admin')  # admin, super_admin
     created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now())
     verified_at = db.Column(db.DateTime(timezone=True), nullable=True, comment="Timestamp when email was verified")
@@ -95,4 +94,4 @@ class Admin(db.Model):
         return True
 
     def __repr__(self):
-        return f'<Admin {self.username}>'
+        return f'<SuperAdmin {self.username}>'

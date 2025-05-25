@@ -12,8 +12,8 @@ import UsepStudent2 from '@/components/UsepStudents2';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-interface AdminLoginFormData {
-  id_number: string;
+interface SuperAdminLoginFormData {
+  username_or_email: string;
   password: string;
 }
 
@@ -21,27 +21,27 @@ interface ErrorResponse {
   message?: string;
 }
 
-export default function AdminLogin() {
+export default function SuperAdminLogin() {
   const router = useRouter();
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<AdminLoginFormData>();
+  const { register, handleSubmit, formState: { errors } } = useForm<SuperAdminLoginFormData>();
 
-  const onSubmit = async (data: AdminLoginFormData) => {
+  const onSubmit = async (data: SuperAdminLoginFormData) => {
     try {
       setError('');
       setIsLoading(true);
 
-      const response = await axios.post(`${API_URL}/auth/admin/login`, {
-        id_number: data.id_number,
+      const response = await axios.post(`${API_URL}/super_admin/login`, {
+        username_or_email: data.username_or_email,
         password: data.password
       });
 
-      // Expecting response.data.admin_id or similar identifier
-      if (response.data.admin_id) {
-        router.push(`/auth/admin_verification?admin_id=${response.data.admin_id}`);
+      // Expecting response.data.super_admin_id or similar identifier
+      if (response.data.super_admin_id) {
+        router.push(`/auth/super_admin_verification?super_admin_id=${response.data.super_admin_id}`);
       } else {
         setError('Invalid response from server');
       }
@@ -82,8 +82,8 @@ export default function AdminLogin() {
             <div className="w-full max-w-lg">
               <div className="border border-gray-200 rounded-lg shadow-sm bg-white p-6 md:p-8">
                 <div className="mb-6 text-center">
-                  <h2 className="text-2xl font-bold text-gray-800">Admin Login</h2>
-                  <p className="text-gray-600">Sign in to manage the voting system.</p>
+                  <h2 className="text-2xl font-bold text-gray-800">Super Admin Login</h2>
+                  <p className="text-gray-600">Sign in to manage the system administrators.</p>
                 </div>
                 {error && (
                   <div className="rounded-md bg-red-50 p-4 mb-4">
@@ -96,19 +96,19 @@ export default function AdminLogin() {
                 )}
                 <form className="space-y-4 text-gray-500" onSubmit={handleSubmit(onSubmit)}>
                   <div>
-                    <label htmlFor="id_number" className="sr-only">
-                      ID Number
+                    <label htmlFor="username_or_email" className="sr-only">
+                      Username or Email
                     </label>
                     <input
-                      id="id_number"
+                      id="username_or_email"
                       type="text"
-                      placeholder="ID Number (e.g. 2024-12345)"
+                      placeholder="Username or Email"
                       autoComplete="username"
-                      {...register('id_number', { required: 'ID Number is required', pattern: { value: /^\d{4}-\d{5}$/, message: 'Format: 0000-00000' } })}
+                      {...register('username_or_email', { required: 'Username or Email is required' })}
                       className="block w-full rounded-md border text-gray-700 border-gray-300 px-3 py-2 shadow-sm focus:border-red-800 focus:ring-red-800"
                     />
-                    {errors.id_number && (
-                      <p className="mt-1 text-sm text-red-600">{errors.id_number.message}</p>
+                    {errors.username_or_email && (
+                      <p className="mt-1 text-sm text-red-600">{errors.username_or_email.message}</p>
                     )}
                   </div>
                   <div className="relative">
@@ -149,20 +149,16 @@ export default function AdminLogin() {
                       {isLoading ? 'Signing in...' : 'Sign In'}
                     </button>
                   </div>
-                </form>                <div className="mt-4 flex flex-col gap-2 md:flex-row md:gap-4 justify-center">
+                </form>
+                <div className="mt-4 flex flex-col gap-2 md:flex-row md:gap-4 justify-center">
                   <Link href="/auth/login">
                     <button className="text-sm text-red-800 hover:underline">
                       Student Login
                     </button>
                   </Link>
-                  <Link href="/auth/admin_register">
+                  <Link href="/auth/admin_login">
                     <button className="text-sm text-red-800 hover:underline">
-                      Register Admin
-                    </button>
-                  </Link>
-                  <Link href="/auth/super_admin_login">
-                    <button className="text-sm text-red-800 hover:underline">
-                      Super Admin
+                      Admin Login
                     </button>
                   </Link>
                 </div>

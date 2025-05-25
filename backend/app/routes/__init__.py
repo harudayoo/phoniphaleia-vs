@@ -18,6 +18,7 @@ from .election_results_routes import election_results_bp
 from .archived_results_routes import archived_results_bp
 from .documentation_routes import documentation_routes as documentation_bp
 from .system_settings_routes import system_settings_bp
+from .super_admin_routes import super_admin_bp
 
 # Define __all__ for clarity
 __all__ = [
@@ -33,8 +34,10 @@ __all__ = [
     "upload_bp",
     "key_share_bp",
     "admin_search_bp",
-    "verification_bp",    "election_results_bp",
+    "verification_bp",    
+    "election_results_bp",
     "archived_results_bp",
     "documentation_bp",
     "system_settings_bp",
+    "super_admin_bp",
 ]

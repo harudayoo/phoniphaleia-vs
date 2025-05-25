@@ -2,6 +2,8 @@ from flask import request, jsonify, current_app, render_template_string, session
 from werkzeug.exceptions import Unauthorized
 from app.models.voter import Voter
 from app.models.admin import Admin
+from app.models.pending_admin import PendingAdmin
+from app.models.super_admin import SuperAdmin
 import jwt
 from datetime import datetime, timedelta
 import json
@@ -376,9 +378,7 @@ class AuthController:
             )
             mail.send(msg)
         except Exception as e:
-            current_app.logger.error(f"Failed to send OTP email: {str(e)}")
-
-    @staticmethod
+            current_app.logger.error(f"Failed to send OTP email: {str(e)}")    @staticmethod
     def admin_register():
         try:
             data = request.get_json()
@@ -388,29 +388,54 @@ class AuthController:
             if not all(k in data and data[k] for k in required_fields):
                 return jsonify({"message": "Missing required fields"}), 400
 
-            # Check for existing email or username
+            # Check for existing email or username in admin table
             if Admin.query.filter_by(email=data['email']).first():
                 return jsonify({"message": "Email already registered"}), 409
             if Admin.query.filter_by(username=data['username']).first():
                 return jsonify({"message": "Username already taken"}), 409
             if Admin.query.filter_by(id_number=data['id_number']).first():
                 return jsonify({"message": "ID Number already registered"}), 409
+                
+            # Check for existing email or username in pending_admin table
+            if PendingAdmin.query.filter_by(email=data['email']).first():
+                return jsonify({"message": "Email already in pending registration"}), 409
+            if PendingAdmin.query.filter_by(username=data['username']).first():
+                return jsonify({"message": "Username already in pending registration"}), 409
+            if PendingAdmin.query.filter_by(id_number=data['id_number']).first():
+                return jsonify({"message": "ID Number already in pending registration"}), 409
 
-            # Create new admin
-            new_admin = Admin(
+            # Create new pending admin
+            new_pending_admin = PendingAdmin(
                 id_number=data['id_number'],
                 email=data['email'],
                 lastname=data['lastname'],
                 firstname=data['firstname'],
                 middlename=data.get('middlename', ''),
                 username=data['username'],
+                status='pending'
             )
-            new_admin.password_raw = data['password']  # <-- use password_raw setter
+            new_pending_admin.password_raw = data['password']  # <-- use password_raw setter
 
-            db.session.add(new_admin)
+            db.session.add(new_pending_admin)
             db.session.commit()
 
-            return jsonify({"message": "Admin registration successful"}), 201
+            # Send notification email to super admin
+            try:
+                super_admins = SuperAdmin.query.all()
+                for super_admin in super_admins:
+                    msg = Message(
+                        subject="New Admin Registration Request",
+                        recipients=[super_admin.email],
+                        body=f"A new admin registration request has been submitted by {new_pending_admin.full_name()}. Please log in to the super admin dashboard to review and approve/reject this request."
+                    )
+                    mail.send(msg)
+            except Exception as e:
+                current_app.logger.error(f"Failed to send notification email: {str(e)}")
+
+            return jsonify({
+                "message": "Admin registration request submitted. Your request is pending approval by a super admin.",
+                "pending": True
+            }), 201
 
         except Exception as e:
             current_app.logger.error(f"Admin registration error: {str(e)}")
@@ -618,9 +643,7 @@ class AuthController:
                     current_app.config['JWT_SECRET_KEY'],
                     algorithms=['HS256'],
                     options={"verify_exp": False}
-                )
-
-                # Check if this is an admin or voter token
+                )                # Check if this is an admin, super admin, or voter token
                 if payload.get('role') == 'admin':
                     admin_id = payload.get('admin_id')
                     if not admin_id:
@@ -633,6 +656,33 @@ class AuthController:
                     new_payload = {
                         "admin_id": admin.admin_id,
                         "role": "admin",
+                        "exp": datetime.utcnow() + timedelta(seconds=session_timeout)
+                    }
+                    new_token = jwt.encode(
+                        new_payload,
+                        current_app.config['JWT_SECRET_KEY'],
+                        algorithm="HS256"
+                    )
+                    if isinstance(new_token, bytes):
+                        new_token = new_token.decode('utf-8')
+                    return jsonify({
+                        "token": new_token,
+                        "expires_in": session_timeout
+                    }), 200
+
+                # Super Admin token
+                elif payload.get('role') == 'super_admin':
+                    super_admin_id = payload.get('super_admin_id')
+                    if not super_admin_id:
+                        return jsonify({'message': 'Invalid token payload'}), 401
+                    from app.models.super_admin import SuperAdmin
+                    super_admin = SuperAdmin.query.get(super_admin_id)
+                    if not super_admin:
+                        return jsonify({'message': 'Super admin no longer exists'}), 401
+                    session_timeout = int(current_app.config.get('PERMANENT_SESSION_LIFETIME', 1800).total_seconds())
+                    new_payload = {
+                        "super_admin_id": super_admin.super_admin_id,
+                        "role": "super_admin",
                         "exp": datetime.utcnow() + timedelta(seconds=session_timeout)
                     }
                     new_token = jwt.encode(

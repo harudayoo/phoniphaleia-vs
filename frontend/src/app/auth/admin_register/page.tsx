@@ -27,6 +27,7 @@ export default function AdminRegister() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState<boolean>(false);
+  const [showSuccessNotification, setShowSuccessNotification] = useState<boolean>(false);
 
   const {
     register,
@@ -81,20 +82,24 @@ export default function AdminRegister() {
 
     try {
       setError('');
-      setIsLoading(true);
-
-      await axios.post(`${API_URL}/auth/admin_register`, {
+      setIsLoading(true);      await axios.post(`${API_URL}/auth/admin_register`, {
         id_number: data.id_number,
         email: data.email,
         lastname: data.lastname,
         firstname: data.firstname,
         middlename: data.middlename,
         username: data.username,
-        password: data.password,
-      });
+        password: data.password,      });
 
-      router.push('/auth/login?registered=admin');
-    } catch (err: unknown) {
+      // Show success notification and clear any previous errors
+      setError('');
+      setShowSuccessNotification(true);
+      
+      // Redirect after a brief delay to show the notification
+      setTimeout(() => {
+        router.push('/auth/admin_login?registered=admin');
+      }, 2500);    } catch (err: unknown) {
+      setShowSuccessNotification(false);
       if (axios.isAxiosError(err)) {
         setError(err.response?.data?.message || 'Registration failed. Please try again.');
       } else {
@@ -119,13 +124,31 @@ export default function AdminRegister() {
               </Link>
               <h2 className="text-xl font-bold text-center flex-grow text-red-800">Admin Registration</h2>
             </div>
-            <p className="text-center text-gray-600 mb-6">Register as an admin to manage the system.</p>
-
-            {error && (
+            <p className="text-center text-gray-600 mb-6">Register as an admin to manage the system.</p>            {error && (
               <div className="rounded-md bg-red-50 p-4 mb-4">
                 <div className="flex">
                   <div className="ml-3">
                     <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showSuccessNotification && (
+              <div className="rounded-md bg-green-50 p-4 mb-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-green-800">
+                      Registration successful! 
+                    </h3>
+                    <p className="text-sm text-green-700 mt-1">
+                      Your admin request has been submitted for approval. Redirecting to login...
+                    </p>
                   </div>
                 </div>
               </div>
@@ -337,13 +360,27 @@ export default function AdminRegister() {
                   {errors.confirm_password && <p className="mt-2 text-sm text-red-600">{errors.confirm_password.message}</p>}
                 </div>
               </div>
-              <div className="mt-8 flex justify-end">
-                <button
+              <div className="mt-8 flex justify-end">                <button
                   type="submit"
-                  disabled={isLoading}
-                  className="flex justify-center rounded-md border border-transparent bg-red-800 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-75"
+                  disabled={isLoading || showSuccessNotification}
+                  className={`flex justify-center rounded-md border border-transparent py-2 px-4 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-75 ${
+                    showSuccessNotification 
+                      ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500' 
+                      : 'bg-red-800 hover:bg-red-700 focus:ring-red-500'
+                  }`}
                 >
-                  {isLoading ? 'Submitting...' : 'Register'}
+                  {showSuccessNotification ? (
+                    <>
+                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Registration Successful!
+                    </>
+                  ) : isLoading ? (
+                    'Submitting...'
+                  ) : (
+                    'Register'
+                  )}
                 </button>
               </div>
             </form>
