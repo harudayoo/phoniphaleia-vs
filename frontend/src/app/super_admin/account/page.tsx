@@ -200,7 +200,7 @@ export default function AccountSettingsPage() {
                         id="firstname"
                         type="text"
                         {...registerProfile('firstname', { required: 'First name is required' })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
+                        className="mt-1 block w-full border text-gray-600 border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
                       />
                       {profileErrors.firstname && (
                         <p className="mt-1 text-sm text-red-600">{profileErrors.firstname.message}</p>
@@ -215,7 +215,7 @@ export default function AccountSettingsPage() {
                         id="middlename"
                         type="text"
                         {...registerProfile('middlename')}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
+                        className="mt-1 block w-full border text-gray-600 border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
                       />
                     </div>
                     
@@ -227,7 +227,7 @@ export default function AccountSettingsPage() {
                         id="lastname"
                         type="text"
                         {...registerProfile('lastname', { required: 'Last name is required' })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
+                        className="mt-1 block w-full border text-gray-600 border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
                       />
                       {profileErrors.lastname && (
                         <p className="mt-1 text-sm text-red-600">{profileErrors.lastname.message}</p>
@@ -248,7 +248,7 @@ export default function AccountSettingsPage() {
                             message: 'Invalid email address'
                           }
                         })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
+                        className="mt-1 block w-full border text-gray-600 border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
                       />
                       {profileErrors.email && (
                         <p className="mt-1 text-sm text-red-600">{profileErrors.email.message}</p>
@@ -263,7 +263,7 @@ export default function AccountSettingsPage() {
                         id="username"
                         type="text"
                         {...registerProfile('username', { required: 'Username is required' })}
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
+                        className="mt-1 block w-full border text-gray-600 border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-red-500 focus:border-red-500"
                       />
                       {profileErrors.username && (
                         <p className="mt-1 text-sm text-red-600">{profileErrors.username.message}</p>
@@ -312,7 +312,7 @@ export default function AccountSettingsPage() {
                         id="current_password"
                         type={showCurrentPassword ? 'text' : 'password'}
                         {...registerPassword('current_password', { required: 'Current password is required' })}
-                        className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 pr-10 focus:outline-none focus:ring-red-500 focus:border-red-500"
+                        className="block w-full border text-gray-600 border-gray-300 rounded-md shadow-sm py-2 px-3 pr-10 focus:outline-none focus:ring-red-500 focus:border-red-500"
                       />
                       <button
                         type="button"
@@ -346,7 +346,7 @@ export default function AccountSettingsPage() {
                             message: 'Password must be at least 8 characters'
                           }
                         })}
-                        className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 pr-10 focus:outline-none focus:ring-red-500 focus:border-red-500"
+                        className="block w-full border text-gray-600 border-gray-300 rounded-md shadow-sm py-2 px-3 pr-10 focus:outline-none focus:ring-red-500 focus:border-red-500"
                       />
                       <button
                         type="button"
@@ -377,7 +377,7 @@ export default function AccountSettingsPage() {
                           required: 'Please confirm your password',
                           validate: value => value === newPassword || 'Passwords do not match'
                         })}
-                        className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 pr-10 focus:outline-none focus:ring-red-500 focus:border-red-500"
+                        className="block w-full border text-gray-600 border-gray-300 rounded-md shadow-sm py-2 px-3 pr-10 focus:outline-none focus:ring-red-500 focus:border-red-500"
                       />
                       <button
                         type="button"
