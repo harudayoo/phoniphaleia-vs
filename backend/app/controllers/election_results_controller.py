@@ -7,6 +7,8 @@ from app.models.election_result import ElectionResult
 from app.models.crypto_config import CryptoConfig
 from app.models.key_share import KeyShare
 from app.models.trusted_authority import TrustedAuthority
+from app.models.candidate import Candidate
+from app.models.position import Position
 from datetime import datetime
 from app import db
 from phe import paillier
@@ -14,6 +16,7 @@ import shamirs
 import json
 import base64
 import logging
+import traceback
 import traceback
 
 logger = logging.getLogger(__name__)
@@ -683,10 +686,11 @@ class ElectionResultsController:
             except Exception as e:
                 logger.error(f"Failed to decode private key in any format: {e}")
                 return jsonify({'error': f'Failed to decode private key: {str(e)}'}), 400
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Error in decrypt_tally: {str(e)}")
-            return jsonify({'error': str(e)}), 500    @staticmethod
+        except Exception as e:            db.session.rollback()
+        logger.error(f"Error in decrypt_tally: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+            
+    @staticmethod
     def get_decrypted_results(election_id):
         """
         Return the decrypted results for display, grouped by positions.
@@ -938,25 +942,24 @@ class ElectionResultsController:
                 'voters_count': e.voters_count,
                 'total_votes': None,  # Add logic if available
                 'crypto_enabled': False,  # Add logic if available
-                'threshold_crypto': False,  # Add logic if available
-                'zkp_verified': False,  # Add logic if available
+                'threshold_crypto': False,  # Add logic if available                'zkp_verified': False,  # Add logic if available
                 'candidates': []  # Add logic if available
             })
         return out
-        
+    
     @staticmethod
     def delete_election_result(election_id):
         """
-        Delete all results for a given election_id.
+        Archive results for a given election_id instead of deleting them.
+        This moves the results to the archived_results table for data retention.
         """
         try:
-            deleted = ElectionResult.query.filter_by(election_id=election_id).delete()
-            db.session.commit()
-            return jsonify({'message': f'Deleted {deleted} election result(s) for election_id {election_id}.'}), 200
+            from app.controllers.archived_results_controller import ArchivedResultsController
+            return ArchivedResultsController.archive_election_result(election_id)
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error deleting election results for election_id {election_id}: {str(e)}")
-            return jsonify({'error': f'Failed to delete election results: {str(e)}'}), 500
+            logger.error(f"Error archiving election results for election_id {election_id}: {str(e)}")
+            return jsonify({'error': f'Failed to archive election results: {str(e)}'}), 500
 
     @staticmethod
     def fix_verification_status(election_id=None):
@@ -1029,5 +1032,116 @@ class ElectionResultsController:
             
         except Exception as e:
             logger.error(f"Error in fix_verification_status: {str(e)}")
-            logger.exception(e)
+            logger.exception(e)            
             return jsonify({'error': str(e)}), 500
+    
+    @staticmethod
+    def get_election_results_by_election_id(election_id):
+        """
+        Get all election results for a specific election by election_id
+        Returns detailed information about all results for an election.
+        """
+        try:
+            # Get the election first
+            election = Election.query.get(election_id)
+            if not election:
+                return jsonify({'error': 'Election not found'}), 404
+                
+            organization = Organization.query.get(election.org_id) if election.org_id else None
+            
+            # Get all results for this election
+            all_election_results = ElectionResult.query.filter_by(election_id=election_id).all()
+            if not all_election_results:
+                return jsonify({'error': 'No results found for this election'}), 404
+                
+            candidates = Candidate.query.filter_by(election_id=election_id).all()
+            positions = Position.query.filter_by(org_id=election.org_id).all()
+              # Group candidates by position
+            pos_to_candidates = {}
+            for cand in candidates:
+                pos_to_candidates.setdefault(cand.position_id, []).append(cand)
+            
+            # Calculate total votes and prepare results grouped by position
+            total_votes = sum([r.vote_count or 0 for r in all_election_results])
+            voters_count = election.voters_count or 0  # Use correct field name
+            participation_rate = (total_votes / voters_count * 100) if voters_count > 0 else 0
+            
+            # Prepare data grouped by position
+            position_results = []
+            all_candidates = []  # For backward compatibility
+            
+            for pos in positions:
+                cands = pos_to_candidates.get(pos.position_id, [])
+                if not cands:
+                    continue
+                
+                # Get vote counts for each candidate in this position
+                position_cands = []
+                position_total = 0
+                for cand in cands:
+                    er = next((r for r in all_election_results if r.candidate_id == cand.candidate_id), None)
+                    votes = er.vote_count if er and er.vote_count is not None else 0
+                    position_total += votes
+                    candidate_data = {
+                        'id': cand.candidate_id,
+                        'name': cand.fullname,
+                        'votes': votes,
+                        'percentage': 0,  # will calculate below
+                        'winner': False,  # will determine below
+                        'position_id': pos.position_id,
+                        'position_name': pos.position_name
+                    }
+                    position_cands.append(candidate_data)
+                    all_candidates.append(candidate_data)  # For backward compatibility
+                
+                # Calculate percentages and determine winner for this position
+                if position_cands:
+                    max_votes = max([c['votes'] for c in position_cands])
+                    for c in position_cands:
+                        c['percentage'] = round((c['votes'] / position_total * 100), 1) if position_total > 0 else 0
+                        if c['votes'] == max_votes:
+                            c['winner'] = True
+                    
+                    # Add position with its candidates to the results
+                    position_results.append({
+                        'position_id': pos.position_id,
+                        'position_name': pos.position_name,
+                        'candidates': position_cands
+                    })
+              # Check if crypto config exists to determine crypto status
+            crypto_config = CryptoConfig.query.filter_by(election_id=election.election_id).first()
+            crypto_enabled = crypto_config is not None
+            threshold_crypto = crypto_enabled and (crypto_config.status == 'active') if crypto_config else False
+            
+            # Check if verified column exists safely - use first result as representative
+            zkp_verified = False
+            try:
+                first_result = all_election_results[0] if all_election_results else None
+                zkp_verified = getattr(first_result, 'verified', False) if first_result else False
+            except:
+                zkp_verified = False
+              # Format the response
+            result_detail = {
+                'election_id': election.election_id,
+                'election_name': election.election_name,
+                'organization': {'org_name': organization.org_name} if organization else None,
+                'status': election.election_status,  # Use correct field name
+                'published_at': election.created_at.isoformat() if election.created_at else None,
+                'description': election.election_desc,  # Use correct field name
+                'participation_rate': round(participation_rate, 1),
+                'voters_count': voters_count,
+                'total_votes': total_votes,
+                'crypto_enabled': crypto_enabled,
+                'threshold_crypto': threshold_crypto,
+                'zkp_verified': zkp_verified,
+                'positions': position_results,  # Primary data structure grouped by positions
+                'candidates': all_candidates,  # For backward compatibility with existing frontend code
+                'result_count': len(all_election_results)
+            }
+            
+            return jsonify(result_detail)
+            
+        except Exception as e:
+            logger.error(f"Error in get_election_results_by_election_id: {str(e)}")
+            logger.error(traceback.format_exc())
+            return jsonify({'error': f'Internal server error: {str(e)}'}), 500

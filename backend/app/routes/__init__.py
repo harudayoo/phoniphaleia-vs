@@ -15,6 +15,7 @@ from .admin_search_routes import admin_search_bp
 from .upload_routes import upload_bp
 from .verification_routes import verification_bp
 from .election_results_routes import election_results_bp
+from .archived_results_routes import archived_results_bp
 
 # Define __all__ for clarity
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "admin_search_bp",
     "verification_bp",
     "election_results_bp",
+    "archived_results_bp",
 ]

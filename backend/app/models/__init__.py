@@ -14,6 +14,7 @@ from .vote import Vote
 from .audit_log import AuditLog
 from .election_result import ElectionResult
 from .admin import Admin
+from .archived_result import ArchivedResult
 
 # Export all models for easy access
 __all__ = [
@@ -30,4 +31,5 @@ __all__ = [
     'AuditLog',
     'ElectionResult',
     'Admin',
+    'ArchivedResult',
 ]

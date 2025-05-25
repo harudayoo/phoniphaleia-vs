@@ -3,7 +3,7 @@ import { useEffect, useState, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dialog, Transition } from '@headlessui/react';
 import AdminLayout from '@/layouts/AdminLayout';
-import { FaDownload, FaEdit, FaEye, FaTrash, FaLock, FaLockOpen } from 'react-icons/fa';
+import { FaDownload, FaEye, FaTrash } from 'react-icons/fa';
 import { Filter, Calendar, ArrowUp, Key, Shield } from 'lucide-react';
 
 // Import reusable components
@@ -99,7 +99,7 @@ export default function AdminResultsPage() {
   const [step, setStep] = useState<'warning' | 'select' | 'confirm'>('warning');
   const [ongoingElections, setOngoingElections] = useState<Result[]>([]);
   const [fetchingOngoing, setFetchingOngoing] = useState(false);
-  const [selectedElection, setSelectedElection] = useState<Result | null>(null);
+  const [swinnerElection, setSwinnerElection] = useState<Result | null>(null);
   const [proceeding, setProceeding] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState<number | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
@@ -146,7 +146,7 @@ export default function AdminResultsPage() {
   const openTallyModal = () => {
     setStep('warning');
     setTallyModalOpen(true);
-    setSelectedElection(null);
+    setSwinnerElection(null);
     setOngoingElections([]);
   };
 
@@ -196,9 +196,9 @@ export default function AdminResultsPage() {
     setTimeout(() => {
       setProceeding(false);
       setTallyModalOpen(false);
-      if (selectedElection) {
+      if (swinnerElection) {
         // Use result_id for redirect (which is actually election_id in this context)
-        router.push(`/admin/results/tally?election_id=${selectedElection.result_id}`);
+        router.push(`/admin/results/tally?election_id=${swinnerElection.result_id}`);
       }
     }, 1000);
   };
@@ -210,7 +210,7 @@ export default function AdminResultsPage() {
       return;
     }
     const csv = [
-      'Candidate, Votes, Percentage, Winner',
+      'Candidate, Votes, Percentage, winner',
       ...result.candidates.map(c => `${c.name},${c.votes},${c.percentage},${c.winner ? 'Yes' : 'No'}`)
     ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -233,9 +233,8 @@ export default function AdminResultsPage() {
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || 'Failed to delete election results.');
-      }
-      setResults((prev: Result[]) => prev.filter(r => r.result_id !== result.result_id));
-      setNotification('Election results deleted successfully.');
+      }      setResults((prev: Result[]) => prev.filter(r => r.result_id !== result.result_id));
+      setNotification('Election results archived successfully.');
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message || 'Failed to delete election results.');
@@ -309,67 +308,39 @@ export default function AdminResultsPage() {
         
         <p className="text-gray-600 text-sm mb-4 line-clamp-2">{result.description}</p>
         
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="bg-blue-50 rounded-lg p-3">
+        <div className="grid grid-cols-1 mb-4">
+          <div className="bg-blue-50 rounded-lg p-3 w-full">
             <div className="text-xs text-blue-700 mb-1 font-medium">Total Votes</div>
             <div className="font-semibold text-blue-800">{result.total_votes?.toLocaleString()}</div>
           </div>
-          <div className="bg-green-50 rounded-lg p-3">
-            <div className="text-xs text-green-700 mb-1 font-medium">Participation</div>
-            <div className="font-semibold text-green-800">{result.participation_rate}%</div>
-          </div>
         </div>
-        
-        {result.candidates && result.candidates.length > 0 && (
-          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-            <div className="text-sm font-medium mb-1 text-gray-700">Elected</div>
-            <div className="text-gray-800 font-medium">
-              {result.candidates.find(c => c.winner)?.name || result.candidates[0].name}
+         <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+            <div className="flex space-x-2">
+              <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" onClick={() => handleDownload(result)}>
+                <FaDownload size={16} />
+              </button>
+              <button type="button" className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" onClick={() => router.push(`/admin/results/${result.result_id}`)}>
+                <FaEye size={16} />
+              </button>
+            </div>
+            <div className="flex space-x-2">
+              <button type="button" className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" onClick={() => setShowDeleteModal(result.result_id)}>
+                <FaTrash size={16} />
+              </button>
             </div>
           </div>
-        )}
-        
-        <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-          <div className="flex space-x-2">
-            <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" onClick={() => handleDownload(result)}>
-              <FaDownload size={16} />
-            </button>
-            <button type="button" className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" onClick={() => router.push(`/admin/results/${result.result_id}`)}>
-              <FaEye size={16} />
-            </button>
-          </div>
-          <div className="flex space-x-2">
-            {result.status === 'Published' ? (
-              <button type="button" className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" disabled>
-                <FaLock size={16} />
-              </button>
-            ) : (
-              <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" disabled>
-                <FaLockOpen size={16} />
-              </button>
-            )}
-            <button type="button" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" onClick={() => router.push(`/admin/results/${result.result_id}/edit`)}>
-              <FaEdit size={16} />
-            </button>
-            <button type="button" className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" onClick={() => setShowDeleteModal(result.result_id)}>
-              <FaTrash size={16} />
-            </button>
-          </div>
-        </div>
         {showDeleteModal === result.result_id && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/70 bg-opacity-30 z-50">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 animate-fadeIn">
-              <h3 className="text-xl font-semibold mb-4 text-gray-800">Confirm Deletion</h3>
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 animate-fadeIn">              <h3 className="text-xl font-semibold mb-4 text-gray-800">Confirm Archiving</h3>
               <div className="mb-6 text-gray-600 leading-relaxed">
-                Are you sure you want to delete the results for <b>{result.election_name}</b>? This action cannot be undone.
+                Are you sure you want to archive the results for <b>{result.election_name}</b>? This will move the data to the archive section.
               </div>
               {error && <div className="bg-red-100 text-red-800 px-4 py-3 rounded-lg mb-4 text-center">{error}</div>}
               <div className="flex gap-3">
                 <button type="button" className="flex-1 px-4 py-3 rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors font-medium" onClick={() => setShowDeleteModal(null)}>
                   Cancel
-                </button>
-                <button type="button" className="flex-1 px-4 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors font-medium" onClick={() => handleDelete(result)}>
-                  Delete
+                </button>                <button type="button" className="flex-1 px-4 py-3 rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors font-medium" onClick={() => handleDelete(result)}>
+                  Archive
                 </button>
               </div>
             </div>
@@ -442,13 +413,9 @@ export default function AdminResultsPage() {
               <td className="px-6 py-4 whitespace-nowrap">
                 {getStatusBadge(result.status)}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <div className="flex justify-end space-x-2">
+              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">                <div className="flex justify-end space-x-2">
                   <button type="button" className="p-1 text-blue-600 hover:text-blue-900" onClick={() => router.push(`/admin/results/${result.result_id}`)}>
                     <FaEye size={16} />
-                  </button>
-                  <button type="button" className="p-1 text-amber-600 hover:text-amber-900" onClick={() => router.push(`/admin/results/${result.result_id}/edit`)}>
-                    <FaEdit size={16} />
                   </button>
                   <button type="button" className="p-1 text-red-600 hover:text-red-900" onClick={() => setShowDeleteModal(result.result_id)}>
                     <FaTrash size={16} />
@@ -456,19 +423,17 @@ export default function AdminResultsPage() {
                 </div>
                 {showDeleteModal === result.result_id && (
                   <div className="fixed inset-0 flex items-center justify-center bg-black/70 bg-opacity-30 z-50">
-                    <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full animate-fadeIn">
-                      <h3 className="text-lg font-semibold mb-2">Confirm Deletion</h3>
+                    <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full animate-fadeIn">                      <h3 className="text-lg font-semibold mb-2">Confirm Archiving</h3>
                       <div className="mb-4 text-gray-600">
-                        Are you sure you want to delete the results for <b>{result.election_name}</b>? This action cannot be undone.
+                        Are you sure you want to archive the results for <b>{result.election_name}</b>? This will move the data to the archive section.
                       </div>
                       {error && <div className="bg-red-100 text-red-800 px-4 py-2 rounded mb-2 text-center">{error}</div>}
                       <div className="flex gap-3 justify-end">
                         <button type="button" className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300" onClick={() => setShowDeleteModal(null)}>
                           Cancel
-                        </button>
-                        <button type="button" className="px-4 py-2 rounded bg-red-700 text-white hover:bg-red-800" onClick={() => handleDelete(result)}>
-                          Delete
-                        </button>
+                        </button>                          <button type="button" className="px-4 py-2 rounded bg-red-700 text-white hover:bg-red-800" onClick={() => handleDelete(result)}>
+                            Archive
+                          </button>
                       </div>
                     </div>
                   </div>
@@ -482,9 +447,16 @@ export default function AdminResultsPage() {
   );
 
   return (
-    <AdminLayout>
-      <PageHeader 
+    <AdminLayout>      <PageHeader 
         title="Election Results" 
+        action={
+          <button
+            onClick={() => router.push('/admin/results/archive')}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 flex items-center"
+          >
+            View Archives
+          </button>
+        }
       />
 
       <SearchFilterBar 
@@ -602,19 +574,19 @@ export default function AdminResultsPage() {
                         <>
                           <div className="space-y-4 max-h-96 overflow-y-auto mb-8">
                             {ongoingElections.map(el => {
-                              const isSelected = selectedElection?.result_id === el.result_id;
+                              const isSwinner = swinnerElection?.result_id === el.result_id;
                               return (
                                 <div
                                   key={el.result_id}
-                                  className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${isSelected ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} hover:border-blue-400`}
-                                  onClick={() => setSelectedElection(el)}
+                                  className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${isSwinner ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} hover:border-blue-400`}
+                                  onClick={() => setSwinnerElection(el)}
                                   tabIndex={0}
                                   role="button"
-                                  aria-pressed={isSelected}
+                                  aria-pressed={isSwinner}
                                 >
                                   <div className="flex justify-between items-center mb-2">
                                     <div className="font-semibold text-lg text-gray-800">{el.election_name}</div>
-                                    {isSelected && <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded">Selected</span>}
+                                    {isSwinner && <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded">Swinner</span>}
                                   </div>
                                   <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-1">
                                     <div><span className="font-medium">Organization:</span> {el.organization?.org_name || 'N/A'}</div>
@@ -638,7 +610,7 @@ export default function AdminResultsPage() {
                             <button
                               type="button"
                               className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              disabled={!selectedElection}
+                              disabled={!swinnerElection}
                               onClick={handleProceed}
                             >
                               Proceed
@@ -648,13 +620,13 @@ export default function AdminResultsPage() {
                       )}
                     </>
                   )}
-                  {step === 'confirm' && selectedElection && (
+                  {step === 'confirm' && swinnerElection && (
                     <>
                       <Dialog.Title as="h3" className="text-xl font-bold text-gray-900 mb-4">
                         Confirm Tally
                       </Dialog.Title>
                       <div className="mb-8 text-gray-700 leading-relaxed">
-                        Are you sure you want to tally <b>{selectedElection.election_name}</b>? This will close voting and set the status to <b>Finished</b>.
+                        Are you sure you want to tally <b>{swinnerElection.election_name}</b>? This will close voting and set the status to <b>Finished</b>.
                       </div>
                       <div className="flex justify-end gap-3">
                         <button

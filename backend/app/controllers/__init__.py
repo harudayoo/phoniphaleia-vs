@@ -8,6 +8,7 @@ from .organization_controller import OrganizationController
 from .position_controller import PositionController
 from .verification_controller import VerificationController
 from .election_results_controller import ElectionResultsController
+from .archived_results_controller import ArchivedResultsController
 
 # Export controllers
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     'PositionController',
     'ElectionResultsController',
     'VerificationController',
+    'ArchivedResultsController',
 ]
