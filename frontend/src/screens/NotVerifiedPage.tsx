@@ -24,8 +24,8 @@ const NotVerifiedPage: React.FC = () => (
       <div className="md:ml-12 mt-8 md:mt-0 flex-1 flex flex-col items-center md:items-start">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-red-900 text-center md:text-left">Verification Required</h1>
         <p className="mt-6 text-lg text-gray-800 text-center md:text-left max-w-md">
-          uh Oh!, it seems you&apos;re not verified to access behind this page.<br /><br />
-          Is it because you are not from this college or organization? Oh well, you can still visit the other parts of the system though.
+          Uh-oh! It looks like you don&apos;t have access to this page yet.<br /><br />
+          Please verify your student or enrollment status to continue.
         </p>
         <div className="mt-10 w-full flex justify-center md:justify-start">
             <Link

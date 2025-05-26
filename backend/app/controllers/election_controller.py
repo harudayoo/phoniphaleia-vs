@@ -417,9 +417,7 @@ class ElectionController:
         if not org or not org.college_id:
             return jsonify({'eligible_voters': 0})
         count = Voter.query.filter_by(college_id=org.college_id).count()
-        return jsonify({'eligible_voters': count})
-
-    @staticmethod
+        return jsonify({'eligible_voters': count})    @staticmethod
     def access_check(election_id):
         data = request.json or {}
         voter_id = data.get('voter_id')
@@ -433,6 +431,11 @@ class ElectionController:
             return jsonify({'eligible': False, 'reason': 'Voter not found'}), 404
         if voter.college_id != election.organization.college_id:
             return jsonify({'eligible': False, 'reason': 'Voter not in the same college as election'}), 403
+        
+        # Check voter status - only 'Enrolled' voters are eligible to vote
+        if voter.status != 'Enrolled':
+            return jsonify({'eligible': False, 'reason': f'Voter status is "{voter.status}". Only enrolled students can vote.'}), 403
+        
         return jsonify({'eligible': True})
 
     @staticmethod

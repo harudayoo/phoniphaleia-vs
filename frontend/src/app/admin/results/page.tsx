@@ -96,10 +96,10 @@ export default function AdminResultsPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const [tallyModalOpen, setTallyModalOpen] = useState(false);
-  const [step, setStep] = useState<'warning' | 'select' | 'confirm'>('warning');
+  const [step, setStep] = useState<'warning' | 'Selected' | 'confirm'>('warning');
   const [ongoingElections, setOngoingElections] = useState<Result[]>([]);
   const [fetchingOngoing, setFetchingOngoing] = useState(false);
-  const [swinnerElection, setSwinnerElection] = useState<Result | null>(null);
+  const [selectElection, setSelectElection] = useState<Result | null>(null);
   const [proceeding, setProceeding] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState<number | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
@@ -110,7 +110,6 @@ export default function AdminResultsPage() {
       try {
         setLoading(true);
         const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-        // Use the proper endpoint that returns data from ElectionResult table
         // This endpoint relies solely on homomorphic encryption for vote counting
         const res = await fetch(`${backendUrl}/election_results`);
         if (!res.ok) throw new Error('Failed to fetch results');
@@ -146,7 +145,7 @@ export default function AdminResultsPage() {
   const openTallyModal = () => {
     setStep('warning');
     setTallyModalOpen(true);
-    setSwinnerElection(null);
+    setSelectElection(null);
     setOngoingElections([]);
   };
 
@@ -196,9 +195,9 @@ export default function AdminResultsPage() {
     setTimeout(() => {
       setProceeding(false);
       setTallyModalOpen(false);
-      if (swinnerElection) {
+      if (selectElection) {
         // Use result_id for redirect (which is actually election_id in this context)
-        router.push(`/admin/results/tally?election_id=${swinnerElection.result_id}`);
+        router.push(`/admin/results/tally?election_id=${selectElection.result_id}`);
       }
     }, 1000);
   };
@@ -543,17 +542,17 @@ export default function AdminResultsPage() {
                         <button
                           type="button"
                           className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
-                          onClick={() => { setStep('select'); fetchOngoing(); }}
+                          onClick={() => { setStep('Selected'); fetchOngoing(); }}
                         >
                           Continue
                         </button>
                       </div>
                     </>
                   )}
-                  {step === 'select' && (
+                  {step === 'Selected' && (
                     <>
                       <Dialog.Title as="h3" className="text-xl font-bold text-gray-900 mb-4">
-                        Select Ongoing Election
+                        Selected Ongoing Election
                       </Dialog.Title>
                       {fetchingOngoing ? (
                         <div className="flex justify-center py-12"><Loader4 size={40} /></div>
@@ -574,19 +573,19 @@ export default function AdminResultsPage() {
                         <>
                           <div className="space-y-4 max-h-96 overflow-y-auto mb-8">
                             {ongoingElections.map(el => {
-                              const isSwinner = swinnerElection?.result_id === el.result_id;
+                              const isSelect = selectElection?.result_id === el.result_id;
                               return (
                                 <div
                                   key={el.result_id}
-                                  className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${isSwinner ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} hover:border-blue-400`}
-                                  onClick={() => setSwinnerElection(el)}
+                                  className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${isSelect ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} hover:border-blue-400`}
+                                  onClick={() => setSelectElection(el)}
                                   tabIndex={0}
                                   role="button"
-                                  aria-pressed={isSwinner}
+                                  aria-pressed={isSelect}
                                 >
                                   <div className="flex justify-between items-center mb-2">
                                     <div className="font-semibold text-lg text-gray-800">{el.election_name}</div>
-                                    {isSwinner && <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded">Swinner</span>}
+                                    {isSelect && <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded">Selected</span>}
                                   </div>
                                   <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-1">
                                     <div><span className="font-medium">Organization:</span> {el.organization?.org_name || 'N/A'}</div>
@@ -602,15 +601,15 @@ export default function AdminResultsPage() {
                           <div className="flex justify-end gap-3">
                             <button
                               type="button"
-                              className="px-6 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
+                              className="px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
                               onClick={() => setTallyModalOpen(false)}
                             >
                               Cancel
                             </button>
                             <button
                               type="button"
-                              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              disabled={!swinnerElection}
+                              className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={!selectElection}
                               onClick={handleProceed}
                             >
                               Proceed
@@ -620,13 +619,13 @@ export default function AdminResultsPage() {
                       )}
                     </>
                   )}
-                  {step === 'confirm' && swinnerElection && (
+                  {step === 'confirm' && selectElection && (
                     <>
                       <Dialog.Title as="h3" className="text-xl font-bold text-gray-900 mb-4">
                         Confirm Tally
                       </Dialog.Title>
                       <div className="mb-8 text-gray-700 leading-relaxed">
-                        Are you sure you want to tally <b>{swinnerElection.election_name}</b>? This will close voting and set the status to <b>Finished</b>.
+                        Are you sure you want to tally <b>{selectElection.election_name}</b>? This will close voting and set the status to <b>Finished</b>.
                       </div>
                       <div className="flex justify-end gap-3">
                         <button
