@@ -55,43 +55,24 @@ export default function UserVotesPage() {
         const data = await response.json();
         // Use the college_name directly from the API response for each election
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const processedData: Election[] = (data as Election[]).map((election) => {
-          let election_status: Election['election_status'] = 'Ongoing';
-          if (election.election_status) {
-            election_status = election.election_status as Election['election_status'];
-          } else {
-            const dateStr: string = election.date_end;
-            const [year, month, day] = dateStr.split('-').map(Number);
-            const endDate = new Date(year, month - 1, day);
-            endDate.setHours(23, 59, 59, 999);
-            const diffTime = endDate.getTime() - today.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            if (diffDays < 0) {
-              election_status = 'Finished';
-            } else if (election.date_start) {
-              const [sy, sm, sd] = election.date_start.split('-').map(Number);
-              const startDate = new Date(sy, sm - 1, sd);
-              startDate.setHours(0, 0, 0, 0);
-              if (today < startDate) {
-                election_status = 'Upcoming';
-              } else if (today >= startDate && today <= endDate) {
-                election_status = 'Ongoing';
-              }
-            }
-          }
+        today.setHours(0, 0, 0, 0);        const processedData: Election[] = (data as Election[]).map((election) => {
+          // Use the election_status directly from the backend as it's the authoritative source
+          const election_status = election.election_status || 'Upcoming';
+          
+          // Calculate days left for UI display purposes only
+          const dateStr: string = election.date_end;
+          const [year, month, day] = dateStr.split('-').map(Number);
+          const endDate = new Date(year, month - 1, day);
+          endDate.setHours(23, 59, 59, 999);
+          const diffTime = endDate.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
           // Use college_name from API response if present
           const college_name = election.organization?.college_name || 'None';
-          // Only calculate diffTime/diffDays once
-          const dateStr2: string = election.date_end;
-          const [year2, month2, day2] = dateStr2.split('-').map(Number);
-          const endDate2 = new Date(year2, month2 - 1, day2);
-          endDate2.setHours(23, 59, 59, 999);
-          const diffTime2 = endDate2.getTime() - today.getTime();
-          const diffDays2 = Math.ceil(diffTime2 / (1000 * 60 * 60 * 24));
+          
           return {
             ...election,
-            days_left: Math.max(diffDays2, 0),
+            days_left: Math.max(diffDays, 0),
             election_status,
             organization: {
               org_name: election.organization?.org_name || '',
@@ -207,19 +188,9 @@ export default function UserVotesPage() {
       return () => clearInterval(interval);
     }
   }, [filteredElections, waitlistStatus]);
-
-  // Helper to compute accurate status based on dates and current date
-  const computeElectionStatus = (election: Election): Election['election_status'] => {
-    if (election.election_status === 'Canceled') return 'Canceled';
-    const now = new Date();
-    const start = election.date_start ? new Date(election.date_start) : null;
-    const end = new Date(election.date_end);
-    // Set time to 00:00:00 for start and 23:59:59 for end
-    if (start) start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
-    if (start && now >= start && now <= end) return 'Ongoing';
-    if (start && now < start) return 'Upcoming';
-    if (now > end) return 'Finished';
+  // Helper to get the status directly from the election object (authoritative from backend)
+  const getElectionStatus = (election: Election): Election['election_status'] => {
+    // Trust the backend's election_status as it's the authoritative source
     return election.election_status || 'Upcoming';
   };
 
@@ -243,35 +214,42 @@ export default function UserVotesPage() {
     if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} left`;
     return `${seconds} second${seconds > 1 ? 's' : ''} left`;
   };
-
   // Helper function to render the time remaining badge
   const getTimeRemainingBadge = (election: Election) => {
-    if (!election.election_status) return null;
-    if (election.election_status === 'Finished') {
+    const status = getElectionStatus(election);
+    
+    if (status === 'Finished') {
       return (
         <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-600">
           Election ended
         </span>
       );
     }
-    if (election.election_status === 'Canceled') {
+    if (status === 'Canceled') {
       return (
         <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-600">
           Canceled
         </span>
       );
     }
-    // Show actual time remaining for Ongoing/Upcoming
+    if (status === 'Upcoming') {
+      return (
+        <span className="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-600">
+          Voting not started
+        </span>
+      );
+    }
+    
+    // Show actual time remaining for Ongoing elections
     return (
       <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-600">
         {formatTimeRemaining(election.date_end)}
       </span>
     );
   };
-
   // Helper function to render the status badge (top-right corner)
   const getStatusBadge = (election: Election) => {
-    const status = computeElectionStatus(election);
+    const status = getElectionStatus(election);
     let color = 'bg-blue-100 text-blue-600';
     if (status === 'Finished') color = 'bg-gray-100 text-gray-600';
     if (status === 'Canceled') color = 'bg-red-100 text-red-600';
@@ -302,10 +280,9 @@ export default function UserVotesPage() {
         election.election_desc.toLowerCase().includes(searchLower) ||
         election.organization?.org_name.toLowerCase().includes(searchLower)
       );
-    }
-    // Updated filtering logic for new election_status mapping
+    }    // Updated filtering logic to use the authoritative election status from backend
     if (filter !== 'all') {
-      result = result.filter(election => election.election_status === filter);
+      result = result.filter(election => getElectionStatus(election) === filter);
     }
     if (sort === 'end-date') {
       result.sort((a, b) => (a.days_left || 0) - (b.days_left || 0));
@@ -378,12 +355,11 @@ export default function UserVotesPage() {
             </p>
           </div>
         </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredElections.map((election) => {
-            const status = computeElectionStatus(election);
+      ) : viewMode === 'grid' ? (        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">          {filteredElections.map((election) => {
+            const status = getElectionStatus(election);
+            const isFinishedOrCanceled = status === 'Finished' || status === 'Canceled';
             return (
-              <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden flex flex-col relative">
+              <div key={election.election_id} className={`bg-white rounded-xl shadow border border-gray-200 overflow-hidden flex flex-col relative ${isFinishedOrCanceled ? 'opacity-75' : ''}`}>
                 <div className="px-6 pt-6 pb-0 flex flex-col items-start">
                   <div className="flex w-full justify-between items-start mb-2">
                     {election.queued_access && (
@@ -408,32 +384,38 @@ export default function UserVotesPage() {
                 <div className="p-6 pt-2 flex-1">
                   <h3 className="text-lg font-semibold text-gray-800 mb-2">{election.election_name}</h3>
                   <p className="text-gray-600 text-sm mb-4">{election.election_desc}</p>
-                </div>
-                <div className="px-6 pb-3 flex flex-col gap-1 items-start justify-between">
+                </div>                <div className="px-6 pb-3 flex flex-col gap-1 items-start justify-between">
                   <span className="text-xs text-gray-500">
-                    Ends on {new Date(election.date_end).toLocaleDateString()}
+                    {status === 'Finished' ? 'Ended on' : 'Ends on'} {new Date(election.date_end).toLocaleDateString()}
                   </span>
                   {getTimeRemainingBadge(election)}
                 </div>
-                <div className="px-6 pb-6">
-                  <button
+                <div className="px-6 pb-6">                  <button
                     className={`w-full mt-2 px-4 py-2 rounded-lg text-white font-semibold transition flex items-center justify-center gap-2 ${
-                      status === 'Finished' ? 'bg-gray-500 cursor-not-allowed'
+                      status === 'Finished' || status === 'Canceled' ? 'bg-gray-500 cursor-not-allowed'
                       : status === 'Upcoming' ? 'bg-gray-500 cursor-not-allowed'
                       : alreadyVoted[election.election_id] ? 'bg-gray-500 cursor-not-allowed'
                       : 'bg-red-600 hover:bg-red-700'
                     }`}
-                    disabled={status === 'Finished' || status === 'Upcoming' || alreadyVoted[election.election_id]}
-                    title={alreadyVoted[election.election_id] ? 'You have already voted in this election.' : 'Cast your vote'}
+                    disabled={status === 'Finished' || status === 'Canceled' || status === 'Upcoming' || alreadyVoted[election.election_id]}
+                    title={
+                      alreadyVoted[election.election_id] ? 'You have already voted in this election.' 
+                      : status === 'Finished' ? 'This election has ended and voting is now closed.'
+                      : status === 'Canceled' ? 'This election has been canceled.'
+                      : status === 'Upcoming' ? 'Voting has not started yet for this election.'
+                      : 'Cast your vote'
+                    }
                     onClick={() => window.location.href = `/user/votes/access-check?election_id=${election.election_id}`}
                   >
                     {alreadyVoted[election.election_id]
                       ? 'Already Voted'
                       : status === 'Finished'
-                        ? 'Election Closed'
-                        : status === 'Upcoming'
-                          ? 'Voting Not Started'
-                          : 'Cast Your Vote'}
+                        ? 'Voting Closed'
+                        : status === 'Canceled'
+                          ? 'Election Canceled'
+                          : status === 'Upcoming'
+                            ? 'Voting Not Started'
+                            : 'Cast Your Vote'}
                     {status === 'Ongoing' && !alreadyVoted[election.election_id] && <ArrowRight size={16} />}
                   </button>
                 </div>
@@ -441,12 +423,11 @@ export default function UserVotesPage() {
             );
           })}
         </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {filteredElections.map((election) => {
-            const status = computeElectionStatus(election);
+      ) : (        <div className="flex flex-col gap-4">          {filteredElections.map((election) => {
+            const status = getElectionStatus(election);
+            const isFinishedOrCanceled = status === 'Finished' || status === 'Canceled';
             return (
-              <div key={election.election_id} className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+              <div key={election.election_id} className={`bg-white rounded-xl shadow border border-gray-200 overflow-hidden ${isFinishedOrCanceled ? 'opacity-75' : ''}`}>
                 <div className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center">
                   <div className="flex-1">
                     {election.organization && (
@@ -473,24 +454,31 @@ export default function UserVotesPage() {
                           <span className="ml-2 text-gray-700">{activeVoters[election.election_id]}/{election.max_concurrent_voters} active</span>
                         ) : null}
                       </span>
-                    )}
-                    <button 
+                    )}                    <button 
                       className={`${
-                        status === 'Finished' || status === 'Upcoming' || alreadyVoted[election.election_id]
+                        status === 'Finished' || status === 'Canceled' || status === 'Upcoming' || alreadyVoted[election.election_id]
                           ? 'bg-gray-500 cursor-not-allowed' 
                           : 'bg-red-600 hover:bg-red-700'
                       } text-white px-4 py-2 rounded-lg transition flex items-center justify-center gap-2`}
-                      disabled={status === 'Finished' || status === 'Upcoming' || alreadyVoted[election.election_id]}
-                      title={alreadyVoted[election.election_id] ? 'You have already voted in this election.' : 'Cast your vote'}
+                      disabled={status === 'Finished' || status === 'Canceled' || status === 'Upcoming' || alreadyVoted[election.election_id]}
+                      title={
+                        alreadyVoted[election.election_id] ? 'You have already voted in this election.' 
+                        : status === 'Finished' ? 'This election has ended and voting is now closed.'
+                        : status === 'Canceled' ? 'This election has been canceled.'
+                        : status === 'Upcoming' ? 'Voting has not started yet for this election.'
+                        : 'Cast your vote'
+                      }
                       onClick={() => window.location.href = `/user/votes/access-check?election_id=${election.election_id}`}
                     >
                       {alreadyVoted[election.election_id]
                         ? 'Already Voted'
                         : status === 'Finished'
-                          ? 'Election Closed'
-                          : status === 'Upcoming'
-                            ? 'Voting Not Started'
-                            : 'Cast Your Vote'} 
+                          ? 'Voting Closed'
+                          : status === 'Canceled'
+                            ? 'Election Canceled'
+                            : status === 'Upcoming'
+                              ? 'Voting Not Started'
+                              : 'Cast Your Vote'} 
                       {status === 'Ongoing' && !alreadyVoted[election.election_id] && <ArrowRight size={16} />}
                     </button>
                   </div>

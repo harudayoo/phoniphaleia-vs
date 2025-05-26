@@ -1,6 +1,7 @@
 from app.models.election import Election
 from app.models.organization import Organization
 from app.models.candidate import Candidate
+from app.models.election_result import ElectionResult
 from app import db
 from flask import jsonify, request, current_app
 from datetime import datetime
@@ -14,29 +15,44 @@ import uuid
 import json
 from werkzeug.utils import secure_filename
 
-class ElectionController:    
+class ElectionController:
     @staticmethod
     def get_all():
         try:
             elections = Election.query.all()
             result = []
-            now = datetime.utcnow().date()
+            now = datetime.utcnow().date()            
             for e in elections:
+                # First check if election has results and should be marked as 'Finished'
+                results_updated = ElectionController._check_and_update_election_with_results(e)
+                if results_updated:
+                    db.session.add(e)  # Mark for update
+                
+                # Check if election has results - if so, don't override 'Finished' status
+                existing_results = ElectionResult.query.filter_by(election_id=e.election_id).first()
+                
                 # Use the stored election_status as the primary source of truth
-                # Only update status if it's clearly outdated based on dates
                 status = e.election_status
                 
-                # Auto-update status if dates indicate it should change
-                if now > e.date_end and e.election_status not in ['Finished', 'Canceled']:
-                    # Election has ended but status hasn't been updated - fix it
-                    status = 'Finished'
-                    e.election_status = 'Finished'
-                    db.session.add(e)  # Mark for update
-                elif e.date_start > now and e.election_status not in ['Upcoming', 'Canceled']:
-                    # Election hasn't started yet
-                    status = 'Upcoming'
-                    e.election_status = 'Upcoming'
-                    db.session.add(e)  # Mark for update
+                # Only update status based on dates if election has NO results
+                if not existing_results:
+                    # Auto-update status if dates indicate it should change
+                    if now > e.date_end and e.election_status not in ['Finished', 'Canceled']:
+                        # Election has ended but status hasn't been updated - fix it
+                        status = 'Finished'
+                        e.election_status = 'Finished'
+                        db.session.add(e)  # Mark for update
+                    elif e.date_start and e.date_start > now and e.election_status not in ['Upcoming', 'Canceled']:
+                        # Election hasn't started yet
+                        status = 'Upcoming'
+                        e.election_status = 'Upcoming'
+                        db.session.add(e)  # Mark for update
+                    elif e.date_start and e.date_start <= now <= e.date_end and e.election_status not in ['Ongoing', 'Canceled', 'Finished']:
+                        # Election should be ongoing
+                        status = 'Ongoing'
+                        e.election_status = 'Ongoing'
+                        db.session.add(e)  # Mark for update
+                # If election has results, preserve 'Finished' status and don't change it
                 # Fetch college_name and college_id from organization relationship
                 college_name = None
                 college_id = None
@@ -60,16 +76,22 @@ class ElectionController:
                     } if e.organization else None,
                     "voters_count": e.voters_count if hasattr(e, "voters_count") else 0,
                     "participation_rate": e.participation_rate if hasattr(e, "participation_rate") else None,
-                    "queued_access": getattr(e, "queued_access", False),
-                    "max_concurrent_voters": getattr(e, "max_concurrent_voters", None),
+                    "queued_access": getattr(e, "queued_access", False),                    "max_concurrent_voters": getattr(e, "max_concurrent_voters", None),
                     "org_id": e.org_id
                 })
+            
+            # Commit any status updates we made
+            try:
+                db.session.commit()
+            except Exception as commit_ex:
+                print("Error committing status updates:", commit_ex)
+                db.session.rollback()
+            
             return jsonify(result)
         except Exception as ex:
             print("Error in get_all elections:", ex)
-            return jsonify({"error": str(ex)}), 500
-
-    @staticmethod
+            db.session.rollback()
+            return jsonify({"error": str(ex)}), 500    @staticmethod
     def get_ongoing():
         try:
             now = datetime.utcnow().date()
@@ -79,9 +101,15 @@ class ElectionController:
                 Election.date_end >= now,
                 Election.election_status == 'Ongoing'
             ).all()
-            
             result = []
             for e in ongoing_elections:
+                # Check if election has results and should be marked as 'Finished'
+                results_updated = ElectionController._check_and_update_election_with_results(e)
+                if results_updated:
+                    db.session.add(e)  # Mark for update
+                    # Skip this election from ongoing list if it was updated to Finished
+                    continue
+                
                 election_data = {
                     'election_id': e.election_id,
                     'election_name': e.election_name,
@@ -205,8 +233,9 @@ class ElectionController:
             data = request.json
             election = Election.query.get(election_id)
             if not election:
-                return jsonify({'error': 'Election not found'}), 404
-
+                return jsonify({'error': 'Election not found'}), 404            # Check if election has results first - this takes precedence
+            results_updated = ElectionController._check_and_update_election_with_results(election)
+            
             # Parse and update date fields if present
             if 'date_start' in data:
                 date_start = data['date_start']
@@ -217,43 +246,58 @@ class ElectionController:
                 date_end = data['date_end']
                 if isinstance(date_end, str):
                     date_end = datetime.fromisoformat(date_end).date()
-                election.date_end = date_end            # Update other fields if present in request
+                election.date_end = date_end            
+            
+            # Update other fields if present in request
             if 'election_name' in data:
                 election.election_name = data['election_name']
             if 'election_desc' in data:
                 election.election_desc = data['election_desc']
             if 'org_id' in data:
-                election.org_id = data['org_id']
-            if 'election_status' in data:
-                # If manually setting status to 'Finished', update the end date
-                if data['election_status'] == 'Finished' and election.election_status != 'Finished':
+                election.org_id = data['org_id']            
+                if 'election_status' in data:
+                # Check if election has results - if so, warn about override attempt
+                    existing_results = ElectionResult.query.filter_by(election_id=election_id).first()
+                if existing_results and data['election_status'] != 'Finished':
+                    print(f"Warning: Attempt to set election {election_id} status to '{data['election_status']}' but election has results. Keeping 'Finished' status.")
+                    # Don't change status if election has results unless explicitly setting to Finished
+                elif data['election_status'] == 'Finished' and election.election_status != 'Finished':
+                    # If manually setting status to 'Finished', update the end date
                     election.date_end = datetime.utcnow().date()
-                election.election_status = data['election_status']
+                    election.election_status = data['election_status']
+                elif not existing_results:
+                    # Only allow status changes if no results exist
+                    election.election_status = data['election_status']
+            
             if 'queued_access' in data:
                 election.queued_access = data['queued_access']
             if 'max_concurrent_voters' in data:
-                election.max_concurrent_voters = data['max_concurrent_voters']            # If no explicit status was provided, auto-determine status based on dates
+                election.max_concurrent_voters = data['max_concurrent_voters']
+            
+            # If no explicit status was provided, auto-determine status based on dates
+            # But don't override 'Finished' status if election has results
             if 'election_status' not in data:
-                ds = election.date_start
-                de = election.date_end
-                if isinstance(ds, str):
-                    ds = datetime.fromisoformat(ds).date()
-                if isinstance(de, str):
-                    de = datetime.fromisoformat(de).date()
-                now = datetime.utcnow().date()
-                if ds > now:
-                    status = 'Upcoming'
-                elif ds <= now <= de:
-                    status = 'Ongoing'
-                elif now > de:
-                    status = 'Finished'
-                    # Auto-update end date when status becomes 'Finished' due to date
-                    if election.election_status != 'Finished':
-                        election.date_end = now
-                else:
-                    status = election.election_status
-                election.election_status = status
-            election.election_status = status
+                existing_results = ElectionResult.query.filter_by(election_id=election_id).first()
+                if not existing_results:  # Only auto-update status if no results exist
+                    ds = election.date_start
+                    de = election.date_end
+                    if isinstance(ds, str):
+                        ds = datetime.fromisoformat(ds).date()
+                    if isinstance(de, str):
+                        de = datetime.fromisoformat(de).date()
+                    now = datetime.utcnow().date()
+                    if ds > now:
+                        status = 'Upcoming'
+                    elif ds <= now <= de:
+                        status = 'Ongoing'
+                    elif now > de:
+                        status = 'Finished'
+                        # Auto-update end date when status becomes 'Finished' due to date
+                        if election.election_status != 'Finished':
+                            election.date_end = now
+                    else:
+                        status = election.election_status
+                    election.election_status = status
 
             db.session.commit()
             return jsonify({'message': 'Election updated successfully', 'election_id': election.election_id, 'election_name': election.election_name, 'election_desc': election.election_desc, 'election_status': election.election_status, 'date_start': election.date_start.isoformat(), 'date_end': election.date_end.isoformat(), 'queued_access': election.queued_access, 'max_concurrent_voters': election.max_concurrent_voters}), 200
@@ -879,3 +923,25 @@ class ElectionController:
         except Exception as ex:
             print('Error in get_crypto_config:', ex)
             return jsonify({'error': 'Failed to fetch crypto configuration'}), 500
+    
+    @staticmethod
+    def _check_and_update_election_with_results(election):
+        """
+        Helper method to check if an election has results and automatically 
+        set its status to 'Finished' if results exist.
+        Returns True if the election was updated, False otherwise.
+        """
+        try:
+            # Check if election already has results
+            existing_results = ElectionResult.query.filter_by(election_id=election.election_id).first()
+            
+            if existing_results and election.election_status != 'Finished':
+                # Election has results but status is not 'Finished' - override it
+                election.election_status = 'Finished'
+                election.date_end = election.date_end or datetime.utcnow().date()
+                print(f"Auto-updated election {election.election_id} status to 'Finished' due to existing results")
+                return True
+            return False
+        except Exception as ex:
+            print(f"Error checking election results for election {election.election_id}: {ex}")
+            return False

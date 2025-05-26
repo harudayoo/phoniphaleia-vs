@@ -536,11 +536,13 @@ export default function AdminElectionsPage() {
       }
       return 0;
     });
-
   const getStatusBadge = (status: string, date_start?: string, date_end?: string) => {
-    // Compute status based on dates if available
-    let computedStatus = status;
-    if (date_start && date_end) {
+    // Use the database status as the primary source of truth
+    // Only apply date-based logic as a fallback or for validation
+    let displayStatus = status;
+    
+    // Validate status against dates for consistency (optional enhancement)
+    if (date_start && date_end && status !== 'Canceled') {
       const now = new Date();
       const start = new Date(date_start);
       const end = new Date(date_end);
@@ -549,27 +551,30 @@ export default function AdminElectionsPage() {
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
 
-      if (now >= start && now <= end && status !== 'Canceled') {
-        computedStatus = 'Ongoing';
-      } else if (now < start && status !== 'Canceled') {
-        computedStatus = 'Upcoming';
-      } else if (now > end && status !== 'Canceled') {
-        computedStatus = 'Finished';
-      } else if (status === 'Canceled') {
-        computedStatus = 'Canceled';
+      // Provide visual hints if database status doesn't align with dates
+      if (now >= start && now <= end && status === 'Upcoming') {
+        // Election should be ongoing but marked as upcoming - show as ongoing with hint
+        displayStatus = 'Ongoing';
+      } else if (now > end && (status === 'Ongoing' || status === 'Upcoming')) {
+        // Election should be finished but not marked - show as finished
+        displayStatus = 'Finished';
+      } else if (now < start && status === 'Ongoing') {
+        // Election shouldn't be ongoing yet - show as upcoming
+        displayStatus = 'Upcoming';
       }
-    }
-    switch(computedStatus) {
+    }    // Map status to badge colors - using semantic color scheme
+    switch(displayStatus) {
       case 'Ongoing':
-        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Ongoing</span>;
+        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full font-medium">Ongoing</span>;
       case 'Upcoming':
-        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">Upcoming</span>;
+        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full font-medium">Upcoming</span>;
       case 'Finished':
-        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Finished</span>;
+        return <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full font-medium">Finished</span>;
       case 'Canceled':
-        return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Canceled</span>;
+        return <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full font-medium">Canceled</span>;
       default:
-        return null;
+        // Fallback for any unexpected status values
+        return <span className="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full font-medium">{status}</span>;
     }
   };
 
