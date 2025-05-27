@@ -110,8 +110,8 @@ def test_phi_n_reconstruction(shares, n, prime_modulus):
             q_candidate = n // p_candidate
         if p_candidate * q_candidate == n:
         # Validate that we have actual primes, not trivial factors
-        if p_candidate > 1 and q_candidate > 1:
-            logger.info(f"Old approach successful: found p={p_candidate} ({p_candidate.bit_length()} bits) "
+            if p_candidate > 1 and q_candidate > 1:
+                logger.info(f"Old approach successful: found p={p_candidate} ({p_candidate.bit_length()} bits) "
                         f"and q={q_candidate} ({q_candidate.bit_length()} bits)")
             return {"p": p_candidate, "q": q_candidate, "approach": "old_phi_n"}
         else:
@@ -126,7 +126,7 @@ def test_phi_n_reconstruction(shares, n, prime_modulus):
     if gcd_val > 1:
         p_candidate = gcd_val + 1
         if n % p_candidate == 0:            q_candidate = n // p_candidate
-            if p_candidate * q_candidate == n:
+        if p_candidate * q_candidate == n:
                 # Validate that we have actual primes, not trivial factors
                 if p_candidate > 1 and q_candidate > 1:
                     logger.info(f"Old approach (GCD) successful: found p={p_candidate} ({p_candidate.bit_length()} bits) "

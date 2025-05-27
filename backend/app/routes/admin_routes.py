@@ -161,12 +161,15 @@ def get_admin_stats():
         if elections_with_results:
             total_participation = 0
             elections_with_participation = 0
-            
             for election in elections_with_results:
-                # Get eligible voters: those in the same college as the election's organization
-                eligible_voters = db.session.query(Voter).join(
-                    Organization, Voter.college_id == Organization.college_id
-                ).filter(Organization.org_id == election.org_id).count()
+                # Get eligible voters based on college affiliation
+                org = election.organization
+                if org and org.college_id:
+                    # Election is restricted to one college
+                    eligible_voters = Voter.query.filter_by(college_id=org.college_id).count()
+                else:
+                    # Election is open to all colleges
+                    eligible_voters = Voter.query.count()
                 
                 if eligible_voters > 0:
                     # Count actual votes cast in this election

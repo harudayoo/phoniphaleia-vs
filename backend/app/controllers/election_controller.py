@@ -441,39 +441,47 @@ class ElectionController:
             return jsonify({'message': 'No one in waitlist'}), 200
         next_entry.status = 'active'
         db.session.commit()
-        return jsonify({'message': 'Next voter activated', 'voter_id': next_entry.voter_id}), 200
-
-    @staticmethod
+        return jsonify({'message': 'Next voter activated', 'voter_id': next_entry.voter_id}), 200    @staticmethod
     def get_active_voters(election_id):
         election = Election.query.get(election_id)
         if not election:
             return jsonify({'error': 'Election not found'}), 404
+        
         count = ElectionWaitlist.query.filter_by(election_id=election_id, status='active').count()
         return jsonify({'active_voters': count})
 
     @staticmethod
     def get_eligible_voters(election_id):
-        """Return the number of eligible voters for an election (same college as org)."""
+        """Return the number of eligible voters for an election based on college affiliation."""
         election = Election.query.get(election_id)
         if not election:
             return jsonify({'error': 'Election not found'}), 404
         org = election.organization
-        if not org or not org.college_id:
-            return jsonify({'eligible_voters': 0})
-        count = Voter.query.filter_by(college_id=org.college_id).count()
-        return jsonify({'eligible_voters': count})    @staticmethod
+        if not org:
+            return jsonify({'error': 'Organization not found'}), 404
+          # If organization has no college affiliation, election is open to all colleges
+        if not org.college_id:
+            count = Voter.query.count()
+        else:
+            # Election is restricted to voters from the same college as the organization
+            count = Voter.query.filter_by(college_id=org.college_id).count()        
+        return jsonify({'eligible_voters': count})
+    
+    @staticmethod
     def access_check(election_id):
         data = request.json or {}
         voter_id = data.get('voter_id')
         if not voter_id:
             return jsonify({'eligible': False, 'reason': 'No voter_id provided'}), 400
         election = Election.query.get(election_id)
-        if not election or not election.organization or not election.organization.college_id:
-            return jsonify({'eligible': False, 'reason': 'Election or organization/college not found'}), 404
+        if not election or not election.organization:
+            return jsonify({'eligible': False, 'reason': 'Election or organization not found'}), 404
         voter = Voter.query.get(voter_id)
         if not voter:
             return jsonify({'eligible': False, 'reason': 'Voter not found'}), 404
-        if voter.college_id != election.organization.college_id:
+        
+        # If organization has college affiliation, check if voter is from the same college
+        if election.organization.college_id and voter.college_id != election.organization.college_id:
             return jsonify({'eligible': False, 'reason': 'Voter not in the same college as election'}), 403
         
         # Check voter status - only 'Enrolled' voters are eligible to vote
@@ -574,15 +582,20 @@ class ElectionController:
                     vote_status='cast'
                 )
                 db.session.add(vote)
-                
-            # Update voters_count in the election
+                  # Update voters_count in the election
             election = Election.query.get(election_id)
             if election:
                 election.voters_count = (election.voters_count or 0) + 1
                 
                 # Update participation rate if we can calculate eligible voters
-                if election.organization and election.organization.college_id:
-                    eligible_voters = Voter.query.filter_by(college_id=election.organization.college_id).count()
+                if election.organization:
+                    if election.organization.college_id:
+                        # Election is restricted to one college
+                        eligible_voters = Voter.query.filter_by(college_id=election.organization.college_id).count()
+                    else:
+                        # Election is open to all colleges
+                        eligible_voters = Voter.query.count()
+                    
                     if eligible_voters > 0:
                         election.participation_rate = (election.voters_count / eligible_voters) * 100
                 
