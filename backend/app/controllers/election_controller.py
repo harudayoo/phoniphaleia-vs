@@ -622,13 +622,22 @@ class ElectionController:
             data = request.form.to_dict() if request.form else request.json or {}
             photo = request.files.get('photo')
             photo_metadata = json.loads(request.form.get('photo_metadata', '{}')) if request.form and request.form.get('photo_metadata') else {}
-
+            
             fullname = data.get('fullname')
             position_id = data.get('position_id')
             party = data.get('party')
             candidate_desc = data.get('candidate_desc')
-            if not fullname or not position_id:
-                return jsonify({'error': 'fullname and position_id are required'}), 400
+            if not fullname:
+                return jsonify({'error': 'fullname is required'}), 400
+            
+            # Convert position_id to None if empty string or invalid
+            if position_id == '' or position_id == 'None':
+                position_id = None
+            elif position_id:
+                try:
+                    position_id = int(position_id)
+                except (ValueError, TypeError):
+                    position_id = None
 
             photo_path = None
             if photo and AuthController.allowed_file(photo.filename):
@@ -677,12 +686,21 @@ class ElectionController:
             candidate = Candidate.query.get(candidate_id)
             if not candidate:
                 return jsonify({'error': 'Candidate not found'}), 404
-                
-            # Update candidate details
+                  # Update candidate details
             if 'fullname' in data:
                 candidate.fullname = data['fullname']
             if 'position_id' in data:
-                candidate.position_id = data['position_id']
+                position_id = data['position_id']
+                # Convert position_id to None if empty string or invalid
+                if position_id == '' or position_id == 'None':
+                    candidate.position_id = None
+                elif position_id:
+                    try:
+                        candidate.position_id = int(position_id)
+                    except (ValueError, TypeError):
+                        candidate.position_id = None
+                else:
+                    candidate.position_id = None
             if 'party' in data:
                 candidate.party = data['party']
             if 'candidate_desc' in data:

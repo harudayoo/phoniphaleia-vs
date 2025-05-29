@@ -8,7 +8,7 @@ class Candidate(db.Model):
     candidate_id = db.Column(db.Integer, primary_key=True)
     election_id = db.Column(db.Integer, db.ForeignKey('elections.election_id'), nullable=False)
     fullname = db.Column(db.String(255), nullable=False)  # fixed from fullName to fullname
-    position_id = db.Column(db.Integer, db.ForeignKey('positions.position_id'), nullable=False)
+    position_id = db.Column(db.Integer, db.ForeignKey('positions.position_id'), nullable=True)
     party = db.Column(db.String(100))
     candidate_desc = db.Column(db.String(255))
     photo_path = db.Column(db.String(255))  # Path to stored candidate photo
