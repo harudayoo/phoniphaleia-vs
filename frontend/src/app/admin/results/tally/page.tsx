@@ -257,10 +257,10 @@ function TallyElectionContent() {
         setStep("error");
       });
   };
-
   return (
     <AdminLayout>
-      <div className="max-w-4xl mx-auto mt-8 space-y-6">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50/80 via-red-50/30 to-gray-100/80">
+        <div className="max-w-4xl mx-auto pt-8 pb-8 space-y-6">
         {/* Header with return button */}
         <div className="flex items-center justify-between mb-6">
           <button
@@ -271,16 +271,14 @@ function TallyElectionContent() {
             <span className="font-medium">Back to Results</span>
           </button>
           <div className="text-sm text-gray-500">Election ID: {election_id}</div>
-        </div>
-
-        {/* Main content card */}
+        </div>        {/* Main content card */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
+          <div className="bg-gradient-to-r from-red-700 to-red-800 px-8 py-6">
             <h1 className="text-2xl font-bold text-white flex items-center gap-3">
               <FaLock className="w-6 h-6" />
               Tally Election Results
             </h1>
-            <p className="text-blue-100 mt-2">
+            <p className="text-red-100 mt-2">
               Securely compute and decrypt election results using cryptographic protocols
             </p>
           </div>
@@ -290,9 +288,8 @@ function TallyElectionContent() {
               <div className="text-center space-y-6">
                 <div className="flex justify-center">
                   <div className="relative">
-                    <Loader4 size={80} />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <FaLock className="w-8 h-8 text-blue-600 animate-pulse" />
+                    <Loader4 size={80} />                    <div className="absolute inset-0 flex items-center justify-center">
+                      <FaLock className="w-8 h-8 text-red-700 animate-pulse" />
                     </div>
                   </div>
                 </div>
@@ -301,12 +298,11 @@ function TallyElectionContent() {
                   <p className="text-gray-600 max-w-md mx-auto leading-relaxed">
                     Using Paillier cryptosystem to compute encrypted vote totals while preserving ballot privacy
                   </p>
-                </div>
-                <div className="bg-blue-50 rounded-lg p-4">
-                  <div className="flex items-center justify-center gap-2 text-blue-700">
-                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
-                    <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
+                </div>                <div className="bg-red-50 rounded-lg p-4">
+                  <div className="flex items-center justify-center gap-2 text-red-700">
+                    <div className="w-2 h-2 bg-red-600 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-red-600 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
+                    <div className="w-2 h-2 bg-red-600 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
                   </div>
                 </div>
               </div>
@@ -331,17 +327,15 @@ function TallyElectionContent() {
                 >
                   <div className="grid gap-6">
                     {authorities.map((auth, idx) => (
-                      <div key={auth.authority_id} className="bg-gray-50 rounded-xl p-6 border border-gray-200">
-                        <label className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                          <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                      <div key={auth.authority_id} className="bg-gray-50 rounded-xl p-6 border border-gray-200">                        <label className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                          <div className="w-8 h-8 bg-red-700 text-white rounded-full flex items-center justify-center text-sm font-bold">
                             {idx + 1}
                           </div>
                           {auth.authority_name} Key Share
                         </label>
-                        <div className="space-y-3">
-                          <input
+                        <div className="space-y-3">                          <input
                             type="text"
-                            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-gray-700 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all duration-200"
                             value={keyShares[idx]}
                             onChange={(e) => handleKeyShareChange(idx, e.target.value)}
                             placeholder="Paste key share here (format: number:hexadecimal)"
@@ -357,17 +351,15 @@ function TallyElectionContent() {
                                   handleFileUpload(idx, e.target.files[0]);
                                 }
                               }}
-                              className="text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                              className="text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
                             />
                           </div>
                         </div>
                       </div>
                     ))}
-                  </div>
-
-                  <button
+                  </div>                  <button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 rounded-xl hover:from-blue-700 hover:to-blue-800 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl"
+                    className="w-full bg-gradient-to-r from-red-700 to-red-800 text-white py-4 rounded-xl hover:from-red-800 hover:to-red-900 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl"
                   >
                     Construct Private Key
                   </button>
@@ -414,10 +406,8 @@ function TallyElectionContent() {
                 <div className="space-y-2">
                   <h3 className="text-xl font-semibold text-gray-800">Key Reconstruction Complete</h3>
                   <p className="text-gray-600">Ready to decrypt the encrypted vote tally</p>
-                </div>
-
-                <button
-                  className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-4 rounded-xl hover:from-green-700 hover:to-green-800 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl"
+                </div>                <button
+                  className="w-full bg-gradient-to-r from-red-700 to-red-800 text-white py-4 rounded-xl hover:from-red-800 hover:to-red-900 font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl"
                   onClick={decryptTally}
                 >
                   Decrypt Tally
@@ -429,9 +419,8 @@ function TallyElectionContent() {
               <div className="text-center space-y-6">
                 <div className="flex justify-center">
                   <div className="relative">
-                    <Loader4 size={80} />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <FaLock className="w-8 h-8 text-green-600 animate-pulse" />
+                    <Loader4 size={80} />                    <div className="absolute inset-0 flex items-center justify-center">
+                      <FaLock className="w-8 h-8 text-red-700 animate-pulse" />
                     </div>
                   </div>
                 </div>
@@ -454,8 +443,7 @@ function TallyElectionContent() {
                     <span className="font-semibold">Error</span>
                   </div>
                   <p>{error}</p>
-                </div>
-                <button
+                </div>                <button
                   onClick={() => router.push("/admin/results")}
                   className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
                 >
@@ -463,7 +451,7 @@ function TallyElectionContent() {
                 </button>
               </div>
             )}
-          </div>
+          </div>        </div>
         </div>
       </div>      {/* Scroll to top button */}
       <ArrowUpScrollToTop show={showScrollToTop} />
@@ -472,21 +460,20 @@ function TallyElectionContent() {
 }
 
 export default function TallyElectionPage() {
-  return (
-    <Suspense fallback={
+  return (    <Suspense fallback={
       <AdminLayout>
-        <div className="max-w-4xl mx-auto mt-8 space-y-6">
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-8 py-6">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50/80 via-red-50/30 to-gray-100/80">
+          <div className="max-w-4xl mx-auto pt-8 pb-8 space-y-6">
+            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden"><div className="bg-gradient-to-r from-red-700 to-red-800 px-8 py-6">
               <h1 className="text-2xl font-bold text-white flex items-center gap-3">
                 <FaLock className="w-6 h-6" />
                 Tally Election Results
               </h1>
-            </div>
-            <div className="p-8 text-center">
+            </div>            <div className="p-8 text-center">
               <Loader4 size={80} />
               <p className="text-gray-600 mt-4">Loading...</p>
             </div>
+          </div>
           </div>
         </div>
       </AdminLayout>

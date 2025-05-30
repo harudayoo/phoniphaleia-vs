@@ -130,12 +130,12 @@ function DecryptedResultsContent() {
       .filter(c => c && c.is_winner)
       .map(c => ({ ...c, position_name: position.position_name }))
   );
-
   return (
     <AdminLayout>
-      <div className="max-w-4xl mx-auto mt-8 space-y-6">
-        {/* Header with return button */}
-        <div className="flex items-center justify-between mb-6">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50/80 via-red-50/30 to-gray-100/80">
+        <div className="max-w-4xl mx-auto pt-8 pb-8 space-y-6">
+          {/* Header with return button */}
+          <div className="flex items-center justify-between mb-6">
           <button
             onClick={() => setShowConfirm(true)}
             className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-all duration-200"
@@ -147,13 +147,12 @@ function DecryptedResultsContent() {
         </div>
 
         {/* Main content card */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-          <div className="bg-gradient-to-r from-green-600 to-green-700 px-8 py-6">
+        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">          <div className="bg-gradient-to-r from-red-700 to-red-800 px-8 py-6">
             <h1 className="text-2xl font-bold text-white flex items-center gap-3">
               <FaChartBar className="w-6 h-6" />
               Decrypted Election Results
             </h1>
-            <p className="text-green-100 mt-2">
+            <p className="text-red-100 mt-2">
               Final vote tallies successfully decrypted and ready for analysis
             </p>
           </div>
@@ -163,9 +162,8 @@ function DecryptedResultsContent() {
               <div className="text-center space-y-6">
                 <div className="flex justify-center">
                   <div className="relative">
-                    <Loader4 size={80} />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <FaChartBar className="w-8 h-8 text-green-600 animate-pulse" />
+                    <Loader4 size={80} />                    <div className="absolute inset-0 flex items-center justify-center">
+                      <FaChartBar className="w-8 h-8 text-red-700 animate-pulse" />
                     </div>
                   </div>
                 </div>
@@ -174,12 +172,11 @@ function DecryptedResultsContent() {
                   <p className="text-gray-600 max-w-md mx-auto leading-relaxed">
                     Retrieving the final vote tallies from secure storage
                   </p>
-                </div>
-                <div className="bg-green-50 rounded-lg p-4">
-                  <div className="flex items-center justify-center gap-2 text-green-700">
-                    <div className="w-2 h-2 bg-green-600 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-green-600 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
-                    <div className="w-2 h-2 bg-green-600 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
+                </div>                <div className="bg-red-50 rounded-lg p-4">
+                  <div className="flex items-center justify-center gap-2 text-red-700">
+                    <div className="w-2 h-2 bg-red-600 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-red-600 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
+                    <div className="w-2 h-2 bg-red-600 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
                   </div>
                 </div>
               </div>
@@ -203,16 +200,15 @@ function DecryptedResultsContent() {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Success indicator */}
-                <div className="text-center">
-                  <div className="flex justify-center mb-4">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                      <FaCheckCircle className="w-8 h-8 text-green-600" />
+                {/* Success indicator */}                  <div className="text-center">
+                    <div className="flex justify-center mb-4">
+                      <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                        <FaCheckCircle className="w-8 h-8 text-green-700" />
+                      </div>
                     </div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">Decryption Complete</h3>
+                    <p className="text-gray-600">All votes have been successfully decrypted and tallied</p>
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-800 mb-2">Decryption Complete</h3>
-                  <p className="text-gray-600">All votes have been successfully decrypted and tallied</p>
-                </div>
 
                 {/* Summary cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -289,9 +285,8 @@ function DecryptedResultsContent() {
 
                 {/* Results by position */}
                 {results.length > 0 ? (
-                  <div className="space-y-6">
-                    <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                      <FaChartBar className="w-5 h-5 text-green-600" />
+                  <div className="space-y-6">                    <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                      <FaChartBar className="w-5 h-5 text-red-700" />
                       Results by Position
                     </h4>
                       {results.map((position) => {
@@ -303,8 +298,7 @@ function DecryptedResultsContent() {
                           <h5 className="text-lg font-semibold text-gray-800 mb-4">{position.position_name}</h5>
                           
                           <div className="overflow-hidden rounded-lg border border-gray-200">
-                            <table className="w-full">
-                              <thead className="bg-gray-100">
+                            <table className="w-full">                              <thead className="bg-gray-100">
                                 <tr>
                                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Candidate</th>
                                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Party</th>
@@ -317,13 +311,14 @@ function DecryptedResultsContent() {
                                 {candidates
                                   .filter(candidate => candidate != null)
                                   .sort((a, b) => (b.vote_count || 0) - (a.vote_count || 0))
-                                  .map((candidate, idx) => {                                    const voteCount = candidate.vote_count || 0;
+                                  .map((candidate, idx) => {
+                                    const voteCount = candidate.vote_count || 0;
                                     const percentage = positionTotalVotes > 0 ? ((voteCount / positionTotalVotes) * 100).toFixed(1) : "0.0";
                                     return (
                                       <tr key={`${position.position_id}-${candidate.candidate_id}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                                         <td className="py-3 px-4 border-t border-gray-200">
                                           <div className="flex items-center gap-2">
-                                            <div className={`w-8 h-8 ${candidate.is_winner ? 'bg-yellow-600' : 'bg-blue-600'} text-white rounded-full flex items-center justify-center text-sm font-bold`}>
+                                            <div className={`w-8 h-8 ${candidate.is_winner ? 'bg-yellow-600' : 'bg-red-700'} text-white rounded-full flex items-center justify-center text-sm font-bold`}>
                                               {candidate.is_winner ? <FaTrophy className="w-4 h-4" /> : candidate.candidate_id}
                                             </div>
                                             <span className="font-medium text-gray-700">{candidate.fullname || 'Unknown Candidate'}</span>
@@ -339,7 +334,7 @@ function DecryptedResultsContent() {
                                           <div className="flex items-center gap-3">
                                             <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[100px]">
                                               <div 
-                                                className={`${candidate.is_winner ? 'bg-yellow-600' : 'bg-blue-600'} h-2 rounded-full transition-all duration-500`}
+                                                className={`${candidate.is_winner ? 'bg-yellow-600' : 'bg-red-700'} h-2 rounded-full transition-all duration-500`}
                                                 style={{ width: `${percentage}%` }}
                                               ></div>
                                             </div>
@@ -375,17 +370,16 @@ function DecryptedResultsContent() {
                   </div>
                 )}
 
-                {/* Action buttons */}
-                <div className="flex gap-3 justify-center">
+                {/* Action buttons */}                <div className="flex gap-3 justify-center">
                   <button
-                    className="flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                    className="flex items-center gap-2 bg-red-700 text-white px-6 py-3 rounded-xl hover:bg-red-800 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
                     onClick={handleExport}
                   >
                     <FaDownload className="w-4 h-4" />
                     Export CSV
                   </button>
                   <button
-                    className="flex items-center gap-2 bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-700 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                    className="flex items-center gap-2 bg-gray-700 text-white px-6 py-3 rounded-xl hover:bg-gray-800 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
                     onClick={handleShare}
                   >
                     <FaShareAlt className="w-4 h-4" />
@@ -416,17 +410,16 @@ function DecryptedResultsContent() {
                   onClick={() => setShowConfirm(false)}
                 >
                   Cancel
-                </button>
-                <button
-                  className="px-6 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+                </button>                <button
+                  className="px-6 py-3 rounded-xl bg-red-700 text-white hover:bg-red-800 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
                   onClick={() => router.push('/admin/results')}
-                >
-                  Yes, Return
+                >                  Yes, Return
                 </button>
               </div>
             </div>
           </div>
         )}
+        </div>
       </div>      {/* Scroll to top button */}
       <ArrowUpScrollToTop show={showScrollToTop} />
     </AdminLayout>
@@ -434,11 +427,11 @@ function DecryptedResultsContent() {
 }
 
 export default function DecryptedResultsPage() {
-  return (
-    <Suspense fallback={
+  return (    <Suspense fallback={
       <AdminLayout>
-        <div className="max-w-6xl mx-auto mt-8 space-y-6">
-          <div className="flex items-center justify-between mb-6">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50/80 via-red-50/30 to-gray-100/80">
+          <div className="max-w-6xl mx-auto pt-8 pb-8 space-y-6">
+            <div className="flex items-center justify-between mb-6">
             <button className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-all duration-200">
               <FaArrowLeft className="w-4 h-4" />
               <span className="font-medium">Back to Results</span>
@@ -446,19 +439,17 @@ export default function DecryptedResultsPage() {
             <div className="text-sm text-gray-500">Loading...</div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-green-600 to-green-700 px-8 py-6">
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">            <div className="bg-gradient-to-r from-red-700 to-red-800 px-8 py-6">
               <h1 className="text-2xl font-bold text-white flex items-center gap-3">
                 <FaChartBar className="w-6 h-6" />
                 Decrypted Election Results
               </h1>
-              <p className="text-green-100 mt-2">Final verified results from the election</p>
-            </div>
-
-            <div className="p-8 text-center">
+              <p className="text-red-100 mt-2">Final verified results from the election</p>
+            </div>            <div className="p-8 text-center">
               <Loader4 size={80} />
               <p className="text-gray-600 mt-4">Loading decrypted results...</p>
             </div>
+          </div>
           </div>
         </div>
       </AdminLayout>

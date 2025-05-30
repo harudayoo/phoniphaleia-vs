@@ -225,13 +225,13 @@ function UserLayoutInner({ children }: UserLayoutProps) {
                     className="text-lg font-semibold text-red-900 text-shadow-gray-600"
                     layoutId="user-name"
                   >
-                    Welcome, {user.first_name}
+                    Welcome User, {user.first_name}
                   </motion.div>
                   <motion.div 
                     className="text-sm text-gray-600"
                     layoutId="user-id"
                   >
-                    Student ID: {user.student_id}
+                    Student Voter ID: {user.student_id}
                   </motion.div>
                 </div>
               </motion.div>

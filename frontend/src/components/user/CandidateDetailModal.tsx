@@ -105,7 +105,7 @@ const CandidateDetailModal: FC<CandidateDetailModalProps> = ({ candidate, isOpen
           
           {candidate.party && (
             <motion.div 
-              className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700 mb-4"
+              className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-red-100 text-red-700 mb-4"
               variants={itemAnimation}
             >
               {candidate.party}

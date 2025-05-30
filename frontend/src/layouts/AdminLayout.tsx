@@ -63,7 +63,7 @@ function AdminLayoutInner({ children }: AdminLayoutProps) {
               }`}
             >
               <LayoutDashboard className="w-5 h-5" />
-              <span>Dashboard</span>
+              <span>Admin Dashboard</span>
             </Link>
           </li>
           <li>
@@ -197,13 +197,13 @@ function AdminLayoutInner({ children }: AdminLayoutProps) {
                   className="text-lg font-semibold text-red-900 text-shadow-gray-600"
                   layoutId="admin-name"
                 >
-                  Welcome, {admin.full_name}
+                  Welcome Admin: {admin.full_name}
                 </motion.div>
                 <motion.div 
                   className="text-sm text-gray-600"
                   layoutId="admin-id"
                 >
-                  ID Number: {admin.id_number}
+                  Admin ID Number: {admin.id_number}
                 </motion.div>
               </motion.div>
             ) : (

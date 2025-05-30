@@ -365,10 +365,10 @@ function CastVoteContent() {
                         damping: 25,
                         delay: cand.candidate_id * 0.05 % 0.5 // Stagger effect
                       }}
-                      className={`flex items-start p-4 rounded-lg border-2 cursor-pointer transition-all duration-300 hover:bg-blue-50 ${
+                      className={`flex items-start p-4 rounded-lg border-2 cursor-pointer transition-all duration-300 hover:bg-green-50 ${
                         selected[pos.position_id] === cand.candidate_id 
-                          ? 'border-blue-500 bg-blue-50 shadow-lg' 
-                          : 'border-gray-200'
+                          ? 'border-green-500 bg-green-50 shadow-lg' 
+                          : 'border-green-200'
                       }`}
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.99 }}
@@ -379,7 +379,7 @@ function CastVoteContent() {
                         value={cand.candidate_id}
                         checked={selected[pos.position_id] === cand.candidate_id}
                         onChange={() => handleSelect(pos.position_id, cand.candidate_id)}
-                        className="mr-3 mt-1 h-5 w-5 accent-blue-500"
+                        className="mr-3 mt-1 h-5 w-5 accent-green-500"
                       />
                       
                       <div className="flex flex-1">
@@ -432,7 +432,7 @@ function CastVoteContent() {
                             <span className="font-medium text-gray-900">{cand.fullname}</span>
                             {cand.party && (
                               <motion.span 
-                                className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full"
+                                className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full"
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                               >
@@ -471,7 +471,7 @@ function CastVoteContent() {
               <div className="flex justify-end mt-6 mb-12">
               <motion.button
                 type="submit"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-10 py-3 rounded-lg shadow transition flex items-center"
+                className="bg-red-600 hover:bg-red-700 text-white font-medium px-10 py-3 rounded-lg shadow transition flex items-center"
                 whileHover={{ 
                   scale: 1.05, 
                   boxShadow: "0px 5px 15px rgba(0, 0, 0, 0.1)"
@@ -542,7 +542,7 @@ export default function CastVotePage() {
         />
         <div className="relative z-20 w-full max-w-3xl mx-auto flex flex-col items-center">
           <div className="text-center py-16 w-full">
-            <div className="rounded-full h-12 w-12 border-b-2 border-blue-700 mx-auto mb-4 animate-spin"></div>
+            <div className="rounded-full h-12 w-12 border-b-2 border-red-700 mx-auto mb-4 animate-spin"></div>
             <p className="text-lg text-gray-700">Loading voting interface...</p>
           </div>
         </div>

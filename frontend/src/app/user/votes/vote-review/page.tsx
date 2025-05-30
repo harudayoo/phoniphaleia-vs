@@ -74,10 +74,10 @@ function VoteReviewContent() {
       <Image src="/usep-bg.jpg" alt="bg" fill style={{ objectFit: 'cover', opacity: 0.08, zIndex: 0 }} />
       <div className="z-10 flex flex-col items-center w-full">
         <SystemLogo2 width={180} className="mb-8 drop-shadow-lg" />
-        <div className="max-w-xl w-full bg-white/90 backdrop-blur-md rounded-2xl p-10 shadow-2xl border border-yellow-200 mx-auto flex flex-col items-center"
+        <div className="max-w-4xl w-full m-2 bg-white/90 backdrop-blur-md rounded-2xl p-10 shadow-2xl border border-red-200 mx-auto flex flex-col items-center"
           style={{ maxHeight: '80vh', overflowY: 'auto' }}
         >
-          <h2 className="text-3xl font-extrabold text-center mb-8 text-green-700 tracking-tight drop-shadow-sm">Your Submitted Votes</h2>
+          <h2 className="text-3xl font-bold text-center mb-8 text-green-700 tracking-tight drop-shadow-sm">Your Submitted Votes</h2>
           {loading ? (
             <div className="flex flex-col items-center">
               <Loader4 size={90} className="mb-6" />
@@ -88,17 +88,17 @@ function VoteReviewContent() {
           ) : (
             <>
               <div className="w-full overflow-x-auto mb-6">
-                <table className="w-full border border-yellow-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                <table className="w-full border border-green-200 rounded-xl overflow-hidden shadow-sm bg-white">
                   <thead>
-                    <tr className="bg-yellow-100">
-                      <th className="p-3 text-left text-xs font-bold text-yellow-800 uppercase tracking-wider">Position</th>
-                      <th className="p-3 text-left text-xs font-bold text-yellow-800 uppercase tracking-wider">Candidate</th>
-                      <th className="p-3 text-left text-xs font-bold text-yellow-800 uppercase tracking-wider">Party</th>
+                    <tr className="bg-green-100">
+                      <th className="p-3 text-left text-xs font-bold text-green-800 uppercase tracking-wider">Position</th>
+                      <th className="p-3 text-left text-xs font-bold text-green-800 uppercase tracking-wider">Candidate</th>
+                      <th className="p-3 text-left text-xs font-bold text-green-800 uppercase tracking-wider">Party</th>
                     </tr>
                   </thead>
                   <tbody>
                     {votes.map((v, i) => (
-                      <tr key={i} className="border-b last:border-b-0 hover:bg-yellow-50 transition">
+                      <tr key={i} className="border-b last:border-b-0 hover:bg-green-50 transition">
                         <td className="p-3 text-sm text-gray-900 font-medium">{v.position_name}</td>
                         <td className="p-3 text-sm text-gray-800">{v.candidate_name}</td>
                         <td className="p-3 text-sm text-gray-700">{v.party}</td>
@@ -108,7 +108,7 @@ function VoteReviewContent() {
                 </table>
               </div>
               <button
-                className="w-full py-3 px-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-bold text-lg shadow-md transition mb-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-3xs py-2 px-2 bg-gradient-to-r self-end from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-xl font-bold text-md shadow-md transition mb-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 onClick={handleSendReceipt}
                 disabled={sending || emailSent}
               >
@@ -134,7 +134,7 @@ export default function VoteReviewPage() {
         <Image src="/usep-bg.jpg" alt="bg" fill style={{ objectFit: 'cover', opacity: 0.08, zIndex: 0 }} />
         <div className="z-10 flex flex-col items-center w-full">
           <SystemLogo2 width={180} className="mb-8 drop-shadow-lg" />
-          <div className="max-w-xl w-full bg-white/90 backdrop-blur-md rounded-2xl p-10 shadow-2xl border border-yellow-200 mx-auto flex flex-col items-center">
+          <div className="max-w-xl w-full bg-white/90 backdrop-blur-md rounded-2xl p-10 shadow-2xl border border-red-200 mx-auto flex flex-col items-center">
             <h2 className="text-3xl font-extrabold text-center mb-8 text-green-700 tracking-tight drop-shadow-sm">Your Submitted Votes</h2>
             <div className="flex flex-col items-center">
               <Loader4 size={90} className="mb-6" />

@@ -62,7 +62,6 @@ export default function AdminSecurityKeysPage() {
         setLoading(true);
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/crypto_configs/security-keys`);
         const data = await res.json();
-        // Patch: If backend does not provide key_name, description, or key_fingerprint, generate them from available fields
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const keys = (data.keys || []).map((k: any) => ({
           key_id: k.key_id ?? k.crypto_id ?? k.id ?? Math.random(),
@@ -180,15 +179,15 @@ export default function AdminSecurityKeysPage() {
         )}
         {key.associated_election && (
           <button
-            className="bg-blue-50 rounded-lg p-2 mb-3 flex items-center hover:bg-blue-100 transition"
+            className="bg-red-50 rounded-lg p-2 mb-3 flex items-center hover:bg-red-100 transition"
             onClick={() => {
               setSelectedElectionId(typeof key.election_id === 'number' ? key.election_id : null);
               setShowAuthoritiesModal(true);
             }}
             title="View trusted authorities"
           >
-            <Award className="h-4 w-4 text-blue-600 mr-2" />
-            <span className="text-sm text-blue-700">{key.associated_election}</span>
+            <Award className="h-4 w-4 text-red-700 mr-2" />
+            <span className="text-sm text-red-800">{key.associated_election}</span>
           </button>
         )}
         <div className="flex items-center mb-3 text-sm text-gray-600">
@@ -221,7 +220,7 @@ export default function AdminSecurityKeysPage() {
         </div>
         <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
           <div className="flex space-x-2">
-            <button className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+            <button className="p-2 text-red-700 hover:bg-red-50 rounded"
               onClick={() => {
                 setSelectedElectionId(typeof key.election_id === 'number' ? key.election_id : null);
                 setShowAuthoritiesModal(true);
@@ -380,7 +379,7 @@ export default function AdminSecurityKeysPage() {
           <div className="text-center py-12 text-gray-500">Loading...</div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-12">
-            <h3 className="text-lg font-semibold mb-2">No security keys found</h3>
+            <h3 className="text-lg text-red-800 font-semibold mb-2">No security keys found</h3>
             <p className="text-gray-500 mb-4">
               {search || status !== 'ALL' || keyType !== 'ALL' 
                 ? 'Try adjusting your search or filters' 
@@ -422,7 +421,6 @@ export default function AdminSecurityKeysPage() {
         <p className="text-gray-600 mb-4">
           Create a new security key for your election. Select an election to create one!.
         </p>
-        {/* Modal content would go here */}
       </Modal>
 
       <TrustedAuthoritiesModal

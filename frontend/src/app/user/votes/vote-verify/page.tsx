@@ -39,7 +39,7 @@ function VoteVerifyContent() {
   const [votes, setVotes] = useState<Vote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [publicKey, setPublicKey] = useState<string | null>(null);  
+  const [, setPublicKey] = useState<string | null>(null);  
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>({
     uniqueVote: 'pending',
     validVote: 'pending',
@@ -288,7 +288,7 @@ function VoteVerifyContent() {
           className="max-w-3xl w-full bg-white/80 backdrop-blur-sm rounded-xl p-8 shadow-lg border border-gray-200 mx-auto"
           style={{ maxHeight: '80vh', overflowY: 'auto' }}
         >
-          <h2 className="text-2xl font-bold text-center mb-6">Vote Verification</h2>
+          <h2 className="text-2xl font-bold text-center mb-6 text-red-700">Vote Verification</h2>
           {loading ? (
             <div className="flex flex-col items-center">
               <Loader4 size={100} className="mb-6" />
@@ -309,12 +309,7 @@ function VoteVerifyContent() {
                   status={verificationStatus.followsRules} 
                 />
               </div>
-              {publicKey && (
-                <div className="mt-6 bg-gray-100 rounded p-3 w-full">
-                  <p className="text-xs text-gray-600 font-mono mb-1">Public Key:</p>
-                  <p className="text-xs text-gray-800 font-mono break-all">{publicKey}</p>
-                </div>
-              )}
+             
             </div>
           ) : overallStatus === 'success' ? (
             <div className="text-center">

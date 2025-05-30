@@ -678,7 +678,7 @@ export default function AdminSettingsPage() {
                   </div>
 
                   <div className="mt-6 flex justify-center">
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg mx-2">
+                    <button className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg mx-2">
                       Run Manual Backup
                     </button>
                     <button className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg mx-2">

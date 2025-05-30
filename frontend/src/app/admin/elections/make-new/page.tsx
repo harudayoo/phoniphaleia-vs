@@ -463,70 +463,68 @@ export default function CreateElectionPage() {
           </div>
           <p className="text-lg font-medium">{modalContent.message}</p>
         </div>
-      </Modal>
-
-      {/* Background image with overlay and gradient */}
+      </Modal>      {/* Background with subtle gradient overlay */}
       <div className="absolute inset-0 z-0">
-        {/* USEP background image with 0.6 opacity using next/image */}
+        {/* USEP background image with reduced opacity */}
         <Image
           src="/usep-bg.jpg"
           alt="USEP Background"
           fill
-          style={{ objectFit: 'cover', opacity: 0.6 }}
+          style={{ objectFit: 'cover', opacity: 0.3 }}
           className="!absolute !inset-0"
           priority
         />
-        {/* Yellow gradient overlay from bottom to transparent */}
+        {/* Subtle warm gradient overlay */}
         <div
           className="absolute inset-0"
           style={{
-            background: 'linear-gradient(to top, #FFF9E5 0%, #FFF9E5 40%, transparent 100%)',
+            background: 'linear-gradient(to bottom, rgba(254, 251, 243, 0.9) 0%, rgba(254, 253, 247, 0.8) 50%, rgba(249, 250, 251, 0.9) 100%)',
             pointerEvents: 'none',
           }}
         ></div>
-      </div>      <div className="w-full max-w-7xl bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 my-4 border border-gray-200 relative z-10" 
+      </div><div className="w-full max-w-7xl bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 my-4 border border-gray-200 relative z-10" 
            style={{ width: '95%', minHeight: '80vh' }}>        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold gradient-text mb-2">Create New Election</h1>
-          <p className="text-gray-600 text-lg">Configure all aspects of your new election with our guided setup process.</p>
+          <h1 className="text-4xl font-bold text-red-900 mb-2">Create New Election</h1>
+          <p className="text-gray-700 text-lg">Configure all aspects of your new election with our guided setup process.</p>
           <div className="mt-4 flex justify-center">
-            <div className="h-1 w-24 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
+            <div className="h-1 w-24 bg-gradient-to-r from-red-700 to-red-900 rounded-full"></div>
           </div>
           
           {/* Overall Progress Bar */}
           <div className="mt-6 max-w-md mx-auto">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-gray-600">Overall Progress</span>
-              <span className="text-sm font-bold text-blue-600">{overallProgress()}%</span>
+              <span className="text-sm font-medium text-gray-700">Overall Progress</span>
+              <span className="text-sm font-bold text-red-700">{overallProgress()}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div 
-                className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500 ease-out"
+                className="bg-gradient-to-r from-red-700 to-red-900 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${overallProgress()}%` }}
               ></div>
             </div>
           </div>
-        </div>{/* Enhanced Stepper */}
+        </div>        {/* Enhanced Stepper */}
         <div className="flex justify-between items-center mb-12 relative">
           {/* Progress line */}
           <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-200 z-0">
             <div 
-              className="h-full bg-blue-600 transition-all duration-500 ease-in-out"
+              className="h-full bg-red-700 transition-all duration-500 ease-in-out"
               style={{ width: `${(step / 2) * 100}%` }}
             />
           </div>
             {[
-            { label: 'General Details', icon: '📋', isValid: isGeneralValid },
-            { label: 'Trusted Authorities', icon: '🔐', isValid: isAuthoritiesValid },
-            { label: 'Candidates', icon: '👥', isValid: hasValidCandidates || step === 2 }
+            { label: 'General Details', icon: 'G', isValid: isGeneralValid },
+            { label: 'Trusted Authorities', icon: 'A', isValid: isAuthoritiesValid },
+            { label: 'Candidates', icon: 'C', isValid: hasValidCandidates || step === 2 }
           ].map((item, idx) => (
             <div key={item.label} className="flex-1 flex flex-col items-center relative z-10">
               <div className={`
                 rounded-full w-12 h-12 flex items-center justify-center font-bold text-lg
                 border-4 border-white shadow-lg transition-all duration-300 relative
                 ${step === idx 
-                  ? 'bg-blue-600 text-white scale-110 shadow-blue-200' 
+                  ? 'bg-red-700 text-white scale-110 shadow-red-200' 
                   : step > idx 
-                    ? 'bg-green-500 text-white' 
+                    ? 'bg-green-600 text-white' 
                     : 'bg-gray-100 text-gray-500'
                 }
               `}>
@@ -541,7 +539,7 @@ export default function CreateElectionPage() {
               </div>
               <span className={`
                 mt-3 text-sm font-semibold text-center max-w-24
-                ${step === idx ? 'text-blue-700' : step > idx ? 'text-green-600' : 'text-gray-500'}
+                ${step === idx ? 'text-red-700' : step > idx ? 'text-green-600' : 'text-gray-500'}
               `}>
                 {item.label}
               </span>
@@ -552,10 +550,10 @@ export default function CreateElectionPage() {
           ))}
         </div>        {/* Step 1: General Details */}
         <div className={`${step === 0 ? 'block animate-fadeIn' : 'hidden'} ${stepAnim}`}> 
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 mb-6">
+          <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-6 mb-6 border border-gray-200">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <span className="text-blue-600 text-xl">📋</span>
+              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                <span className="text-red-700 font-bold text-lg">G</span>
               </div>
               <div>
                 <h3 className="font-bold text-gray-800 text-xl">General Details</h3>
@@ -568,12 +566,11 @@ export default function CreateElectionPage() {
             <div className="space-y-6">
               <div className="group">
                 <label className="flex items-center gap-2 text-sm text-gray-700 font-semibold mb-2">
-                  <span className="text-blue-600">🏢</span>
                   Organization 
                   <span className="text-red-500">*</span>
                 </label>                <select 
                   className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 form-input
-                           focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200
+                           focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200
                            group-hover:border-gray-300" 
                   value={orgId ?? ''} 
                   onChange={e => setOrgId(Number(e.target.value))} 
@@ -590,12 +587,11 @@ export default function CreateElectionPage() {
 
               <div className="group">
                 <label className="flex items-center gap-2 text-sm text-gray-700 font-semibold mb-2">
-                  <span className="text-blue-600">🗳️</span>
                   Election Name 
                   <span className="text-red-500">*</span>
                 </label>                <input 
                   className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 form-input
-                           focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200
+                           focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200
                            group-hover:border-gray-300" 
                   value={electionName} 
                   onChange={e => setElectionName(e.target.value)} 
@@ -606,13 +602,12 @@ export default function CreateElectionPage() {
 
               <div className="group">
                 <label className="flex items-center gap-2 text-sm text-gray-700 font-semibold mb-2">
-                  <span className="text-blue-600">📝</span>
                   Description 
                   <span className="text-red-500">*</span>
                 </label>
                 <textarea 
                   className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 h-32
-                           focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200
+                           focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200
                            group-hover:border-gray-300 resize-none" 
                   value={description} 
                   onChange={e => setDescription(e.target.value)} 
@@ -626,14 +621,13 @@ export default function CreateElectionPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="group">
                   <label className="flex items-center gap-2 text-sm text-gray-700 font-semibold mb-2">
-                    <span className="text-green-600">🕐</span>
                     Start Date 
                     <span className="text-red-500">*</span>
                   </label>
                   <input 
                     type="date" 
                     className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 
-                             focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200
+                             focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200
                              group-hover:border-gray-300" 
                     value={dateStart} 
                     onChange={e => setDateStart(e.target.value)} 
@@ -643,25 +637,24 @@ export default function CreateElectionPage() {
 
                 <div className="group">
                   <label className="flex items-center gap-2 text-sm text-gray-700 font-semibold mb-2">
-                    <span className="text-red-600">🕑</span>
                     End Date 
                     <span className="text-red-500">*</span>
                   </label>
                   <input 
                     type="date" 
                     className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 
-                             focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200
+                             focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200
                              group-hover:border-gray-300" 
                     value={endDate} 
                     onChange={e => setEndDate(e.target.value)} 
                     required 
                   />
                 </div>
-              </div>
-
-              <div className="bg-gray-50 rounded-lg p-6 border-2 border-gray-200">
+              </div>              <div className="bg-gray-50 rounded-lg p-6 border-2 border-gray-200">
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="text-orange-600 text-xl">⚙️</span>
+                  <div className="w-8 h-8 bg-gray-200 rounded-lg flex items-center justify-center">
+                    <span className="text-gray-700 font-bold text-sm">Q</span>
+                  </div>
                   <div>
                     <h4 className="font-semibold text-gray-700">Access Control Settings</h4>
                     <p className="text-sm text-gray-600">Configure how voters will access the election</p>
@@ -676,47 +669,45 @@ export default function CreateElectionPage() {
                       px-6 py-2 rounded-lg font-medium transition-all duration-300 transform hover:scale-105
                       ${queuedAccess 
                         ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg' 
-                        : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg'
+                        : 'bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700 text-white shadow-lg'
                       }
                     `}
                     onClick={() => setQueuedAccess(v => !v)}
                   >
-                    {queuedAccess ? '✅ Enabled' : '❌ Disabled'}
+                    {queuedAccess ? 'Enabled' : 'Disabled'}
                   </button>
                 </div>
                 
                 {queuedAccess && (
-                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <label className="block text-sm text-blue-800 font-medium mb-2">
+                  <div className="mt-4 p-4 bg-gray-100 rounded-lg border border-gray-200">
+                    <label className="block text-sm text-gray-800 font-medium mb-2">
                       Maximum Concurrent Voters
                     </label>
                     <input 
                       type="number" 
                       min={1} 
-                      className="w-full border-2 border-blue-200 text-gray-700 rounded-lg px-4 py-2 
-                               focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200" 
+                      className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-2 
+                               focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200" 
                       value={maxConcurrentVoters} 
                       onChange={e => setMaxConcurrentVoters(Number(e.target.value))} 
                       placeholder="e.g., 100" 
                       required 
                     />
-                    <p className="text-xs text-blue-600 mt-1">
+                    <p className="text-xs text-gray-600 mt-1">
                       Limit the number of voters who can vote simultaneously to manage server load
                     </p>
                   </div>
                 )}
               </div>
             </div>
-          </div>
-
-          <div className="flex justify-end mt-10">
+          </div>          <div className="flex justify-end mt-10">
             <button
               className={`
                 px-8 py-3 rounded-lg font-semibold text-lg transition-all duration-300 transform
                 flex items-center gap-2
                 ${!isGeneralValid 
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl hover:scale-105'
+                  : 'bg-gradient-to-r from-red-700 to-red-800 hover:from-red-800 hover:to-red-900 text-white shadow-lg hover:shadow-xl hover:scale-105'
                 }
               `}
               onClick={() => isGeneralValid && setStep(1)}
@@ -728,20 +719,22 @@ export default function CreateElectionPage() {
           </div>
         </div>        {/* Step 2: Trusted Authorities */}
         <div className={`${step === 1 ? 'block animate-fadeIn' : 'hidden'} ${stepAnim}`}> 
-          <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-6 mb-6">
+          <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-6 mb-6 border border-gray-200">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                <span className="text-purple-600 text-xl">🔐</span>
+              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                <span className="text-red-700 font-bold text-lg">A</span>
               </div>
               <div>
                 <h3 className="font-bold text-gray-800 text-xl">Trusted Authorities</h3>
                 <p className="text-gray-600 text-sm">Configure the people who will oversee election security</p>
               </div>
             </div>
-            <div className="bg-blue-100 border border-blue-300 rounded-lg p-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <div className="flex items-start gap-2">
-                <span className="text-blue-600 text-lg">ℹ️</span>
-                <div className="text-sm text-blue-800">
+                <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
+                  <span className="text-red-600 text-sm font-bold">i</span>
+                </div>
+                <div className="text-sm text-red-800">
                   <p className="font-medium mb-1">Important Requirements:</p>
                   <ul className="list-disc list-inside space-y-1">
                     <li>At least 3 trusted authorities are required</li>
@@ -751,17 +744,16 @@ export default function CreateElectionPage() {
                 </div>
               </div>
             </div>
-          </div>        <div className="w-full">
+          </div>          <div className="w-full">
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h4 className="font-semibold text-gray-700 text-lg flex items-center gap-2">
-                  <span className="text-blue-600">👥</span>
                   Authority Personnel
                 </h4>
                 <button 
                   type="button" 
-                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 
-                           hover:from-blue-600 hover:to-blue-700 text-white rounded-lg font-medium
+                  className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 
+                           hover:from-red-700 hover:to-red-800 text-white rounded-lg font-medium
                            transition-all duration-200 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" 
                   onClick={() => setPersonnel(p => [...p, { name: '' }])} 
                   disabled={personnel.length >= 10}
@@ -769,7 +761,7 @@ export default function CreateElectionPage() {
                   <Plus size={16} /> 
                   Add Personnel
                 </button>
-              </div>              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              </div><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {personnel.map((p, idx) => (
                   <div key={idx} className="group">
                     <div className="flex gap-3 items-center">
@@ -852,24 +844,28 @@ export default function CreateElectionPage() {
                 </div>
               </div>
             }
-          >
-            <div className="space-y-6">
+          >            <div className="space-y-6">
               <div className="bg-gradient-to-r from-red-50 to-red-100 border-l-4 border-red-500 p-4 rounded">
                 <div className="flex items-start gap-3">
-                  <span className="text-red-500 text-xl">🚨</span>
-                  <div className="text-red-800">                    <p className="font-bold mb-1">CRITICAL: One-Time Access Only</p>
+                  <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center mt-0.5">
+                    <span className="text-red-600 text-sm font-bold">!</span>
+                  </div>
+                  <div className="text-red-800">
+                    <p className="font-bold mb-1">CRITICAL: One-Time Access Only</p>
                     <p className="text-sm">
-                      After you click &quot;Done - Create Election&quot;, you will <span className="font-bold text-red-600">NOT</span> be able to view these private key shares again. 
+                      After you click &quot;Create Election&quot;, you will <span className="font-bold text-red-600">NOT</span> be able to view these private key shares again. 
                       You must generate a completely new key pair if you lose them.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
-                  <span className="text-blue-600 text-xl">📋</span>
-                  <div className="text-blue-800">
+                  <div className="w-6 h-6 bg-gray-200 rounded-full flex items-center justify-center mt-0.5">
+                    <span className="text-gray-600 text-sm font-bold">i</span>
+                  </div>
+                  <div className="text-gray-800">
                     <p className="font-semibold mb-2">Distribution Instructions:</p>
                     <ul className="text-sm space-y-1 list-disc list-inside">
                       <li>Each authority needs their corresponding key share to participate in decryption</li>
@@ -882,7 +878,6 @@ export default function CreateElectionPage() {
 
               <div>
                 <h4 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                  <span>🔑</span>
                   Private Key Shares for Download
                 </h4>
                 <div className="space-y-4 max-h-96 overflow-y-auto">
@@ -890,8 +885,8 @@ export default function CreateElectionPage() {
                     <div key={idx} className="border-2 border-gray-200 rounded-lg p-4 bg-gradient-to-r from-gray-50 to-white">
                       <div className="flex justify-between items-center mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span className="text-blue-600 font-bold text-sm">{idx + 1}</span>
+                          <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                            <span className="text-red-700 font-bold text-sm">{idx + 1}</span>
                           </div>
                           <span className="font-semibold text-gray-800">
                             {keyGenAuthorityNames[idx] || `Authority #${idx + 1}`}
@@ -918,7 +913,6 @@ export default function CreateElectionPage() {
                             }, 100);
                           }}
                         >
-                          <span>💾</span>
                           Download Share
                         </button>
                       </div>
@@ -934,9 +928,7 @@ export default function CreateElectionPage() {
                 </div>
               </div>
             </div>
-          </Modal>
-
-          <div className="flex justify-between mt-10">
+          </Modal>          <div className="flex justify-between mt-10">
             <button
               className="px-8 py-3 bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400 
                        text-gray-700 rounded-lg font-semibold transition-all duration-200 transform hover:scale-105
@@ -952,7 +944,7 @@ export default function CreateElectionPage() {
                 flex items-center gap-2
                 ${!isAuthoritiesValid 
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl hover:scale-105'
+                  : 'bg-gradient-to-r from-red-700 to-red-800 hover:from-red-800 hover:to-red-900 text-white shadow-lg hover:shadow-xl hover:scale-105'
                 }
               `}
               onClick={() => isAuthoritiesValid && setStep(2)}
@@ -964,10 +956,10 @@ export default function CreateElectionPage() {
           </div>
         </div>        {/* Step 3: Candidates (Enhanced) */}
         <div className={`${step === 2 ? 'block animate-fadeIn' : 'hidden'} ${stepAnim}`}> 
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-6 mb-6">
+          <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-6 mb-6 border border-gray-200">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <span className="text-green-600 text-xl">👥</span>
+              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                <span className="text-red-700 font-bold text-lg">C</span>
               </div>
               <div>
                 <h3 className="font-bold text-gray-800 text-xl">
@@ -977,9 +969,11 @@ export default function CreateElectionPage() {
                 <p className="text-gray-600 text-sm">Add candidates who will participate in this election</p>
               </div>
             </div>
-            <div className="bg-green-100 border border-green-300 rounded-lg p-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <div className="flex items-start gap-2">
-                <span className="text-green-600 text-lg">💡</span>
+                <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center mt-0.5">
+                  <span className="text-green-600 text-sm font-bold">i</span>
+                </div>
                 <div className="text-sm text-green-800">
                   <p className="font-medium mb-1">Candidate Information:</p>
                   <ul className="list-disc list-inside space-y-1">
@@ -995,13 +989,12 @@ export default function CreateElectionPage() {
 
           <div className="flex items-center justify-between mb-6">
             <h4 className="font-semibold text-gray-700 text-lg flex items-center gap-2">
-              <span className="text-blue-600">🗳️</span>
               Election Candidates
             </h4>
             <button 
               type="button" 
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 
-                       hover:from-green-600 hover:to-green-700 text-white rounded-lg font-medium
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-600 to-green-700 
+                       hover:from-green-700 hover:to-green-800 text-white rounded-lg font-medium
                        transition-all duration-200 transform hover:scale-105" 
               onClick={addCandidate}
             >
@@ -1035,15 +1028,13 @@ export default function CreateElectionPage() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="lg:col-span-2 space-y-4">                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="group">
                         <label className="flex items-center gap-2 text-sm text-gray-700 font-semibold mb-2">
-                          <span className="text-blue-600">👤</span>
                           Full Name
                         </label>
                         <input 
-                          className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-gray-300" 
+                          className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200 group-hover:border-gray-300" 
                           value={cand.fullname} 
                           onChange={e => updateCandidate(idx, 'fullname', e.target.value)} 
                           placeholder="Enter candidate's full name" 
@@ -1052,11 +1043,10 @@ export default function CreateElectionPage() {
 
                       <div className="group">
                         <label className="flex items-center gap-2 text-sm text-gray-700 font-semibold mb-2">
-                          <span className="text-purple-600">🏛️</span>
                           Party/Affiliation
                         </label>
                         <input 
-                          className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-gray-300" 
+                          className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200 group-hover:border-gray-300" 
                           value={cand.party} 
                           onChange={e => updateCandidate(idx, 'party', e.target.value)} 
                           placeholder="Political party or organization" 
@@ -1066,11 +1056,10 @@ export default function CreateElectionPage() {
 
                     <div className="group">
                       <label className="flex items-center gap-2 text-sm text-gray-700 font-semibold mb-2">
-                        <span className="text-green-600">🎯</span>
                         Position
                       </label>
                       <select 
-                        className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-gray-300" 
+                        className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200 group-hover:border-gray-300" 
                         value={cand.position_id} 
                         onChange={e => updateCandidate(idx, 'position_id', Number(e.target.value))}
                       >
@@ -1083,11 +1072,10 @@ export default function CreateElectionPage() {
 
                     <div className="group">
                       <label className="flex items-center gap-2 text-sm text-gray-700 font-semibold mb-2">
-                        <span className="text-orange-600">📄</span>
                         Description/Platform
                       </label>
                       <textarea 
-                        className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 h-24 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all duration-200 group-hover:border-gray-300 resize-none" 
+                        className="w-full border-2 border-gray-200 text-gray-700 rounded-lg px-4 py-3 h-24 focus:border-red-500 focus:ring-2 focus:ring-red-200 transition-all duration-200 group-hover:border-gray-300 resize-none" 
                         value={cand.candidate_desc} 
                         onChange={e => updateCandidate(idx, 'candidate_desc', e.target.value)} 
                         placeholder="Candidate's background, qualifications, or campaign platform..." 
@@ -1160,13 +1148,11 @@ export default function CreateElectionPage() {
                 </div>
               </div>
             ))}
-          </div>
-
-          {candidates.length === 0 && (
+          </div>          {candidates.length === 0 && (
             <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
               <div className="space-y-4">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
-                  <span className="text-gray-400 text-2xl">👥</span>
+                  <span className="text-gray-400 text-2xl font-bold">C</span>
                 </div>
                 <div>
                   <h4 className="text-gray-600 font-medium">No candidates added yet</h4>
@@ -1174,7 +1160,7 @@ export default function CreateElectionPage() {
                 </div>
                 <button 
                   type="button" 
-                  className="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 
+                  className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 
                            text-white rounded-lg font-medium transition-all duration-200 transform hover:scale-105" 
                   onClick={addCandidate}
                 >
@@ -1194,13 +1180,13 @@ export default function CreateElectionPage() {
             >
               <span className="text-xl">←</span>
               Back to Authorities
-            </button>            <button
-              className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 
+            </button>
+            <button
+              className="px-8 py-3 bg-gradient-to-r from-red-700 to-red-800 hover:from-red-800 hover:to-red-900 
                        text-white rounded-lg font-semibold text-lg transition-all duration-300 transform hover:scale-105
                        flex items-center gap-3 shadow-lg hover:shadow-xl"
               onClick={handleFinish}
             >
-             
               Create Election
             </button>
           </div>

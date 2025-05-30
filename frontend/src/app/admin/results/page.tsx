@@ -541,7 +541,7 @@ export default function AdminResultsPage() {
                         </button>
                         <button
                           type="button"
-                          className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+                          className="px-6 py-2.5 bg-red-700 text-white rounded-lg hover:bg-red-800 font-medium transition-colors"
                           onClick={() => { setStep('Selected'); fetchOngoing(); }}
                         >
                           Continue
@@ -577,7 +577,7 @@ export default function AdminResultsPage() {
                               return (
                                 <div
                                   key={el.result_id}
-                                  className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${isSelect ? 'border-blue-600 bg-blue-50' : 'border-gray-200 bg-white'} hover:border-blue-400`}
+                                  className={`border rounded-lg p-4 cursor-pointer transition-all shadow-sm ${isSelect ? 'border-yellow-600 bg-yellow-50' : 'border-gray-200 bg-white'} hover:border-yelow-400`}
                                   onClick={() => setSelectElection(el)}
                                   tabIndex={0}
                                   role="button"
@@ -585,7 +585,7 @@ export default function AdminResultsPage() {
                                 >
                                   <div className="flex justify-between items-center mb-2">
                                     <div className="font-semibold text-lg text-gray-800">{el.election_name}</div>
-                                    {isSelect && <span className="ml-2 px-2 py-1 bg-blue-600 text-white text-xs rounded">Selected</span>}
+                                    {isSelect && <span className="ml-2 px-2 py-1 bg-green-600 text-white text-xs rounded">Selected</span>}
                                   </div>
                                   <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-1">
                                     <div><span className="font-medium">Organization:</span> {el.organization?.org_name || 'N/A'}</div>
@@ -608,7 +608,7 @@ export default function AdminResultsPage() {
                             </button>
                             <button
                               type="button"
-                              className="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="px-4 py-2.5 bg-red-700 text-white rounded-lg hover:bg-red-800 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               disabled={!selectElection}
                               onClick={handleProceed}
                             >
