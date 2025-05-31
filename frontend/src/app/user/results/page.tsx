@@ -3,10 +3,9 @@ import { useEffect, useState } from 'react';
 import UserLayout from '@/layouts/UserLayout';
 import { useUser } from '@/contexts/UserContext';
 import UserSearchFilterBar from '@/components/user/UserSearchFilterBar';
-import { Calendar, Download, ExternalLink } from 'lucide-react';
+import { Calendar, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import NothingIcon from '@/components/NothingIcon';
-import jsPDF from 'jspdf';
 
 interface ElectionResult {
   election_id: number;
@@ -29,131 +28,11 @@ export default function UserResultsPage() {
   const [filteredResults, setFilteredResults] = useState<ElectionResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [, setParticipatedElectionIds] = useState<Set<number>>(new Set());
-  const [generatingPDFs, setGeneratingPDFs] = useState<Set<number>>(new Set());  const filterOptions: Array<{ value: string; label: string }> = [
+  const [filter, setFilter] = useState('all');  const [, setParticipatedElectionIds] = useState<Set<number>>(new Set());const filterOptions: Array<{ value: string; label: string }> = [
     { value: 'all', label: 'All Results' },
     { value: 'recent', label: 'Most Recent' },
-    { value: 'highest-participation', label: 'Highest Participation' },
-  ];
+    { value: 'highest-participation', label: 'Highest Participation' },  ];
 
-  const generateElectionPDF = async (election: ElectionResult) => {
-    setGeneratingPDFs(prev => new Set([...prev, election.election_id]));
-      try {
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 15;
-      let yPosition = margin;
-      
-      // Helper function to add new page if needed
-      const checkPageBreak = (additionalHeight: number) => {
-        if (yPosition + additionalHeight > pageHeight - margin) {
-          pdf.addPage();
-          yPosition = margin;
-          return true;
-        }
-        return false;
-      };
-      
-      // Header
-      pdf.setFontSize(20);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Election Results Report', margin, yPosition);
-      yPosition += 15;
-      
-      // Election Info
-      pdf.setFontSize(16);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(election.election_name, margin, yPosition);
-      yPosition += 8;
-      
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'normal');
-      pdf.text(`Organization: ${election.organization}`, margin, yPosition);
-      yPosition += 6;
-      
-      pdf.text(`Ended: ${new Date(election.ended_at).toLocaleDateString()}`, margin, yPosition);
-      yPosition += 10;
-      
-      // Statistics
-      checkPageBreak(40);
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Election Statistics', margin, yPosition);
-      yPosition += 10;
-      
-      pdf.setFontSize(11);
-      pdf.setFont('helvetica', 'normal');
-      
-      const stats = [
-        `Total Votes: ${election.total_votes.toLocaleString()}`,
-        `Participation Rate: ${election.participation_rate}%`,
-        `Overall Winner: ${election.winner}`
-      ];
-      
-      stats.forEach(stat => {
-        pdf.text(stat, margin, yPosition);
-        yPosition += 6;
-      });
-      
-      yPosition += 10;
-      
-      // Results
-      checkPageBreak(30);
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Detailed Results', margin, yPosition);
-      yPosition += 10;
-      
-      // Sort candidates by votes (descending)
-      const sortedCandidates = [...election.candidates].sort((a, b) => b.votes - a.votes);
-      
-      sortedCandidates.forEach((candidate, idx) => {
-        checkPageBreak(20);
-        
-        const rankText = `${idx + 1}. ${candidate.name}`;
-        const voteText = `${candidate.votes.toLocaleString()} votes (${candidate.percentage}%)`;
-        const winnerText = candidate.winner ? ' - WINNER' : '';
-        
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', candidate.winner ? 'bold' : 'normal');
-        pdf.text(rankText, margin + 5, yPosition);
-        
-        pdf.setFontSize(10);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(voteText + winnerText, margin + 5, yPosition + 5);
-        
-        yPosition += 15;
-      });
-      
-      // Footer
-      const totalPages = pdf.internal.pages.length - 1;
-      for (let i = 1; i <= totalPages; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'normal');
-        pdf.text(
-          `Generated on ${new Date().toLocaleDateString()} - Page ${i} of ${totalPages}`,
-          margin,
-          pageHeight - 10
-        );
-      }
-      
-      // Download the PDF
-      const fileName = `election-results-${election.election_name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
-      
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Error generating PDF report. Please try again.');
-    } finally {
-      setGeneratingPDFs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(election.election_id);
-        return newSet;
-      });
-    }
-  };
   // Fetch election results and participated elections
   useEffect(() => {
     const fetchResults = async () => {
@@ -262,21 +141,12 @@ export default function UserResultsPage() {
                     </span>
                   </div>
                 </div>
-                
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">{result.election_name}</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">{result.election_name}</h3>
                 
                 <div className="flex flex-wrap gap-4 mb-6">
                   <div className="bg-blue-50 rounded-lg p-3 flex-1 min-w-[120px]">
                     <div className="text-sm text-blue-700 mb-1">Winner</div>
                     <div className="font-semibold text-gray-700">{result.winner}</div>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-3 flex-1 min-w-[120px]">
-                    <div className="text-sm text-green-700 mb-1">Total Votes</div>
-                    <div className="font-semibold text-gray-700">{result.total_votes}</div>
-                  </div>
-                  <div className="bg-purple-50 rounded-lg p-3 flex-1 min-w-[120px]">
-                    <div className="text-sm text-purple-700 mb-1">Participation</div>
-                    <div className="font-semibold text-gray-700">{result.participation_rate}%</div>
                   </div>
                 </div>
                 
@@ -301,17 +171,8 @@ export default function UserResultsPage() {
                         ></div>
                       </div>
                     </div>
-                  ))}
-                </div>
-                  <div className="flex justify-between items-center mt-6">
-                  <button 
-                    onClick={() => generateElectionPDF(result)}
-                    disabled={generatingPDFs.has(result.election_id)}
-                    className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800 disabled:text-gray-400"
-                  >
-                    <Download size={14} /> 
-                    {generatingPDFs.has(result.election_id) ? 'Generating...' : 'Download PDF'}
-                  </button>
+                  ))}                </div>
+                  <div className="flex justify-end items-center mt-6">
                   <Link href={`/user/results/${result.election_id}`}>
                     <button className="flex items-center gap-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg">
                       Detailed Results <ExternalLink size={14} />

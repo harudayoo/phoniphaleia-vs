@@ -586,8 +586,7 @@ class ElectionController:
             election = Election.query.get(election_id)
             if election:
                 election.voters_count = (election.voters_count or 0) + 1
-                
-                # Update participation rate if we can calculate eligible voters
+                  # Update participation rate based on actual votes cast
                 if election.organization:
                     if election.organization.college_id:
                         # Election is restricted to one college
@@ -597,7 +596,9 @@ class ElectionController:
                         eligible_voters = Voter.query.count()
                     
                     if eligible_voters > 0:
-                        election.participation_rate = (election.voters_count / eligible_voters) * 100
+                        # Get actual vote count for this election
+                        actual_votes_count = Vote.query.filter_by(election_id=election_id).count()
+                        election.participation_rate = (actual_votes_count / eligible_voters) * 100
                 
                 print(f'DEBUG updated voters_count to {election.voters_count}')
                 
@@ -909,11 +910,17 @@ class ElectionController:
                         'votes': votes_count,
                         'percentage': round(percentage, 1),
                         'winner': votes_count == max_votes and max_votes > 0
-                    })
-                # Compute participation rate (if possible)
+                    })                # Compute participation rate based on total registered voters
                 participation_rate = None
-                if hasattr(election, 'voters_count') and election.voters_count:
-                    participation_rate = round((total_votes / election.voters_count) * 100, 1) if election.voters_count > 0 else 0
+                if election.organization and election.organization.college_id:
+                    # Election is restricted to one college
+                    total_registered_voters = Voter.query.filter_by(college_id=election.organization.college_id).count()
+                else:
+                    # Election is open to all colleges
+                    total_registered_voters = Voter.query.count()
+                
+                if total_registered_voters > 0:
+                    participation_rate = round((total_votes / total_registered_voters) * 100, 1)
                 # Compose result object
                 results.append({
                     'election_id': election.election_id,

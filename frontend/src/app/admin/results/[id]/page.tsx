@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import AdminLayout from '@/layouts/AdminLayout';
 import PageHeader from '@/components/admin/PageHeader';
-import { Download, ArrowLeft, Key, Shield } from 'lucide-react';
+import { Download, ArrowLeft, Key, Shield, FileText, FileSpreadsheet } from 'lucide-react';
 import Link from 'next/link';
+import jsPDF from 'jspdf';
 
 // API URL for fetching data
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
@@ -65,12 +66,47 @@ interface ExportData {
   }[];
 }
 
+interface PDFData {
+  election_name: string;
+  election_id: number;
+  organization?: string;
+  total_voters: number;
+  total_votes: number;
+  participation_rate: number;
+  generation_date: string;
+  generation_timestamp: string;
+  positions: {
+    position_id: number;
+    position_name: string;
+    candidates: {
+      candidate_id: number;
+      fullname: string;
+      party: string;
+      vote_count: number;
+      is_winner: boolean;
+      rank: number;
+      percentage: number;
+    }[];
+    total_votes: number;
+  }[];
+  winners: {
+    fullname: string;
+    party: string;
+    position_name: string;
+    vote_count: number;
+  }[];
+  is_verified: boolean;
+  verification_message: string;
+}
+
 export default function AdminResultDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   // Unwrap params using React.use()
   const resolvedParams = React.use(params);  const [resultId, setResultId] = useState<number | null>(null);
-  const [result, setResult] = useState<ResultDetail | null>(null);  const [loading, setLoading] = useState(true);
+  const [result, setResult] = useState<ResultDetail | null>(null);
+  const [loading, setLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   
   // Initialize resultId from params when the component mounts
   useEffect(() => {
@@ -78,7 +114,6 @@ export default function AdminResultDetailPage({ params }: { params: Promise<{ id
       setResultId(parseInt(resolvedParams.id, 10));
     }
   }, [resolvedParams.id]);
-
   useEffect(() => {
     const fetchResultDetail = async () => {
       if (!resultId) return; // Don't fetch if resultId is not set yet
@@ -101,7 +136,20 @@ export default function AdminResultDetailPage({ params }: { params: Promise<{ id
     };
 
     fetchResultDetail();
-  }, [resultId]);
+  }, [resultId]);  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (showExportMenu && !target.closest('.export-dropdown')) {
+        setShowExportMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showExportMenu]);
     const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Published':
@@ -114,12 +162,16 @@ export default function AdminResultDetailPage({ params }: { params: Promise<{ id
         return null;
     }
   };
-
   const handleExport = async () => {
+    setShowExportMenu(!showExportMenu);
+  };
+
+  const handleCSVExport = async () => {
     if (!result) return;
     
     try {
       setIsExporting(true);
+      setShowExportMenu(false);
       
       // Prepare export data
       const exportData = {
@@ -155,8 +207,144 @@ export default function AdminResultDetailPage({ params }: { params: Promise<{ id
       document.body.removeChild(link);
       
     } catch (error) {
-      console.error('Error exporting results:', error);
-      alert('Failed to export results. Please try again.');
+      console.error('Error exporting CSV:', error);
+      alert('Failed to export CSV. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+  const handlePDFExport = async () => {
+    if (!result) return;
+    
+    try {
+      setIsExporting(true);
+      setShowExportMenu(false);
+      
+      console.log('Starting PDF export for election:', result.election_id);
+      
+      // Fetch PDF data from backend
+      const response = await fetch(`${API_URL}/election_results/${result.election_id}/pdf`);
+      console.log('PDF API response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch PDF data: ${response.status} ${response.statusText}`);
+      }
+      
+      const pdfResponse = await response.json();
+      console.log('PDF Response:', pdfResponse);
+      
+      if (!pdfResponse.success) {
+        throw new Error(pdfResponse.error || 'Failed to get PDF data');
+      }
+      
+      const pdfData: PDFData = pdfResponse.data;
+        // Generate PDF using jsPDF
+      const doc = new jsPDF();
+      
+      // Leave space for letterhead (start content lower on page)
+      // PDF Header - moved down to avoid letterhead overlap
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text('ELECTION RESULTS REPORT', 105, 80, { align: 'center' });
+      
+      // Election Information
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      let yPos = 100;
+      
+      doc.text(`Election: ${pdfData.election_name}`, 20, yPos);
+      yPos += 8;
+      if (pdfData.organization) {
+        doc.text(`Organization: ${pdfData.organization}`, 20, yPos);
+        yPos += 8;
+      }
+      doc.text(`Total Eligible Voters: ${pdfData.total_voters.toLocaleString()}`, 20, yPos);
+      yPos += 6;
+      doc.text(`Total Votes Counted: ${pdfData.total_votes.toLocaleString()}`, 20, yPos);
+      yPos += 6;
+      doc.text(`Participation Rate: ${pdfData.participation_rate}%`, 20, yPos);
+      yPos += 6;
+      doc.text(`Generated: ${pdfData.generation_date}`, 20, yPos);
+      yPos += 15;
+      
+      // Winners Summary
+      if (pdfData.winners && pdfData.winners.length > 0) {
+        doc.setFont('helvetica', 'bold');
+        doc.text('ELECTION WINNERS', 20, yPos);
+        yPos += 8;
+        doc.setFont('helvetica', 'normal');
+          pdfData.winners.forEach((winner) => {
+          if (yPos > 250) { // Adjusted for letterhead space
+            doc.addPage();
+            yPos = 60; // Start new pages with letterhead space
+          }
+          doc.text(`• ${winner.fullname} (${winner.party}) - ${winner.position_name}: ${winner.vote_count.toLocaleString()} votes`, 25, yPos);
+          yPos += 6;
+        });
+        yPos += 10;
+      }
+      
+      // Detailed Results by Position
+      doc.setFont('helvetica', 'bold');
+      doc.text('DETAILED RESULTS BY POSITION', 20, yPos);
+      yPos += 10;
+        pdfData.positions.forEach((position) => {
+        if (yPos > 230) { // Adjusted for letterhead space
+          doc.addPage();
+          yPos = 60; // Start new pages with letterhead space
+        }
+        
+        // Position header
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${position.position_name}`, 20, yPos);
+        yPos += 8;
+        
+        // Table headers
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('Rank', 25, yPos);
+        doc.text('Candidate', 45, yPos);
+        doc.text('Party', 120, yPos);
+        doc.text('Votes', 150, yPos);
+        doc.text('%', 170, yPos);
+        doc.text('Status', 185, yPos);
+        yPos += 6;
+          // Candidates
+        doc.setFont('helvetica', 'normal');
+        position.candidates.forEach((candidate) => {
+          if (yPos > 260) { // Adjusted for letterhead space
+            doc.addPage();
+            yPos = 60; // Start new pages with letterhead space
+          }
+          
+          doc.text(candidate.rank.toString(), 25, yPos);
+          doc.text(candidate.fullname.length > 25 ? candidate.fullname.substring(0, 22) + '...' : candidate.fullname, 45, yPos);
+          doc.text(candidate.party.length > 15 ? candidate.party.substring(0, 12) + '...' : candidate.party, 120, yPos);
+          doc.text(candidate.vote_count.toLocaleString(), 150, yPos);
+          doc.text(`${candidate.percentage}%`, 170, yPos);
+          doc.text(candidate.is_winner ? 'Elected' : 'Runner-up', 185, yPos);
+          yPos += 5;
+        });
+        yPos += 8;
+      });
+        // Verification status
+      if (yPos > 250) { // Adjusted for letterhead space
+        doc.addPage();
+        yPos = 60; // Start new pages with letterhead space
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('VERIFICATION STATUS', 20, yPos);
+      yPos += 6;
+      doc.setFont('helvetica', 'normal');
+      doc.text(pdfData.verification_message, 20, yPos);
+      
+      // Save the PDF
+      doc.save(`election_results_${pdfData.election_id}_${Date.now()}.pdf`);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
     } finally {
       setIsExporting(false);
     }
@@ -184,10 +372,10 @@ export default function AdminResultDetailPage({ params }: { params: Promise<{ id
           .forEach((candidate, index) => {
             csv += `${index + 1},${candidate.name},${candidate.votes},${candidate.percentage.toFixed(1)}%,${candidate.winner ? 'Elected' : 'Runner-up'}\n`;
           });
-      });
-    }
+      });    }
     
-    return csv;  };
+    return csv;
+  };
 
   if (loading) {
     return (
@@ -228,20 +416,41 @@ export default function AdminResultDetailPage({ params }: { params: Promise<{ id
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to Results
         </Link>
-      </div>
-
-      <PageHeader 
+      </div>      <PageHeader 
         title={result.election_name} 
         description={`Viewing detailed results for ${result.election_name}`}        action={
           <div className="flex space-x-2">
-            <button 
-              onClick={handleExport}
-              disabled={isExporting}
-              className="px-4 py-2 border border-gray-300 rounded-md bg-blue-600 text-white hover:bg-blue-700 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              {isExporting ? 'Exporting...' : 'Export'}
-            </button>            {/* Archive button removed due to authorization issues */}
+            <div className="relative export-dropdown">
+              <button 
+                onClick={handleExport}
+                disabled={isExporting}
+                className="px-4 py-2 border border-gray-300 rounded-md bg-blue-600 text-white hover:bg-blue-700 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                {isExporting ? 'Exporting...' : 'Export'}
+              </button>
+              
+              {showExportMenu && !isExporting && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10 border border-gray-200">
+                  <div className="py-1">
+                    <button
+                      onClick={handlePDFExport}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Export as PDF
+                    </button>
+                    <button
+                      onClick={handleCSVExport}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Export as CSV
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         }
       />
@@ -270,7 +479,7 @@ export default function AdminResultDetailPage({ params }: { params: Promise<{ id
                   <div className="text-sm text-gray-700 font-medium mb-1">Cryptography</div>
                   <div className="flex flex-wrap gap-2 mt-1">
                     {result.threshold_crypto && (
-                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full flex items-center">
+                      <span className="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full flex items-center">
                         <Key className="h-3 w-3 mr-1" />
                         Threshold Cryptography
                       </span>
@@ -306,9 +515,9 @@ export default function AdminResultDetailPage({ params }: { params: Promise<{ id
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h3 className="text-lg font-semibold mb-4 text-gray-800">Statistics</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-blue-50 rounded-md p-4">
-              <div className="text-sm text-blue-800 font-medium mb-1">Total Voters</div>
-              <div className="text-2xl font-bold text-blue-900">{result.voters_count?.toLocaleString()}</div>
+            <div className="bg-red-50 rounded-md p-4">
+              <div className="text-sm text-red-800 font-medium mb-1">Total Voters</div>
+              <div className="text-2xl font-bold text-red-900">{result.voters_count?.toLocaleString()}</div>
             </div>
             <div className="bg-green-50 rounded-md p-4">
               <div className="text-sm text-green-800 font-medium mb-1">Votes Cast</div>

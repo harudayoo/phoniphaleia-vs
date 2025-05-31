@@ -1,8 +1,9 @@
-# filepath: c:\Users\cayan\Documents\Development-Projects\phoniphaleia\backend\app\controllers\election_results_controller.py
-from flask import jsonify, request
+
+from flask import jsonify, request, send_file
 from app.models.election import Election
 from app.models.organization import Organization
 from app.models.vote import Vote
+from app.models.voter import Voter
 from app.models.election_result import ElectionResult
 from app.models.crypto_config import CryptoConfig
 from app.models.key_share import KeyShare
@@ -17,7 +18,8 @@ import json
 import base64
 import logging
 import traceback
-import traceback
+import os
+from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
@@ -797,20 +799,174 @@ class ElectionResultsController:
             from app.models.vote import Vote
             actual_votes = Vote.query.filter_by(election_id=election_id).count()
             total_decrypted = verification_status['total_decrypted']
-            
             if total_decrypted != actual_votes:
                 verification_status['vote_count_match'] = False
                 verification_status['message'] = f"Vote count mismatch: decrypted {total_decrypted}, actual {actual_votes}"
                 logger.warning(f"Vote count mismatch for election {election_id}: decrypted={total_decrypted}, actual={actual_votes}")
-            
+              # Automatically generate PDF data preparation when accessing decrypted results
+            try:
+                logger.info(f"Auto-preparing PDF data for election {election_id}")
+                # Note: PDF generation is now handled on the frontend, this just logs the access
+                logger.info(f"PDF data access logged successfully for election {election_id}")
+            except Exception as pdf_error:
+                logger.warning(f"Failed to log PDF data access for election {election_id}: {str(pdf_error)}")
+                # Don't fail the main request if logging fails
+                
             return jsonify({
                 'results': results, 
                 'verification_status': verification_status
             }), 200
         except Exception as e:
-            logger.error(f"Error in get_decrypted_results: {str(e)}")
-            logger.exception(e)  # Log the full stack trace
-            return jsonify({'error': str(e)}), 500
+                        logger.error(f"Error in get_decrypted_results: {str(e)}")
+                        logger.exception(e)  # Log the full stack trace
+        return jsonify({'error': str(e)}), 500
+    
+    @staticmethod
+    def get_pdf_data(election_id):
+        """
+        Get election results data formatted for PDF generation on the frontend.
+        Returns structured data that can be used by jsPDF.
+        """
+        try:
+            # Get election and results data
+            from app.models.candidate import Candidate
+            from app.models.position import Position
+            from app.models.election import Election
+            from app.models.vote import Vote
+            from app.models.organization import Organization
+            from collections import defaultdict
+            
+            # Fetch election details
+            election = Election.query.get(election_id)
+            if not election:
+                return jsonify({'error': 'Election not found'}), 404
+                
+            # Get organization info
+            organization = Organization.query.get(election.org_id) if election.org_id else None
+                
+            # Get results data (similar to get_decrypted_results)
+            results_query = db.session.query(
+                ElectionResult.result_id,
+                ElectionResult.election_id,
+                ElectionResult.candidate_id, 
+                ElectionResult.vote_count,
+                Candidate.candidate_id,
+                Candidate.fullname,
+                Candidate.party,
+                Position.position_id,
+                Position.position_name
+            ).join(
+                Candidate, ElectionResult.candidate_id == Candidate.candidate_id
+            ).join(
+                Position, Candidate.position_id == Position.position_id
+            ).filter(
+                ElectionResult.election_id == election_id
+            ).all()
+            
+            # Group results by position
+            positions_dict = defaultdict(list)
+            for row in results_query:
+                position_id = row.position_id
+                position_name = row.position_name
+                candidate_id = row.candidate_id
+                fullname = row.fullname
+                party = row.party or 'Independent'
+                vote_count = row.vote_count or 0
+                
+                positions_dict[position_id].append({
+                    'position_id': position_id,
+                    'position_name': position_name,
+                    'candidate': {
+                        'candidate_id': candidate_id,
+                        'fullname': fullname,
+                        'party': party,
+                        'vote_count': vote_count
+                    }
+                })
+            
+            # Process positions and determine winners
+            positions_for_pdf = []
+            all_winners = []
+            total_votes = 0
+            
+            for position_id, position_data in positions_dict.items():
+                if not position_data:
+                    continue
+                    
+                position_name = position_data[0]['position_name']
+                candidates = [item['candidate'] for item in position_data]
+                
+                # Sort candidates by vote count (descending) and add rank
+                candidates.sort(key=lambda x: x['vote_count'], reverse=True)
+                
+                # Calculate total votes for this position
+                position_total = sum(c['vote_count'] for c in candidates)
+                total_votes += position_total
+                
+                # Determine winner(s) and add percentage
+                max_votes = max(candidate['vote_count'] for candidate in candidates) if candidates else 0
+                
+                processed_candidates = []
+                for i, candidate in enumerate(candidates):
+                    candidate['is_winner'] = candidate['vote_count'] == max_votes
+                    candidate['rank'] = i + 1
+                    candidate['percentage'] = round((candidate['vote_count'] / position_total * 100), 2) if position_total > 0 else 0
+                    
+                    processed_candidates.append(candidate)
+                    
+                    if candidate['is_winner']:
+                        all_winners.append({
+                            'fullname': candidate['fullname'],
+                            'party': candidate['party'],
+                            'position_name': position_name,
+                            'vote_count': candidate['vote_count']
+                        })
+                
+                positions_for_pdf.append({
+                    'position_id': position_id,
+                    'position_name': position_name,
+                    'candidates': processed_candidates,
+                    'total_votes': position_total
+                })
+            
+            # Sort positions by position_id for consistent ordering
+            positions_for_pdf.sort(key=lambda x: x['position_id'])
+              # Get vote statistics
+            actual_votes = Vote.query.filter_by(election_id=election_id).count()
+            
+            # Calculate participation rate based on total registered voters in database
+            if election.organization and election.organization.college_id:
+                # Election is restricted to one college
+                total_registered_voters = Voter.query.filter_by(college_id=election.organization.college_id).count()
+            else:
+                # Election is open to all colleges
+                total_registered_voters = Voter.query.count()
+            
+            participation_rate = round((actual_votes / total_registered_voters * 100), 2) if total_registered_voters > 0 else 0
+            
+            # Prepare PDF data
+            pdf_data = {
+                'election_name': election.election_name,
+                'election_id': election_id,
+                'organization': organization.org_name if organization else None,
+                'total_voters': total_registered_voters,
+                'total_votes': actual_votes,
+                'participation_rate': participation_rate,
+                'generation_date': datetime.now().strftime('%B %d, %Y'),
+                'generation_timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'),
+                'positions': positions_for_pdf,
+                'winners': all_winners,
+                'is_verified': total_votes == actual_votes,
+                'verification_message': f'✓ VERIFIED: All {actual_votes} votes successfully decrypted and tallied' if total_votes == actual_votes else f'⚠ WARNING: Vote count mismatch (Decrypted: {total_votes}, Actual: {actual_votes})'
+            }
+            
+            logger.info(f"PDF data prepared for election {election_id}")
+            return jsonify({'success': True, 'data': pdf_data}), 200
+            
+        except Exception as e:
+            logger.error(f"Error preparing PDF data: {str(e)}")
+            logger.error(traceback.format_exc())
+            return jsonify({'error': f'Failed to prepare PDF data: {str(e)}'}), 500
 
     @staticmethod
     def get_ongoing_elections_for_modal():
@@ -1062,11 +1218,18 @@ class ElectionResultsController:
             pos_to_candidates = {}
             for cand in candidates:
                 pos_to_candidates.setdefault(cand.position_id, []).append(cand)
-            
-            # Calculate total votes and prepare results grouped by position
+              # Calculate total votes and prepare results grouped by position
             total_votes = sum([r.vote_count or 0 for r in all_election_results])
-            voters_count = election.voters_count or 0  # Use correct field name
-            participation_rate = (total_votes / voters_count * 100) if voters_count > 0 else 0
+            
+            # Calculate participation rate based on total registered voters in database
+            if election.organization and election.organization.college_id:
+                # Election is restricted to one college
+                total_registered_voters = Voter.query.filter_by(college_id=election.organization.college_id).count()
+            else:
+                # Election is open to all colleges
+                total_registered_voters = Voter.query.count()
+            
+            participation_rate = (total_votes / total_registered_voters * 100) if total_registered_voters > 0 else 0
             
             # Prepare data grouped by position
             position_results = []
@@ -1129,9 +1292,8 @@ class ElectionResultsController:
                 'organization': {'org_name': organization.org_name} if organization else None,
                 'status': election.election_status,  # Use correct field name
                 'published_at': election.created_at.isoformat() if election.created_at else None,
-                'description': election.election_desc,  # Use correct field name
-                'participation_rate': round(participation_rate, 1),
-                'voters_count': voters_count,
+                'description': election.election_desc,  # Use correct field name                'participation_rate': round(participation_rate, 1),
+                'voters_count': total_registered_voters,
                 'total_votes': total_votes,
                 'crypto_enabled': crypto_enabled,
                 'threshold_crypto': threshold_crypto,

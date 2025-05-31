@@ -4,7 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Loader4 from "@/components/Loader4";
 import AdminLayout from "@/layouts/AdminLayout";
 import ArrowUpScrollToTop from "@/components/ArrowUpScrollToTop";
-import { FaDownload, FaShareAlt, FaArrowLeft, FaChartBar, FaCheckCircle, FaTrophy } from "react-icons/fa";
+import { FaDownload, FaShareAlt, FaArrowLeft, FaChartBar, FaCheckCircle, FaTrophy, FaFilePdf } from "react-icons/fa";
+import jsPDF from 'jspdf';
 
 interface Candidate {
   candidate_id: number;
@@ -18,6 +19,42 @@ interface PositionResult {
   position_id: number;
   position_name: string;
   candidates: Candidate[];
+}
+
+interface PDFCandidate {
+  candidate_id: number;
+  fullname: string;
+  party?: string;
+  vote_count: number;
+  is_winner: boolean;
+  rank: number;
+  percentage: number;
+}
+
+interface PDFPosition {
+  position_id: number;
+  position_name: string;
+  candidates: PDFCandidate[];
+  total_votes: number;
+}
+
+interface PDFData {
+  election_name: string;
+  election_id: number;
+  total_voters: number;
+  total_votes: number;
+  participation_rate: number;
+  generation_date: string;
+  generation_timestamp: string;
+  positions: PDFPosition[];
+  winners: Array<{
+    fullname: string;
+    party?: string;
+    position_name: string;
+    vote_count: number;
+  }>;
+  is_verified: boolean;
+  verification_message: string;
 }
 
 function DecryptedResultsContent() {
@@ -83,7 +120,6 @@ function DecryptedResultsContent() {
         setLoading(false);
       });
   }, [election_id, API_URL]);
-
   // Export as CSV
   const handleExport = () => {
     const csvData = [
@@ -110,6 +146,180 @@ function DecryptedResultsContent() {
     a.download = `decrypted_results_${election_id}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+  // Export as PDF
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const handlePdfExport = async () => {
+    if (!election_id) return;
+    
+    setPdfLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/election_results/${election_id}/pdf`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch PDF data');
+      }
+      
+      const result = await response.json();
+      if (!result.success || !result.data) {
+        throw new Error('Invalid PDF data received');
+      }
+      
+      const pdfData: PDFData = result.data;
+        // Generate PDF using jsPDF
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      let yPosition = margin;
+      
+      // Helper function to add new page if needed
+      const checkPageBreak = (additionalHeight: number) => {
+        if (yPosition + additionalHeight > pageHeight - margin) {
+          pdf.addPage();
+          yPosition = margin;
+          return true;
+        }
+        return false;
+      };
+      
+      // Header
+      pdf.setFontSize(20);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Election Results Report', margin, yPosition);
+      yPosition += 15;
+      
+      // Election Info
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(pdfData.election_name, margin, yPosition);
+      yPosition += 8;
+      
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Election ID: ${pdfData.election_id}`, margin, yPosition);
+      yPosition += 6;
+      
+      pdf.text(`Generated: ${pdfData.generation_date}`, margin, yPosition);
+      yPosition += 10;
+      
+      // Statistics
+      checkPageBreak(40);
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Election Statistics', margin, yPosition);
+      yPosition += 10;
+      
+      pdf.setFontSize(11);
+      pdf.setFont('helvetica', 'normal');
+      
+      const stats = [
+        `Total Votes: ${pdfData.total_votes.toLocaleString()}`,
+        `Registered Voters: ${pdfData.total_voters.toLocaleString()}`,
+        `Participation Rate: ${pdfData.participation_rate}%`,
+        `Winners: ${pdfData.winners.length}`
+      ];
+      
+      stats.forEach(stat => {
+        pdf.text(stat, margin, yPosition);
+        yPosition += 6;
+      });
+      
+      yPosition += 5;
+      
+      // Verification Status
+      checkPageBreak(20);
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Verification Status', margin, yPosition);
+      yPosition += 8;
+      
+      pdf.setFontSize(10);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(pdfData.verification_message, margin, yPosition);
+      yPosition += 10;
+      
+      // Results by Position
+      pdfData.positions.forEach((position) => {
+        checkPageBreak(60);
+        
+        pdf.setFontSize(14);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`Position: ${position.position_name}`, margin, yPosition);
+        yPosition += 8;
+        
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'normal');
+        const positionStats = `${position.candidates.length} candidate${position.candidates.length !== 1 ? 's' : ''} • ${position.total_votes} total votes`;
+        pdf.text(positionStats, margin, yPosition);
+        yPosition += 10;
+        
+        // Sort candidates by rank
+        const sortedCandidates = [...position.candidates].sort((a, b) => a.rank - b.rank);
+        
+        sortedCandidates.forEach((candidate) => {
+          checkPageBreak(15);
+          
+          const rankText = `${candidate.rank}. ${candidate.fullname}`;
+          const voteText = `${candidate.vote_count.toLocaleString()} votes (${candidate.percentage}%)`;
+          const partyText = candidate.party ? ` - ${candidate.party}` : '';
+          const winnerText = candidate.is_winner ? ' - WINNER' : '';
+          
+          pdf.setFont('helvetica', candidate.is_winner ? 'bold' : 'normal');
+          pdf.text(rankText, margin + 5, yPosition);
+          
+          pdf.setFont('helvetica', 'normal');
+          pdf.text(voteText + partyText + winnerText, margin + 5, yPosition + 5);
+          
+          yPosition += 12;
+        });
+        
+        yPosition += 5;
+      });
+      
+      // Winners Summary
+      if (pdfData.winners.length > 0) {
+        checkPageBreak(60);
+        
+        pdf.setFontSize(14);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Election Winners', margin, yPosition);
+        yPosition += 10;
+        
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'normal');
+        
+        pdfData.winners.forEach((winner) => {
+          checkPageBreak(10);
+          const winnerText = `${winner.fullname} (${winner.position_name}) - ${winner.vote_count.toLocaleString()} votes`;
+          const partyText = winner.party ? ` - ${winner.party}` : '';
+          
+          pdf.text(winnerText + partyText, margin + 5, yPosition);
+          yPosition += 6;
+        });
+      }
+      
+      // Footer
+      const totalPages = pdf.internal.pages.length - 1;
+      for (let i = 1; i <= totalPages; i++) {
+        pdf.setPage(i);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(
+          `Generated on ${pdfData.generation_date} - Page ${i} of ${totalPages}`,
+          margin,
+          pageHeight - 10
+        );
+      }
+      
+      // Download the PDF
+      const fileName = `election-results-${pdfData.election_name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Error generating PDF report. Please try again.');
+    } finally {
+      setPdfLoading(false);
+    }
   };
 
   // Share (if possible)
@@ -368,15 +578,30 @@ function DecryptedResultsContent() {
                     <FaChartBar className="w-12 h-12 mx-auto mb-3 opacity-50" />
                     <p>No decrypted results available</p>
                   </div>
-                )}
-
-                {/* Action buttons */}                <div className="flex gap-3 justify-center">
+                )}                {/* Action buttons */}                <div className="flex gap-3 justify-center">
                   <button
                     className="flex items-center gap-2 bg-red-700 text-white px-6 py-3 rounded-xl hover:bg-red-800 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
                     onClick={handleExport}
                   >
                     <FaDownload className="w-4 h-4" />
                     Export CSV
+                  </button>
+                  <button
+                    className="flex items-center gap-2 bg-blue-700 text-white px-6 py-3 rounded-xl hover:bg-blue-800 font-medium transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-75 disabled:cursor-not-allowed"
+                    onClick={handlePdfExport}
+                    disabled={pdfLoading}
+                  >
+                    {pdfLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <FaFilePdf className="w-4 h-4" />
+                        Export PDF
+                      </>
+                    )}
                   </button>
                   <button
                     className="flex items-center gap-2 bg-gray-700 text-white px-6 py-3 rounded-xl hover:bg-gray-800 font-medium transition-all duration-200 shadow-lg hover:shadow-xl"

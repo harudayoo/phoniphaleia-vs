@@ -451,7 +451,8 @@ function TallyElectionContent() {
                 </button>
               </div>
             )}
-          </div>        </div>
+          </div>        
+          </div>
         </div>
       </div>      {/* Scroll to top button */}
       <ArrowUpScrollToTop show={showScrollToTop} />

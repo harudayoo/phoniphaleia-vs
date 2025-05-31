@@ -23,6 +23,10 @@ def decrypt_tally():
 def get_decrypted_results(election_id):
     return ElectionResultsController.get_decrypted_results(election_id)
 
+@election_results_bp.route('/election_results/<int:election_id>/pdf', methods=['GET'])
+def export_pdf_report(election_id):
+    return ElectionResultsController.get_pdf_data(election_id)
+
 @election_results_bp.route('/election_results/<int:election_id>', methods=['GET'])
 def get_election_result(election_id):
     return ElectionResultsController.get_election_results_by_election_id(election_id)
