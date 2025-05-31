@@ -602,11 +602,10 @@ export default function AdminElectionsPage() {
             <div className="flex items-center text-sm">
               <Users className="h-4 w-4 text-gray-400 mr-2" />
               <span className="text-gray-600">{eligibleVoters[election.election_id] !== undefined ? eligibleVoters[election.election_id] : '...'} eligible voters</span>
-            </div>
-            {election.participation_rate !== undefined && (
+            </div>            {election.participation_rate !== undefined && (
               <div className="flex items-center text-sm">
                 <Award className="h-4 w-4 text-gray-400 mr-2" />
-                <span className="text-gray-600">{election.participation_rate}% participation</span>
+                <span className="text-gray-600">{election.participation_rate.toFixed(2)}% participation</span>
               </div>
             )}
           </div>
@@ -669,9 +668,8 @@ export default function AdminElectionsPage() {
               <span className="text-gray-500">
                 Ended {Math.abs(daysRemaining)} days ago
               </span>
-            )}
-            {election.participation_rate !== undefined && (
-              <span className="ml-4 text-green-700">{election.participation_rate}% participation</span>
+            )}            {election.participation_rate !== undefined && (
+              <span className="ml-4 text-green-700">{election.participation_rate.toFixed(2)}% participation</span>
             )}
           </div>
           <div className="flex gap-2">
@@ -768,7 +766,7 @@ export default function AdminElectionsPage() {
           { key: 'organization', header: 'Organization' },
           { key: 'college_name', header: 'College' },
           { key: 'voters_count', header: 'Eligible Voters' },
-          { key: 'participation_rate', header: 'Participation Rate', render: e => e.participation_rate !== undefined ? `${e.participation_rate}%` : 'N/A' },
+          { key: 'participation_rate', header: 'Participation Rate', render: e => e.participation_rate !== undefined ? `${e.participation_rate.toFixed(2)}%` : 'N/A' },
         ]}
         onEdit={() => { setShowDetailModal(false); if (selectedElection) handleEdit(selectedElection); }}
         onDelete={() => { setShowDetailModal(false); if (selectedElection) handleDelete(selectedElection); }}

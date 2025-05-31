@@ -11,6 +11,8 @@ import {
   FileCheck,
   HelpCircle,
   Settings2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser, UserProvider } from '@/contexts/UserContext';
@@ -28,6 +30,7 @@ function UserLayoutInner({ children }: UserLayoutProps) {
   const { user, loading } = useUser();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isStudentIdVisible, setIsStudentIdVisible] = useState(false);
   const pathname = usePathname();
 
   // Handle window resize to detect mobile view
@@ -62,7 +65,7 @@ function UserLayoutInner({ children }: UserLayoutProps) {
               }`}
             >
               <LayoutDashboard className="w-5 h-5" />
-              <span>Dashboard</span>
+              <span>User Dashboard</span>
             </Link>
           </li>
           <li>
@@ -218,8 +221,7 @@ function UserLayoutInner({ children }: UserLayoutProps) {
                     {user.first_name.charAt(0)}{user.last_name.charAt(0)}
                   </motion.div>
                 )}
-                
-                {/* User info */}
+                  {/* User info */}
                 <div className="text-right">
                   <motion.div 
                     className="text-lg font-semibold text-red-900 text-shadow-gray-600"
@@ -228,10 +230,19 @@ function UserLayoutInner({ children }: UserLayoutProps) {
                     Welcome User, {user.first_name}
                   </motion.div>
                   <motion.div 
-                    className="text-sm text-gray-600"
+                    className="text-sm text-gray-600 flex items-center justify-end gap-2"
                     layoutId="user-id"
                   >
-                    Student Voter ID: {user.student_id}
+                    <span>
+                      Student Voter ID: {isStudentIdVisible ? user.student_id : '••••••••'}
+                    </span>
+                    <button
+                      onClick={() => setIsStudentIdVisible(!isStudentIdVisible)}
+                      className="text-gray-500 hover:text-gray-700 transition-colors p-1 rounded"
+                      aria-label={isStudentIdVisible ? "Hide student ID" : "Show student ID"}
+                    >
+                      {isStudentIdVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </motion.div>
                 </div>
               </motion.div>

@@ -417,23 +417,10 @@ export default function CreateElectionPage() {
       setShowModal(true);
     }
   };
-
   return (
-    <div className="min-h-screen flex flex-col items-center py-2 relative">      {/* Enhanced Back to Elections button */}
-      <button
-        type="button"
-        className="fixed top-6 left-6 z-50 flex items-center gap-3 px-4 py-3 
-                   bg-white/90 backdrop-blur-sm hover:bg-white text-gray-700 hover:text-red-700
-                   rounded-xl shadow-lg hover:shadow-xl border border-gray-200 hover:border-red-300
-                   transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 group"
-        onClick={() => router.push('/admin/elections')}
-      >
-        <ArrowLeft size={20} className="text-red-600 group-hover:text-red-800 transition-colors duration-200" />
-        <span className="font-semibold">Back to Elections</span>
-      </button>
-
+    <div className="min-h-screen flex flex-col items-center py-2 relative">
       {/* Scroll to Top Button */}
-      <ArrowUpScrollToTop show={showScrollTop} />      {/* Enhanced Modal for notifications */}
+      <ArrowUpScrollToTop show={showScrollTop} />{/* Enhanced Modal for notifications */}
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
@@ -483,7 +470,23 @@ export default function CreateElectionPage() {
           }}
         ></div>
       </div><div className="w-full max-w-7xl bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 my-4 border border-gray-200 relative z-10" 
-           style={{ width: '95%', minHeight: '80vh' }}>        <div className="text-center mb-8">
+           style={{ width: '95%', minHeight: '80vh' }}>
+        
+        {/* Back to Elections button inside container */}
+        <div className="mb-6">
+          <button
+            type="button"
+            className="flex items-center gap-3 px-4 py-3 
+                       text-gray-700 hover:text-red-700
+                       transition-all duration-200 group"
+            onClick={() => router.push('/admin/elections')}
+          >
+            <ArrowLeft size={20} className="text-red-600 group-hover:text-red-800 transition-colors duration-200" />
+            <span className="font-semibold">Back to Elections</span>
+          </button>
+        </div>
+
+        <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-red-900 mb-2">Create New Election</h1>
           <p className="text-gray-700 text-lg">Configure all aspects of your new election with our guided setup process.</p>
           <div className="mt-4 flex justify-center">

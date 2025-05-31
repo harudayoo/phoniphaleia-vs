@@ -152,8 +152,7 @@ def get_admin_stats():
         completed_elections = db.session.query(Election).filter(
             Election.election_id.in_(db.session.query(completed_election_ids.c.election_id))
         ).count()
-        
-        # Calculate average participation for elections with results
+          # Calculate average participation using the participation_rate field from elections
         elections_with_results = db.session.query(Election).filter(
             Election.election_id.in_(db.session.query(completed_election_ids.c.election_id))
         ).all()
@@ -162,22 +161,10 @@ def get_admin_stats():
             total_participation = 0
             elections_with_participation = 0
             for election in elections_with_results:
-                # Get eligible voters based on college affiliation
-                org = election.organization
-                if org and org.college_id:
-                    # Election is restricted to one college
-                    eligible_voters = Voter.query.filter_by(college_id=org.college_id).count()
-                else:
-                    # Election is open to all colleges
-                    eligible_voters = Voter.query.count()
-                
-                if eligible_voters > 0:
-                    # Count actual votes cast in this election
-                    votes_cast = Vote.query.filter_by(election_id=election.election_id).count()
-                    if votes_cast > 0:  # Only include elections where votes were actually cast
-                        participation = (votes_cast / eligible_voters) * 100
-                        total_participation += participation
-                        elections_with_participation += 1
+                # Use the stored participation_rate field if available
+                if election.participation_rate is not None and election.participation_rate > 0:
+                    total_participation += election.participation_rate
+                    elections_with_participation += 1
             
             avg_participation = round(total_participation / elections_with_participation, 1) if elections_with_participation > 0 else 0
         else:

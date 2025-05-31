@@ -133,7 +133,7 @@ export default function AdminDashboard() {
         {
           title: 'Average Participation',
           value: adminStats.averageParticipation,
-          description: 'Average voter turnout percentage',
+          description: 'Average voter turnout percentage for finished elections',
           icon: <Vote className="h-6 w-6 text-orange-500" />,
           trend: {
             value: 2.8, // In a real app, calculate from historical data

@@ -305,8 +305,7 @@ class ElectionResultsController:
                     
                     # Generate a suitable prime
                     import secrets
-                    prime_candidate = secrets.randbits(min_prime_bits) | (1 << (min_prime_bits - 1)) | 1
-                    
+                    prime_candidate = secrets.randbits(min_prime_bits) | (1 << (min_prime_bits - 1)) | 1                    
                     try:
                         from sympy import nextprime
                         shamir_prime = nextprime(prime_candidate)
@@ -666,18 +665,35 @@ class ElectionResultsController:
                     if verified:
                         logger.info(f"Vote count verification passed for election {election_id}")
                     else:
-                        logger.warning(f"Vote count verification found issues for election {election_id}: {issues}")
-                      # VERIFICATION: Final verification that all candidates have vote counts
+                        logger.warning(f"Vote count verification found issues for election {election_id}: {issues}")                    # VERIFICATION: Final verification that all candidates have vote counts
                     missing_counts = ElectionResult.query.filter_by(election_id=election_id, vote_count=None).count()
                     if missing_counts > 0:
                         logger.warning(f"After decryption, {missing_counts} candidates are still missing vote counts")
+                    
+                    # AUTOMATIC PDF GENERATION: Generate PDF data after successful decryption
+                    pdf_generation_success = False
+                    pdf_error_message = None
+                    try:
+                        logger.info(f"Automatically generating PDF data for election {election_id} after successful decryption")
+                        pdf_result = ElectionResultsController.get_pdf_data(election_id)
+                        if pdf_result[1] == 200:  # Check if PDF data generation was successful
+                            pdf_generation_success = True
+                            logger.info(f"✓ PDF data automatically generated for election {election_id}")
+                        else:
+                            pdf_error_message = "Failed to generate PDF data"
+                            logger.warning(f"PDF data generation failed for election {election_id}")
+                    except Exception as pdf_error:
+                        pdf_error_message = str(pdf_error)
+                        logger.error(f"Error during automatic PDF generation for election {election_id}: {pdf_error}")
                     
                     # Return success response for all cases
                     return jsonify({
                         'decrypted_results': decrypted,
                         'total_decrypted_votes': total_votes,
                         'vote_count_match': total_votes == actual_votes,
-                        'verification_passed': verified  # Use actual verification result
+                        'verification_passed': verified,  # Use actual verification result
+                        'pdf_auto_generated': pdf_generation_success,
+                        'pdf_error': pdf_error_message
                     }), 200
                     
                 else:
