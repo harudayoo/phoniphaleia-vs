@@ -26,6 +26,76 @@ interface Position {
   candidates: Candidate[];
 }
 
+// Separate component for ExitConfirmationModal to prevent re-render loops
+interface ExitConfirmationModalProps {
+  onCancel: () => void;
+  onExit: () => void;
+}
+
+const ExitConfirmationModal: React.FC<ExitConfirmationModalProps> = ({ onCancel, onExit }) => {
+  console.log('ExitConfirmationModal is rendering');
+    const handleCancel = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Cancel button clicked');
+    // Call the onCancel callback directly without any state updates
+    onCancel();
+  };
+
+  const handleExit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Exit button clicked');
+    // Call the onExit callback directly without any state updates
+    onExit();
+  };
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    // Only close if clicking the backdrop, not the modal content
+    if (e.target === e.currentTarget) {
+      console.log('Backdrop clicked');
+      onCancel();
+    }
+  };
+
+  const handleModalClick = (e: React.MouseEvent) => {
+    // Prevent event bubbling to backdrop
+    e.stopPropagation();
+  };
+  return (
+    <div 
+      className="fixed inset-0 bg-black/70 bg-opacity-75 flex items-center justify-center z-[9999]"
+      onClick={handleBackdropClick}
+    >
+      <div 
+        className="bg-white rounded-lg p-6 max-w-md mx-4 shadow-lg"
+        onClick={handleModalClick}
+      >
+        <h3 className="text-lg font-semibold mb-4">Confirm Exit</h3>
+        <p className="text-gray-600 mb-6">
+          Are you sure you want to exit? Your current selections will be lost.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={handleCancel}
+            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md border border-gray-500"
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleExit}
+            className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-md"
+            type="button"
+          >
+            Exit
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function CastVoteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -169,16 +239,18 @@ function CastVoteContent() {
   const handleReturnToElections = async () => {
     console.log('Return to Elections button clicked');
     setShowExitConfirmation(true);
-  };
-  // Add new function to handle confirmed exit
-  const handleConfirmedExit = async () => {
+  };  // Add new function to handle confirmed exit
+  const handleConfirmedExit = useCallback(async () => {
     console.log('Exit confirmed by user');
     
-    // Close the modal first
+    // Close the modal first to prevent any rendering issues
     setShowExitConfirmation(false);
     
     try {
+      console.log('Starting exit process...');
+      
       // First decrement voters count
+      console.log(`Calling decrement API for election ${electionId}`);
       const decrementRes = await fetch(`${API_URL}/elections/${electionId}/decrement_voters_count`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -187,18 +259,24 @@ function CastVoteContent() {
       if (!decrementRes.ok) {
         console.error('Failed to decrement voters count');
         // Continue with exit process even if decrement fails
+      } else {
+        const decrementData = await decrementRes.json();
+        console.log('Decrement successful:', decrementData);
       }
 
       // Then leave voting session (existing functionality)
-      await leaveVotingSession();
+      console.log('Leaving voting session...');
+      const sessionResult = await leaveVotingSession();
+      console.log('Leave session result:', sessionResult);
       
     } catch (error) {
       console.error('Error during exit process:', error);
     }
     
     // Always redirect to votes page regardless of API call results
+    console.log('Redirecting to /user/votes');
     router.push('/user/votes');
-  };
+  }, [electionId, leaveVotingSession, router]);
   // Cleanup effect to handle leaving the voting session
   useEffect(() => {
     const decrementVotersCount = async () => {
@@ -267,13 +345,12 @@ function CastVoteContent() {
     router.push(`/user/votes/vote-verify?election_id=${electionId}&votes=${votesParam}`);
     
     setError(null);
-    setSuccess('Redirecting to vote verification...');
-  };
+    setSuccess('Redirecting to vote verification...');  };
   // Add scroll detection for showing/hiding the scroll-to-top button
   useEffect(() => {
     const handleScroll = () => {
-      // Show the button when user scrolls down 300px from the top
-      setShowScrollToTop(window.scrollY > 100);
+      // Show the button when user scrolls down 80px from the top
+      setShowScrollToTop(window.scrollY > 80);
     };
 
     window.addEventListener('scroll', handleScroll);
@@ -284,31 +361,6 @@ function CastVoteContent() {
     // Clean up the event listener
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  const ExitConfirmationModal = () => (
-    <div className="fixed inset-0 bg-black/70 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md mx-4">
-        <h3 className="text-lg font-semibold mb-4">Confirm Exit</h3>
-        <p className="text-gray-600 mb-6">
-          Are you sure you want to exit? Your current selections will be lost.
-        </p>
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={() => setShowExitConfirmation(false)}
-            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirmedExit}
-            className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded"
-          >
-            Exit
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-start py-8 px-4 md:px-6" style={{
@@ -667,12 +719,21 @@ function CastVoteContent() {
           candidate={showCandidate}
           isOpen={!!showCandidate}
           onClose={() => setShowCandidate(null)}
+        />      </div>      {/* Add the confirmation modal */}      {showExitConfirmation && (
+        <ExitConfirmationModal 
+          onCancel={() => {
+            console.log("Cancel callback triggered");
+            setShowExitConfirmation(false);
+          }} 
+          onExit={() => {
+            console.log("Exit callback triggered");
+            handleConfirmedExit();
+          }} 
         />
-      </div>
-        {/* Scroll to top button */}
+      )}
+      
+      {/* Scroll to top button */}
       <ArrowUpScrollToTop show={showScrollToTop} />
-      {/* Add the confirmation modal */}
-      {showExitConfirmation && <ExitConfirmationModal />}
     </div>
   );
 }
