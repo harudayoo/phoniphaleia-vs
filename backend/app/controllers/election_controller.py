@@ -389,13 +389,14 @@ class ElectionController:
             db.session.add(entry)
             db.session.commit()
             return jsonify({'message': 'Access granted', 'status': 'active'}), 200
-        else:
-            # Add to waitlist
+        else:            # Add to waitlist
             entry = ElectionWaitlist(election_id=election_id, voter_id=voter_id, status='waiting')
             db.session.add(entry)
             db.session.commit()
             position = ElectionWaitlist.query.filter_by(election_id=election_id, status='waiting').order_by(ElectionWaitlist.joined_at).all().index(entry) + 1
-            return jsonify({'message': 'Added to waitlist', 'status': 'waiting', 'position': position}), 200    @staticmethod
+            return jsonify({'message': 'Added to waitlist', 'status': 'waiting', 'position': position}), 200
+    
+    @staticmethod
     def leave_waitlist(election_id):
         from app.models.election_waitlist import ElectionWaitlist
         from app.models.election import Election
@@ -496,13 +497,14 @@ class ElectionController:
             count = Voter.query.count()
         else:        # Election is restricted to voters from the same college as the organization
             count = Voter.query.filter_by(college_id=org.college_id).count()
-        return jsonify({'eligible_voters': count})
-    @staticmethod
+        return jsonify({'eligible_voters': count})    @staticmethod
     def access_check(election_id):
         try:
             data = request.json or {}
             voter_id = data.get('voter_id')
             grant_access = data.get('grant_access', False)  # Flag to indicate if access should be granted
+            
+            print(f"DEBUG access_check: election_id={election_id}, voter_id={voter_id}, grant_access={grant_access}")
             
             if not voter_id:
                 return jsonify({'eligible': False, 'reason': 'No voter_id provided'}), 400
@@ -532,18 +534,21 @@ class ElectionController:
                 return jsonify({'eligible': False, 'reason': 'Voter not in the same college as election'}), 403
             
             # At this point, voter is valid and eligible
-            
-            # If not granting access, just return eligibility status
+              # If not granting access, just return eligibility status
             if not grant_access:
-                return jsonify({'eligible': True})            # STEP 2: Check queued access and handle accordingly            if not election.queued_access:
+                return jsonify({'eligible': True})
+            
+            # STEP 2: Check queued access and handle accordingly
+            if not election.queued_access:
                 # No queued access - check voters_count vs max_concurrent_voters
                 current_voters = election.voters_count or 0
                 max_concurrent = election.max_concurrent_voters or 1
-                
                 if current_voters < max_concurrent:
                     # Election is not full - grant access and increment voters_count
+                    old_count = election.voters_count or 0
                     election.voters_count = current_voters + 1
                     db.session.commit()
+                    print(f"DEBUG: Non-queued election - incremented voters_count from {old_count} to {election.voters_count}")
                     return jsonify({
                         'eligible': True, 
                         'access_granted': True,
@@ -561,94 +566,98 @@ class ElectionController:
                         'max_concurrent_voters': max_concurrent,
                         'action': 'redirect_to_waitlist'
                     })
-                # STEP 3: Queued access enabled - use waitlist system for queueing, voters_count for active tracking
-            from app.models.election_waitlist import ElectionWaitlist
-            
-            # Check if voter is coming from waitlist activation
-            active_waitlist_entry = ElectionWaitlist.query.filter_by(
-                election_id=election_id, 
-                voter_id=voter_id, 
-                status='active'
-            ).first()
-            
-            if active_waitlist_entry:
-                # Voter was activated from waitlist - grant access, increment voters_count, and mark waitlist as done
-                current_voters = election.voters_count or 0
-                election.voters_count = current_voters + 1
-                active_waitlist_entry.status = 'done'
-                db.session.commit()
-                
-                return jsonify({
-                    'eligible': True, 
-                    'access_granted': True,
-                    'voters_count': election.voters_count,
-                    'max_concurrent_voters': election.max_concurrent_voters or 1,
-                    'action': 'redirect_to_cast',
-                    'from_waitlist': True
-                })
-            
-            # Use voters_count to check if election is full
-            current_voters = election.voters_count or 0
-            max_concurrent = election.max_concurrent_voters or 1
-            
-            if current_voters < max_concurrent:
-                # Election has available slots - grant access and increment voters_count
-                # Check if voter is already waiting in queue and remove them
-                existing_waitlist = ElectionWaitlist.query.filter_by(
-                    election_id=election_id, 
-                    voter_id=voter_id,
-                    status='waiting'
-                ).first()
-                
-                if existing_waitlist:
-                    existing_waitlist.status = 'done'
-                  # Increment voters_count and grant access
-                election.voters_count = current_voters + 1
-                db.session.commit()
-                
-                return jsonify({
-                    'eligible': True, 
-                    'access_granted': True,
-                    'voters_count': election.voters_count,
-                    'max_concurrent_voters': max_concurrent,
-                    'action': 'redirect_to_cast'
-                })
             else:
-                # Election is full - add to waitlist queue
-                # Check if voter is already in waitlist
-                existing_waitlist = ElectionWaitlist.query.filter_by(
+                from app.models.election_waitlist import ElectionWaitlist
+                
+                # Check if voter is coming from waitlist activation
+                active_waitlist_entry = ElectionWaitlist.query.filter_by(
                     election_id=election_id, 
                     voter_id=voter_id, 
-                    status='waiting'                ).first()
+                    status='active'                ).first()
                 
-                if not existing_waitlist:
-                    # Add to waitlist queue
-                    waitlist_entry = ElectionWaitlist(
-                        election_id=election_id,
+                if active_waitlist_entry:
+                    # Voter was activated from waitlist - grant access, increment voters_count, and mark waitlist as done
+                    old_count = election.voters_count or 0
+                    election.voters_count = old_count + 1
+                    active_waitlist_entry.status = 'done'
+                    db.session.commit()
+                    print(f"DEBUG: Queued election (from waitlist) - incremented voters_count from {old_count} to {election.voters_count}")
+                    
+                    return jsonify({
+                        'eligible': True, 
+                        'access_granted': True,
+                        'voters_count': election.voters_count,
+                        'max_concurrent_voters': election.max_concurrent_voters or 1,
+                        'action': 'redirect_to_cast',
+                        'from_waitlist': True
+                    })
+                
+                # Use voters_count to check if election is full
+                current_voters = election.voters_count or 0
+                max_concurrent = election.max_concurrent_voters or 1
+                
+                print(f"DEBUG: Queued election - current_voters={current_voters}, max_concurrent={max_concurrent}")
+                
+                if current_voters < max_concurrent:
+                    # Election has available slots - grant access and increment voters_count
+                    # Check if voter is already waiting in queue and remove them
+                    existing_waitlist = ElectionWaitlist.query.filter_by(
+                        election_id=election_id, 
                         voter_id=voter_id,
                         status='waiting'
-                    )
-                    db.session.add(waitlist_entry)
+                    ).first()
+                    if existing_waitlist:
+                        existing_waitlist.status = 'done'
+                      # Increment voters_count and grant access
+                    old_count = election.voters_count or 0
+                    election.voters_count = current_voters + 1
                     db.session.commit()
+                    print(f"DEBUG: Queued election (direct access) - incremented voters_count from {old_count} to {election.voters_count}")
+                    
                     return jsonify({
-                        'eligible': True,
-                        'access_granted': False,
-                        'election_full': True,
-                        'voters_count': current_voters,
+                        'eligible': True, 
+                        'access_granted': True,
+                        'voters_count': election.voters_count,
                         'max_concurrent_voters': max_concurrent,
-                        'action': 'redirect_to_waitlist'
+                        'action': 'redirect_to_cast'
                     })
                 else:
-                    # Voter is already in waitlist
-                    return jsonify({
-                        'eligible': True,
-                        'access_granted': False,
-                        'election_full': True,
-                        'voters_count': current_voters,
-                        'max_concurrent_voters': max_concurrent,
-                        'action': 'redirect_to_waitlist',
-                        'already_in_waitlist': True
-                    })
+                    # Election is full - add to waitlist queue
+                    # Check if voter is already in waitlist
+                    existing_waitlist = ElectionWaitlist.query.filter_by(
+                        election_id=election_id, 
+                        voter_id=voter_id, 
+                        status='waiting'
+                    ).first()
+                    
+                    if not existing_waitlist:
+                        # Add to waitlist queue
+                        waitlist_entry = ElectionWaitlist(
+                            election_id=election_id,
+                            voter_id=voter_id,
+                            status='waiting'
+                        )
+                        db.session.add(waitlist_entry)
+                        db.session.commit()
+                        return jsonify({
+                            'eligible': True,
+                            'access_granted': False,
+                            'election_full': True,
+                            'voters_count': current_voters,
+                            'max_concurrent_voters': max_concurrent,
+                            'action': 'redirect_to_waitlist'
+                        })
+                    else:
+                        # Voter is already in waitlist
+                        return jsonify({
+                            'eligible': True,
+                            'access_granted': False,
+                            'election_full': True,
+                            'voters_count': current_voters,
+                            'max_concurrent_voters': max_concurrent,
+                            'action': 'redirect_to_waitlist',
+                            'already_in_waitlist': True
+                        })
             
         except Exception as ex:
             db.session.rollback()
@@ -1339,9 +1348,7 @@ class ElectionController:
         except Exception as ex:
             db.session.rollback()
             print(f'Error in leave_voting_session: {ex}')
-            return jsonify({'error': 'Failed to leave voting session'}), 500
-
-    @staticmethod
+            return jsonify({'error': 'Failed to leave voting session'}), 500    @staticmethod
     def start_voting_session(election_id):
         """
         Endpoint to handle when a voter starts their voting session.
@@ -1362,45 +1369,36 @@ class ElectionController:
             print(f"DEBUG start_voting_session: election_id={election_id}, voter_id={voter_id}, queued_access={election.queued_access}")
             
             if not election.queued_access:
-                # For non-queued elections, ensure voter is counted
+                # For non-queued elections, DO NOT increment voters_count here
+                # access_check has already incremented it when grant_access=true was called
                 current_voters = election.voters_count or 0
                 max_concurrent = election.max_concurrent_voters or 1
                 
-                print(f"DEBUG: current_voters={current_voters}, max_concurrent={max_concurrent}")
+                print(f"DEBUG: start_voting_session - current_voters={current_voters}, max_concurrent={max_concurrent}")
+                print(f"DEBUG: start_voting_session - access_check already incremented voters_count, just validating session")
                 
-                # Check if we need to increment (voter might already be counted from access_check)
-                # We'll be more lenient here and allow the session to start if there's room
-                if current_voters < max_concurrent:
-                    # Only increment if we have room (access_check might have already incremented)
-                    election.voters_count = current_voters + 1
-                    db.session.commit()
-                    print(f"DEBUG: Incremented voters_count to {election.voters_count}")
+                # Just validate that the voter should have access based on current count
+                if current_voters <= max_concurrent:
+                    # Voter should have access (was already counted by access_check)
+                    print(f"DEBUG: Voting session validated, voters_count={election.voters_count}")
                     return jsonify({
-                        'message': 'Voting session started',
-                        'voters_count': election.voters_count,
-                        'max_concurrent_voters': max_concurrent,
-                        'queued_access': False
-                    })
-                elif current_voters == max_concurrent:
-                    # Election is exactly at capacity - assume voter is already counted
-                    print(f"DEBUG: Election at capacity, assuming voter already counted")
-                    return jsonify({
-                        'message': 'Voting session active (already counted)',
+                        'message': 'Voting session validated (already counted by access_check)',
                         'voters_count': election.voters_count,
                         'max_concurrent_voters': max_concurrent,
                         'queued_access': False
                     })
                 else:
-                    # Election is over capacity - this shouldn't happen
-                    print(f"DEBUG: Election over capacity - should not happen")
+                    # This shouldn't happen if access_check is working correctly
+                    print(f"DEBUG: Unexpected: Election over capacity in start_voting_session")
                     return jsonify({
-                        'error': 'Election is full',
+                        'error': 'Election is unexpectedly full',
                         'voters_count': current_voters,
                         'max_concurrent_voters': max_concurrent,
                         'queued_access': False
                     }), 403
             else:
-                # For queued elections, verify the voter has active status
+                # For queued elections, validate voter access without incrementing count
+                # access_check has already incremented voters_count when grant_access=true was called
                 from app.models.election_waitlist import ElectionWaitlist
                 active_entry = ElectionWaitlist.query.filter_by(
                     election_id=election_id,
@@ -1409,25 +1407,92 @@ class ElectionController:
                 ).first()
                 
                 if active_entry:
-                    # Ensure voters_count reflects the active session
-                    current_voters = election.voters_count or 0
-                    if current_voters == 0:
-                        election.voters_count = 1
-                        db.session.commit()
-                        print(f"DEBUG: Fixed voters_count for queued election")
-                    
+                    # Voter came from waitlist activation - access_check already handled the count
+                    print(f"DEBUG: Queued election - voter came from waitlist, voters_count already managed by access_check")
                     return jsonify({
-                        'message': 'Voting session active from waitlist',
+                        'message': 'Voting session active from waitlist (counted by access_check)',
                         'queued_access': True,
                         'voters_count': election.voters_count
                     })
                 else:
-                    return jsonify({
-                        'error': 'No active voting session found',
-                        'queued_access': True
-                    }), 403
+                    # Check if voter has direct access (not through waitlist)
+                    # This happens when election had available slots during access-check
+                    current_voters = election.voters_count or 0
+                    max_concurrent = election.max_concurrent_voters or 1
+                    
+                    print(f"DEBUG: Queued election - validating direct access, voters_count={current_voters}, max={max_concurrent}")
+                    
+                    if current_voters > 0 and current_voters <= max_concurrent:
+                        # Voter likely has direct access - access_check already counted them
+                        print(f"DEBUG: Queued election - voter has direct access, already counted by access_check")
+                        return jsonify({
+                            'message': 'Voting session active (direct access, counted by access_check)',
+                            'queued_access': True,
+                            'voters_count': election.voters_count
+                        })
+                    else:
+                        print(f"DEBUG: Queued election - no valid access found for voter {voter_id}")
+                        return jsonify({
+                            'error': 'No active voting session found',
+                            'queued_access': True
+                        }), 403
                 
         except Exception as ex:
             db.session.rollback()
             print(f'Error in start_voting_session: {ex}')
             return jsonify({'error': 'Failed to start voting session'}), 500
+
+    @staticmethod
+    def increment_voters_count(election_id):
+        """
+        Increment the voters_count for an election when a voter starts voting.
+        """
+        try:
+            election = Election.query.get(election_id)
+            if not election:
+                return jsonify({'error': 'Election not found'}), 404
+            
+            # Initialize voters_count if it's None
+            if election.voters_count is None:
+                election.voters_count = 0
+            
+            # Increment the count
+            election.voters_count += 1
+            
+            db.session.commit()
+            
+            return jsonify({
+                'message': 'Voters count incremented successfully',
+                'voters_count': election.voters_count
+            }), 200
+            
+        except Exception as ex:
+            db.session.rollback()
+            print(f"Error incrementing voters count: {ex}")
+            return jsonify({'error': 'Failed to increment voters count'}), 500
+
+    @staticmethod
+    def decrement_voters_count(election_id):
+        """Decrement active voters count for an election"""
+        try:
+            election = Election.query.get(election_id)
+            if not election:
+                return jsonify({'error': 'Election not found'}), 404
+            
+            # Decrement the count (ensure it doesn't go below 0)
+            if election.voters_count is None or election.voters_count <= 0:
+                election.voters_count = 0
+            else:
+                election.voters_count -= 1
+            
+            db.session.commit()
+            
+            return jsonify({
+                'message': 'Voters count decremented successfully',
+                'voters_count': election.voters_count
+            }), 200
+            
+        except Exception as ex:
+            db.session.rollback()
+            current_app.logger.error(f"Error decrementing voters count for election {election_id}: {str(ex)}")
+            return jsonify({'error': 'Failed to decrement voters count'}), 500

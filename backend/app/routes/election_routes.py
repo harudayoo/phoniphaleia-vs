@@ -133,3 +133,11 @@ def leave_voting_session(election_id):
 def start_voting_session(election_id):
     from app.controllers.election_controller import ElectionController
     return ElectionController.start_voting_session(election_id)
+
+@election_bp.route('/elections/<int:election_id>/increment_voters_count', methods=['POST'])
+def increment_voters_count(election_id):
+    return ElectionController.increment_voters_count(election_id)
+
+@election_bp.route('/elections/<int:election_id>/decrement_voters_count', methods=['POST'])
+def decrement_voters_count(election_id):
+    return ElectionController.decrement_voters_count(election_id)

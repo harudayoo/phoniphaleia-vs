@@ -115,12 +115,14 @@ function AccessCheckContent() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ voter_id: user.student_id, grant_access: true })
         });
-        
-        const accessData = await accessRes.json();
+          const accessData = await accessRes.json();
         
         if (accessData.access_granted) {
-          // Access granted - redirect to cast page
-          router.replace(`/user/votes/cast?election_id=${electionId}`);
+          // No need to increment voters count separately - the access-check endpoint already handles it
+          // when grant_access: true is passed
+          
+          // Redirect to voting page
+          router.push(`/user/votes/cast?election_id=${election.election_id}`);
           return;
         } else if (accessData.action === 'redirect_to_waitlist') {
           // Election is full - redirect to waitlist

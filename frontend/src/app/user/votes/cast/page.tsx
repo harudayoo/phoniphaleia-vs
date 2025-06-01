@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useUser } from '@/contexts/UserContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 import CandidateDetailModal from '@/components/user/CandidateDetailModal';
 import ArrowUpScrollToTop from '@/components/ArrowUpScrollToTop';
 
@@ -38,6 +38,7 @@ function CastVoteContent() {
   const [success, setSuccess] = useState<string | null>(null);
   const [showCandidate, setShowCandidate] = useState<Candidate | null>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const [showExitConfirmation, setShowExitConfirmation] = useState(false);
   
   useEffect(() => {
     const fetchData = async () => {
@@ -167,34 +168,66 @@ function CastVoteContent() {
   // Handle Return to Elections button click
   const handleReturnToElections = async () => {
     console.log('Return to Elections button clicked');
-    const success = await leaveVotingSession();
-    if (success) {
-      console.log('Successfully left voting session, redirecting to elections');
-    } else {
-      console.warn('Failed to leave voting session, but still redirecting');
+    setShowExitConfirmation(true);
+  };
+  // Add new function to handle confirmed exit
+  const handleConfirmedExit = async () => {
+    console.log('Exit confirmed by user');
+    
+    // Close the modal first
+    setShowExitConfirmation(false);
+    
+    try {
+      // First decrement voters count
+      const decrementRes = await fetch(`${API_URL}/elections/${electionId}/decrement_voters_count`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!decrementRes.ok) {
+        console.error('Failed to decrement voters count');
+        // Continue with exit process even if decrement fails
+      }
+
+      // Then leave voting session (existing functionality)
+      await leaveVotingSession();
+      
+    } catch (error) {
+      console.error('Error during exit process:', error);
     }
+    
+    // Always redirect to votes page regardless of API call results
     router.push('/user/votes');
   };
-
   // Cleanup effect to handle leaving the voting session
   useEffect(() => {
-    const handleBeforeUnload = async () => {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      if (user.student_id && electionId) {
-        // Use sendBeacon for better reliability during page unload
-        const blob = new Blob([JSON.stringify({ voter_id: user.student_id })], {
-          type: 'application/json'
+    const decrementVotersCount = async () => {
+      try {
+        const response = await fetch(`${API_URL}/elections/${electionId}/decrement_voters_count`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          }
         });
-        navigator.sendBeacon(
-          `${API_URL}/elections/${electionId}/leave_voting_session`,
-          blob
-        );
+        
+        if (!response.ok) {
+          console.error('Failed to decrement voters count');
+        }
+      } catch (error) {
+        console.error('Error decrementing voters count:', error);
       }
     };
 
+    const handleBeforeUnload = async () => {
+      await decrementVotersCount();
+      await leaveVotingSession();
+    };
+
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        handleBeforeUnload();
+      if (document.hidden) {
+        decrementVotersCount();
+        leaveVotingSession();
       }
     };
 
@@ -202,13 +235,10 @@ function CastVoteContent() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Cleanup function
+    // Cleanup function - only remove event listeners, don't decrement count
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      
-      // Also call leave session when component unmounts
-      leaveVotingSession();
     };
   }, [electionId, leaveVotingSession]);
 
@@ -254,6 +284,31 @@ function CastVoteContent() {
     // Clean up the event listener
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  const ExitConfirmationModal = () => (
+    <div className="fixed inset-0 bg-black/70 bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md mx-4">
+        <h3 className="text-lg font-semibold mb-4">Confirm Exit</h3>
+        <p className="text-gray-600 mb-6">
+          Are you sure you want to exit? Your current selections will be lost.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={() => setShowExitConfirmation(false)}
+            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirmedExit}
+            className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded"
+          >
+            Exit
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-start py-8 px-4 md:px-6" style={{
@@ -616,6 +671,8 @@ function CastVoteContent() {
       </div>
         {/* Scroll to top button */}
       <ArrowUpScrollToTop show={showScrollToTop} />
+      {/* Add the confirmation modal */}
+      {showExitConfirmation && <ExitConfirmationModal />}
     </div>
   );
 }
