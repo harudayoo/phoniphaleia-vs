@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Sidebar from '@/components/Sidebar';
 import SystemLogo2 from '@/components/SystemLogo2';
+import FloatingQueueTracker from '@/components/user/FloatingQueueTracker';
 import {
   LayoutDashboard,
   Vote,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser, UserProvider } from '@/contexts/UserContext';
+import { QueueTrackerProvider, useQueueTracker } from '@/contexts/QueueTrackerContext';
 import { usePathname } from 'next/navigation';
 
 interface UserLayoutProps {
@@ -28,10 +30,29 @@ const SIDEBAR_COLLAPSED = 47; // px (LOGO_SIZE / 2 + 16)
 // Create an inner layout component that uses the context
 function UserLayoutInner({ children }: UserLayoutProps) {
   const { user, loading } = useUser();
+  const { isInQueue, electionId, userId, setQueueStatus } = useQueueTracker();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isStudentIdVisible, setIsStudentIdVisible] = useState(false);
   const pathname = usePathname();
+  // Check for queue status on mount
+  useEffect(() => {
+    if (user?.student_id) {
+      // Check all elections for queue status
+      const checkQueueStatus = () => {
+        const keys = Object.keys(sessionStorage);
+        const queueKey = keys.find(key => key.startsWith('queue_') && key.endsWith(`_${user.student_id}`));
+        
+        if (queueKey) {
+          const parts = queueKey.split('_');
+          const electionId = parts[1];
+          setQueueStatus(true, electionId, user.student_id);
+        }
+      };
+      
+      checkQueueStatus();
+    }
+  }, [user?.student_id, setQueueStatus]);
 
   // Handle window resize to detect mobile view
   useEffect(() => {
@@ -259,8 +280,15 @@ function UserLayoutInner({ children }: UserLayoutProps) {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-        {children}
+        </div>        {children}
+        
+        {/* Floating Queue Tracker */}
+        {isInQueue && electionId && userId && !pathname.startsWith('/user/votes/waitlist') && (
+          <FloatingQueueTracker 
+            electionId={electionId} 
+            userId={userId} 
+          />
+        )}
       </motion.main>
     </div>
   );
@@ -270,7 +298,9 @@ function UserLayoutInner({ children }: UserLayoutProps) {
 export default function UserLayout({ children }: UserLayoutProps) {
   return (
     <UserProvider>
-      <UserLayoutInner>{children}</UserLayoutInner>
+      <QueueTrackerProvider>
+        <UserLayoutInner>{children}</UserLayoutInner>
+      </QueueTrackerProvider>
     </UserProvider>
   );
 }

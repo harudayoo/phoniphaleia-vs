@@ -1024,7 +1024,6 @@ export default function CreateElectionPage() {
                       className="text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded-lg border border-red-200 hover:border-red-300 transition-all duration-200" 
                       onClick={() => removeCandidate(idx)}
                     >
-                      <span className="text-sm">🗑️</span>
                       Remove
                     </button>
                   )}

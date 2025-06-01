@@ -118,3 +118,18 @@ def get_election_results():
     # Redirect to the proper election_results controller for properly tallied results
     from app.controllers.election_results_controller import ElectionResultsController
     return ElectionResultsController.get_all_election_results()
+
+@election_bp.route('/elections/<int:election_id>/waitlist/status', methods=['GET'])
+def get_waitlist_status(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.get_waitlist_status(election_id)
+
+@election_bp.route('/elections/<int:election_id>/leave_voting_session', methods=['POST'])
+def leave_voting_session(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.leave_voting_session(election_id)
+
+@election_bp.route('/elections/<int:election_id>/start_voting_session', methods=['POST'])
+def start_voting_session(election_id):
+    from app.controllers.election_controller import ElectionController
+    return ElectionController.start_voting_session(election_id)

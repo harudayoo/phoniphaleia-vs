@@ -516,11 +516,11 @@ export default function AdminResultDetailPage({ params }: { params: Promise<{ id
           <h3 className="text-lg font-semibold mb-4 text-gray-800">Statistics</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-red-50 rounded-md p-4">
-              <div className="text-sm text-red-800 font-medium mb-1">Total Voters</div>
+              <div className="text-sm text-red-800 font-medium mb-1">Eligible Voters</div>
               <div className="text-2xl font-bold text-red-900">{result.voters_count?.toLocaleString()}</div>
             </div>
             <div className="bg-green-50 rounded-md p-4">
-              <div className="text-sm text-green-800 font-medium mb-1">Votes Cast</div>
+              <div className="text-sm text-green-800 font-medium mb-1">Votes Casted</div>
               <div className="text-2xl font-bold text-green-900">{result.total_votes?.toLocaleString()}</div>
             </div>
           </div>

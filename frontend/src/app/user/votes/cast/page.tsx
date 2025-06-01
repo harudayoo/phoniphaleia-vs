@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useUser } from '@/contexts/UserContext';
 import CandidateDetailModal from '@/components/user/CandidateDetailModal';
 import ArrowUpScrollToTop from '@/components/ArrowUpScrollToTop';
 
@@ -28,6 +29,7 @@ interface Position {
 function CastVoteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  useUser();
   const electionId = searchParams.get('election_id');
   const [positions, setPositions] = useState<Position[]>([]);
   const [selected, setSelected] = useState<{ [positionId: number]: number | null }>({});
@@ -42,6 +44,31 @@ function CastVoteContent() {
       setLoading(true);
       setError(null);
       try {
+        // Start voting session first to ensure proper counting
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (user.student_id && electionId) {
+          try {
+            console.log('Starting voting session...');
+            const sessionResponse = await fetch(`${API_URL}/elections/${electionId}/start_voting_session`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ voter_id: user.student_id })
+            });
+            
+            if (sessionResponse.ok) {
+              const sessionData = await sessionResponse.json();
+              console.log('Voting session started:', sessionData);
+            } else {
+              const errorText = await sessionResponse.text();
+              console.warn('Failed to start voting session:', errorText);
+              // Don't fail the whole page if session start fails
+            }
+          } catch (sessionError) {
+            console.warn('Error starting voting session:', sessionError);
+            // Don't fail the whole page if session start fails
+          }
+        }
+
         // Get election details
         const electionRes = await fetch(`${API_URL}/elections`);
         const elections: { election_id: number; org_id: number }[] = await electionRes.json();
@@ -92,10 +119,7 @@ function CastVoteContent() {
             };
           }) : []
         }));
-        
-        setPositions(formattedPositions);
-
-        // Initialize selection state
+          setPositions(formattedPositions);        // Initialize selection state
         const initialSelected: { [positionId: number]: number | null } = {};
         formattedPositions.forEach(pos => {
           initialSelected[pos.position_id] = null;
@@ -110,6 +134,83 @@ function CastVoteContent() {
     
     if (electionId) fetchData();
   }, [electionId]);
+  // Helper function to leave voting session - memoized with useCallback
+  const leaveVotingSession = useCallback(async () => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user.student_id && electionId) {
+      try {
+        console.log(`Attempting to leave voting session for election ${electionId}, voter ${user.student_id}`);
+        
+        const response = await fetch(`${API_URL}/elections/${electionId}/leave_voting_session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voter_id: user.student_id })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Successfully left voting session:', data);
+          return true;
+        } else {
+          const errorText = await response.text();
+          console.error('Failed to leave voting session:', response.status, errorText);
+          return false;
+        }
+      } catch (error) {
+        console.error('Error leaving voting session:', error);
+        return false;
+      }
+    }
+    return false;
+  }, [electionId]);
+
+  // Handle Return to Elections button click
+  const handleReturnToElections = async () => {
+    console.log('Return to Elections button clicked');
+    const success = await leaveVotingSession();
+    if (success) {
+      console.log('Successfully left voting session, redirecting to elections');
+    } else {
+      console.warn('Failed to leave voting session, but still redirecting');
+    }
+    router.push('/user/votes');
+  };
+
+  // Cleanup effect to handle leaving the voting session
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (user.student_id && electionId) {
+        // Use sendBeacon for better reliability during page unload
+        const blob = new Blob([JSON.stringify({ voter_id: user.student_id })], {
+          type: 'application/json'
+        });
+        navigator.sendBeacon(
+          `${API_URL}/elections/${electionId}/leave_voting_session`,
+          blob
+        );
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleBeforeUnload();
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Cleanup function
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      
+      // Also call leave session when component unmounts
+      leaveVotingSession();
+    };
+  }, [electionId, leaveVotingSession]);
 
   const handleSelect = (positionId: number, candidateId: number) => {
     setSelected(prev => ({ ...prev, [positionId]: candidateId }));
@@ -138,7 +239,6 @@ function CastVoteContent() {
     setError(null);
     setSuccess('Redirecting to vote verification...');
   };
-
   // Add scroll detection for showing/hiding the scroll-to-top button
   useEffect(() => {
     const handleScroll = () => {
@@ -173,16 +273,15 @@ function CastVoteContent() {
             rgba(255,255,255,0.02) 70%,
             rgba(255,255,255,0.0) 100%)`,
         }}
-      />
-      {/* Return to Elections button at the top-left */}
+      />      {/* Return to Elections button at the top-left */}
       <div className="absolute top-6 left-6 z-30">
         <button
           type="button"
           className="px-4 py-2 hover:text-red-950 text-red-700 text-shadow-md font-medium transition flex items-center"
-          onClick={() => router.push('/user/votes')}
+          onClick={handleReturnToElections}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="mr-2" viewBox="0 0 16 16">
-            <path fillRule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+            <path d="M15 8a.5.5 0 0 1-.5.5H2.707l3.147 3.146a.5.5 0 0 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 7.5H14.5A.5.5 0 0 1 15 8z"/>
           </svg>
           Return to Elections
         </button>

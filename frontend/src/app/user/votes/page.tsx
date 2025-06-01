@@ -127,10 +127,12 @@ export default function UserVotesPage() {
       await Promise.all(
         filteredElections.filter(e => e.queued_access).map(async (election) => {
           try {
-            const res = await fetch(`${API_URL}/elections/${election.election_id}/active_voters`);
+            // Fetch election details to get voters_count from database
+            const res = await fetch(`${API_URL}/elections`);
             if (res.ok) {
-              const data = await res.json();
-              updates[election.election_id] = data.active_voters;
+              const electionsData = await res.json();
+              const electionDetails = electionsData.find((e: Election) => e.election_id === election.election_id);
+              updates[election.election_id] = electionDetails?.voters_count || 0;
             }
           } catch {}
         })

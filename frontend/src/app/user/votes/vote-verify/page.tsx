@@ -191,12 +191,24 @@ function VoteVerifyContent() {
           student_id: user?.student_id,
           votes: encryptedVotes
         })
-      });
-      if (!submitRes.ok) {
+      });      if (!submitRes.ok) {
         setOverallStatus('failed');
         setError('Failed to submit encrypted votes.');
         return;
       }
+
+      // Vote submitted successfully - leave the voting session
+      try {
+        await fetch(`${API_URL}/elections/${eId}/leave-voting-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voter_id: user?.student_id })
+        });
+      } catch (sessionError) {
+        console.error('Failed to leave voting session after successful vote:', sessionError);
+        // Don't fail the overall process if this fails
+      }
+
       setOverallStatus('success');
       setError(null);
       // Redirect to vote review page after a short delay
