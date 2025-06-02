@@ -5,6 +5,10 @@ from .auth_routes import auth_bp
 from .college_routes import college_bp
 from .admin_routes import admin_bp
 from .election_routes import election_bp
+from .election_access_routes import election_access_bp
+from .election_cast_routes import election_cast_bp
+from .election_verify_routes import election_verify_bp
+from .election_review_routes import election_review_bp
 from .user_routes import user_bp
 from .organization_routes import organization_bp
 from .position_routes import position_bp
@@ -26,6 +30,10 @@ __all__ = [
     "college_bp",
     "admin_bp",
     "election_bp",
+    "election_access_bp",
+    "election_cast_bp",
+    "election_verify_bp",
+    "election_review_bp",
     "user_bp",
     "organization_bp",
     "position_bp",

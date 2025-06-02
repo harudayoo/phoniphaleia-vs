@@ -69,13 +69,16 @@ def create_app():
 
     with app.app_context():
         db.create_all()
-    
-    # Register blueprints
-    from app.routes import auth_bp, college_bp, admin_bp, election_bp, user_bp, position_bp, organization_bp, trusted_authority_bp, crypto_config_bp, key_share_bp, admin_search_bp, upload_bp, verification_bp, election_results_bp, archived_results_bp, documentation_bp, system_settings_bp, super_admin_bp
+      # Register blueprints
+    from app.routes import auth_bp, college_bp, admin_bp, election_bp, election_access_bp, election_cast_bp, election_verify_bp, election_review_bp, user_bp, position_bp, organization_bp, trusted_authority_bp, crypto_config_bp, key_share_bp, admin_search_bp, upload_bp, verification_bp, election_results_bp, archived_results_bp, documentation_bp, system_settings_bp, super_admin_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(college_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(election_bp)
+    app.register_blueprint(election_access_bp)
+    app.register_blueprint(election_cast_bp)
+    app.register_blueprint(election_verify_bp)
+    app.register_blueprint(election_review_bp)
     app.register_blueprint(user_bp)
     app.register_blueprint(position_bp)
     app.register_blueprint(organization_bp)

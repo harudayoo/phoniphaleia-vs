@@ -249,22 +249,7 @@ function CastVoteContent() {
     try {
       console.log('Starting exit process...');
       
-      // First decrement voters count
-      console.log(`Calling decrement API for election ${electionId}`);
-      const decrementRes = await fetch(`${API_URL}/elections/${electionId}/decrement_voters_count`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      if (!decrementRes.ok) {
-        console.error('Failed to decrement voters count');
-        // Continue with exit process even if decrement fails
-      } else {
-        const decrementData = await decrementRes.json();
-        console.log('Decrement successful:', decrementData);
-      }
-
-      // Then leave voting session (existing functionality)
+      // Leave voting session (this already handles decrementing voters count)
       console.log('Leaving voting session...');
       const sessionResult = await leaveVotingSession();
       console.log('Leave session result:', sessionResult);
@@ -276,35 +261,16 @@ function CastVoteContent() {
     // Always redirect to votes page regardless of API call results
     console.log('Redirecting to /user/votes');
     router.push('/user/votes');
-  }, [electionId, leaveVotingSession, router]);
-  // Cleanup effect to handle leaving the voting session
+  }, [leaveVotingSession, router]);  // Cleanup effect to handle leaving the voting session
   useEffect(() => {
-    const decrementVotersCount = async () => {
-      try {
-        const response = await fetch(`${API_URL}/elections/${electionId}/decrement_voters_count`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-          }
-        });
-        
-        if (!response.ok) {
-          console.error('Failed to decrement voters count');
-        }
-      } catch (error) {
-        console.error('Error decrementing voters count:', error);
-      }
-    };
-
     const handleBeforeUnload = async () => {
-      await decrementVotersCount();
+      // Only call leaveVotingSession - it already handles decrementing
       await leaveVotingSession();
     };
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        decrementVotersCount();
+        // Only call leaveVotingSession - it already handles decrementing
         leaveVotingSession();
       }
     };
@@ -318,7 +284,7 @@ function CastVoteContent() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [electionId, leaveVotingSession]);
+  }, [leaveVotingSession]);
 
   const handleSelect = (positionId: number, candidateId: number) => {
     setSelected(prev => ({ ...prev, [positionId]: candidateId }));

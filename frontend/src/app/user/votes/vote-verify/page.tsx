@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Loader4 from '@/components/Loader4';
@@ -44,11 +44,19 @@ function VoteVerifyContent() {
     uniqueVote: 'pending',
     validVote: 'pending',
     followsRules: 'pending',
-  });
-  const [overallStatus, setOverallStatus] = useState<'verifying' | 'success' | 'failed'>('verifying');
-  
-  // Define verifyVotes using useCallback to avoid re-creation on every render
+  });  const [overallStatus, setOverallStatus] = useState<'verifying' | 'success' | 'failed'>('verifying');
+  const [submissionInProgress, setSubmissionInProgress] = useState(false);
+  const initializationStarted = useRef(false);
+    // Define verifyVotes using useCallback to avoid re-creation on every render
   const verifyVotes = useCallback(async (eId: string, votesToVerify: Vote[], key: string) => {
+    // Prevent duplicate submissions
+    if (submissionInProgress) {
+      console.log('Submission already in progress, skipping...');
+      return;
+    }
+    
+    setSubmissionInProgress(true);
+    
     try {
       // Step 1: Verify voter hasn't voted before
       await new Promise(resolve => setTimeout(resolve, 1500));
@@ -59,18 +67,13 @@ function VoteVerifyContent() {
           voter_id: user?.student_id 
         })
       });
-      
-      const uniqueData = await uniqueRes.json();
+        const uniqueData = await uniqueRes.json();
       setVerificationStatus(prev => ({ ...prev, uniqueVote: uniqueData.unique ? 'verified' : 'failed' }));
-      
-      if (!uniqueData.unique) {
-        const error = handleVerificationError(
-          new Error('You have already voted in this election'),
-          VoteVerificationErrorType.ALREADY_VOTED
-        );
-        setError(getErrorMessage(error));
-        setLoading(false);
-        setOverallStatus('failed');
+        if (!uniqueData.unique) {
+        // User has already voted - redirect to votes page instead of showing error
+        console.log('User has already voted, redirecting to votes page');
+        setSubmissionInProgress(false);
+        router.push('/user/votes');
         return;
       }
         // Step 2: Verify vote validity with ZKP
@@ -83,8 +86,7 @@ function VoteVerifyContent() {
         // First check if votes follow election rules (one per position)
         const followsRules = validateVoteRules(votesToVerify);
         setVerificationStatus(prev => ({ ...prev, followsRules: followsRules ? 'verified' : 'failed' }));
-        
-        if (!followsRules) {
+          if (!followsRules) {
           const error = handleVerificationError(
             new Error('Votes do not follow election rules'),
             VoteVerificationErrorType.MULTIPLE_VOTES_FOR_POSITION
@@ -92,6 +94,7 @@ function VoteVerifyContent() {
           setError(getErrorMessage(error));
           setLoading(false);
           setOverallStatus('failed');
+          setSubmissionInProgress(false);
           return;
         }
         
@@ -109,8 +112,7 @@ function VoteVerifyContent() {
         
         // Call the proof generation function
         const verificationResult = await generateVoteProof(zkpInput);
-        
-        if (!verificationResult.isValid) {
+          if (!verificationResult.isValid) {
           const error = handleVerificationError(
             new Error(verificationResult.error || 'ZKP generation failed'),
             VoteVerificationErrorType.ZKP_GENERATION_FAILED
@@ -119,6 +121,7 @@ function VoteVerifyContent() {
           setVerificationStatus(prev => ({ ...prev, validVote: 'failed' }));
           setLoading(false);
           setOverallStatus('failed');
+          setSubmissionInProgress(false);
           return;
         }
           // Verify the generated proof
@@ -142,8 +145,7 @@ function VoteVerifyContent() {
           }
           
           setVerificationStatus(prev => ({ ...prev, validVote: isVerified ? 'verified' : 'failed' }));
-          
-          if (!isVerified) {
+            if (!isVerified) {
             const error = handleVerificationError(
               new Error('ZKP verification failed'),
               VoteVerificationErrorType.ZKP_VERIFICATION_FAILED
@@ -151,11 +153,11 @@ function VoteVerifyContent() {
             setError(getErrorMessage(error));
             setLoading(false);
             setOverallStatus('failed');
+            setSubmissionInProgress(false);
             return;
           }
           
-          console.log('ZKP verification successful');
-        } else {
+          console.log('ZKP verification successful');        } else {
           setVerificationStatus(prev => ({ ...prev, validVote: 'failed' }));
           const error = handleVerificationError(
             new Error('Invalid ZKP proof structure'),
@@ -164,15 +166,16 @@ function VoteVerifyContent() {
           setError(getErrorMessage(error));
           setLoading(false);
           setOverallStatus('failed');
+          setSubmissionInProgress(false);
           return;
         }
-        
-      } catch (err) {
+          } catch (err) {
         console.error('ZKP verification error:', err);
         setVerificationStatus(prev => ({ ...prev, validVote: 'failed' }));
         setError(getErrorMessage(handleVerificationError(err, VoteVerificationErrorType.ZKP_VERIFICATION_FAILED)));
         setLoading(false);
         setOverallStatus('failed');
+        setSubmissionInProgress(false);
         return;
       }
         // All checks passed, encrypt and submit the vote
@@ -192,14 +195,29 @@ function VoteVerifyContent() {
           votes: encryptedVotes
         })
       });      if (!submitRes.ok) {
+        // Parse the actual error message from the backend
+        try {
+          const errorData = await submitRes.json();
+          const errorMessage = errorData.error || 'Failed to submit encrypted votes.';
+          
+          // If user already voted, redirect instead of showing error
+          if (errorMessage.includes('already voted')) {
+            console.log('Vote submission failed - user already voted, redirecting to votes page');
+            setSubmissionInProgress(false);
+            router.push('/user/votes');
+            return;
+          }
+          
+          setError(errorMessage);
+        } catch {
+          setError('Failed to submit encrypted votes.');
+        }
         setOverallStatus('failed');
-        setError('Failed to submit encrypted votes.');
+        setSubmissionInProgress(false);
         return;
-      }
-
-      // Vote submitted successfully - leave the voting session
+      }// Vote submitted successfully - leave the voting session
       try {
-        await fetch(`${API_URL}/elections/${eId}/leave-voting-session`, {
+        await fetch(`${API_URL}/elections/${eId}/leave_voting_session`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ voter_id: user?.student_id })
@@ -207,30 +225,36 @@ function VoteVerifyContent() {
       } catch (sessionError) {
         console.error('Failed to leave voting session after successful vote:', sessionError);
         // Don't fail the overall process if this fails
-      }
-
-      setOverallStatus('success');
+      }setOverallStatus('success');
       setError(null);
       // Redirect to vote review page after a short delay
       setTimeout(() => {
         router.push(`/user/votes/vote-review?election_id=${eId}&student_id=${user?.student_id}`);
-      }, 1800);
-    } catch {
+      }, 1800);    } catch {
       setOverallStatus('failed');
       setError('An error occurred during vote verification or encryption.');
+      setSubmissionInProgress(false);
+    } finally {
+      setSubmissionInProgress(false);
     }
-  }, [user, router]);
-  
-  useEffect(() => {
+  }, [user, router, submissionInProgress]);  useEffect(() => {
     const initVerification = async () => {
+      // Prevent duplicate initialization
+      if (initializationStarted.current) {
+        console.log('Verification already started, skipping duplicate initialization...');
+        return;
+      }
+      
+      initializationStarted.current = true;
+      
       try {
         // Get election ID and votes from URL parameters
         const eId = searchParams ? searchParams.get('election_id') : null;
         const votesParam = searchParams ? searchParams.get('votes') : null;
-        
-        if (!eId || !votesParam) {
+          if (!eId || !votesParam) {
           setError('Missing election information');
           setLoading(false);
+          setSubmissionInProgress(false);
           return;
         }
 
@@ -246,20 +270,20 @@ function VoteVerifyContent() {
         const election = elections.find((e: { election_id: number; election_name: string }) => 
           String(e.election_id) === eId
         );
-        
-        if (!election) {
+          if (!election) {
           setError('Election not found');
           setLoading(false);
+          setSubmissionInProgress(false);
           return;
         }
         
         setElectionName(election.election_name);
 
         // Fetch crypto config (public key) for this election
-        const cryptoRes = await fetch(`${API_URL}/crypto_configs/election/${eId}?key_type=threshold_elgamal`);
-        if (!cryptoRes.ok) {
+        const cryptoRes = await fetch(`${API_URL}/crypto_configs/election/${eId}?key_type=threshold_elgamal`);        if (!cryptoRes.ok) {
           setError('Failed to get encryption key');
           setLoading(false);
+          setSubmissionInProgress(false);
           return;
         }
         const cryptoData = await cryptoRes.json();
@@ -269,8 +293,10 @@ function VoteVerifyContent() {
         const formattedKey = formatElGamalPublicKey(key);
         console.log('Using public key:', formattedKey);
         // Start verification process
-        await verifyVotes(eId, parsedVotes, key);
-      } catch (err) {
+        await verifyVotes(eId, parsedVotes, key);      } catch (err) {
+        // Reset initialization flag on error so user can retry if needed
+        initializationStarted.current = false;
+        
         // Use our error handling utility
         const verificationError = handleVerificationError(err, VoteVerificationErrorType.UNKNOWN_ERROR);
         const errorMessage = getErrorMessage(verificationError);
@@ -279,6 +305,7 @@ function VoteVerifyContent() {
         setError(errorMessage);
         setLoading(false);
         setOverallStatus('failed');
+        setSubmissionInProgress(false);
       }
     };
     
