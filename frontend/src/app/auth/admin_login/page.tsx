@@ -139,8 +139,8 @@ export default function AdminLogin() {
                       Password
                     </label>
                     {capsLockOn && (
-                      <div className="absolute -top-6 left-0 text-xs text-amber-600">
-                        Caps is on
+                      <div className="absolute -top-6 left-0 text-xs text-red-600">
+                        Caps Lock is on
                       </div>
                     )}
                     <input
@@ -166,11 +166,6 @@ export default function AdminLogin() {
                       <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
                     )}
                   </div>
-                  {capsLockOn && (
-                    <div className="mt-2 text-sm text-red-600 text-center">
-                      Caps Lock is on
-                    </div>
-                  )}
                   <div>
                     <button
                       type="submit"

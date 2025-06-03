@@ -147,8 +147,8 @@ export default function Login() {
                     Password
                   </label>
                   {capsLockOn && (
-                    <div className="absolute -top-6 left-0 text-xs text-amber-600">
-                      Caps is on
+                    <div className="absolute -top-6 left-0 text-xs text-red-600">
+                      Caps Lock is on
                     </div>
                   )}
                   <input
