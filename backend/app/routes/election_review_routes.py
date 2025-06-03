@@ -36,10 +36,3 @@ def edit_candidate(candidate_id):
 @election_review_bp.route('/candidates/<int:candidate_id>', methods=['DELETE'])
 def delete_candidate(candidate_id):
     return ElectionReviewController.delete_candidate(candidate_id)
-
-# Election results route
-@election_review_bp.route('/election-results', methods=['GET'])
-def get_election_results():
-    # Redirect to the proper election_results controller for properly tallied results
-    from app.controllers.election_results_controller import ElectionResultsController
-    return ElectionResultsController.get_all_election_results()
