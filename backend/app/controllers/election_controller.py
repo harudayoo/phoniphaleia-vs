@@ -1030,12 +1030,10 @@ class ElectionController:
             from app import mail
             mail.send(msg)
             
-            # Decrement voter_count after successful email sending
-            # This indicates the voter has completed their voting session
-            if election.voters_count and election.voters_count > 0:
-                election.voters_count -= 1
-                db.session.commit()
-                print(f'DEBUG: Decremented voters_count to {election.voters_count} for election {election_id} after sending receipt to {student_id}')
+            # NOTE: voters_count decrement is handled by leave_voting_session endpoint
+            # when the voter completes their voting process, so we don't decrement here
+            # to avoid double decrementing
+            db.session.commit()
             
             return jsonify({
                 'message': 'Vote receipt sent successfully',

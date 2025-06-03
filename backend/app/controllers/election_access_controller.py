@@ -48,19 +48,35 @@ class ElectionAccessController:
             # If not granting access, just return eligibility status
             if not grant_access:
                 return jsonify({'eligible': True})
-              # STEP 2: Check queued access and handle accordingly
+            
+            # STEP 2: Check queued access and handle accordingly
             if not election.queued_access:
-                # Non-Queued Elections: No limit on concurrent voters, just increment voters_count for each successful access check
-                old_count = election.voters_count or 0
-                election.voters_count = old_count + 1
-                db.session.commit()
-                print(f"DEBUG: Non-queued election - incremented voters_count from {old_count} to {election.voters_count}")
-                return jsonify({
-                    'eligible': True, 
-                    'access_granted': True,
-                    'voters_count': election.voters_count,
-                    'action': 'redirect_to_cast'
-                })
+                # No queued access - check voters_count vs max_concurrent_voters
+                current_voters = election.voters_count or 0
+                max_concurrent = election.max_concurrent_voters or 1
+                if current_voters < max_concurrent:
+                    # Election is not full - grant access and increment voters_count
+                    old_count = election.voters_count or 0
+                    election.voters_count = current_voters + 1
+                    db.session.commit()
+                    print(f"DEBUG: Non-queued election - incremented voters_count from {old_count} to {election.voters_count}")
+                    return jsonify({
+                        'eligible': True, 
+                        'access_granted': True,
+                        'voters_count': election.voters_count,
+                        'max_concurrent_voters': max_concurrent,
+                        'action': 'redirect_to_cast'
+                    })
+                else:
+                    # Election is full - redirect to waitlist notification
+                    return jsonify({
+                        'eligible': True,
+                        'access_granted': False,
+                        'election_full': True,
+                        'voters_count': current_voters,
+                        'max_concurrent_voters': max_concurrent,
+                        'action': 'redirect_to_waitlist'
+                    })
             else:
                 # Check if voter is coming from waitlist activation
                 active_waitlist_entry = ElectionWaitlist.query.filter_by(
