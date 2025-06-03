@@ -398,6 +398,7 @@ export default function Register() {
               <div className="mt-1 flex">
                 <input
                   id="student_email"
+                  placeholder="jdcruz12345"
                   type="text"
                   {...register('student_email', {
                     required: 'Email is required',
@@ -473,6 +474,7 @@ export default function Register() {
             <input
               id="program"
               type="text"
+              placeholder="Bachelor of Science in Sample Program"
               {...registerProgramField}
               className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
             />
@@ -486,10 +488,12 @@ export default function Register() {
             <label htmlFor="major" className="block text-sm font-medium text-gray-500">
               Major <span className="text-red-500">*</span>
             </label>
+            <span className="text-gray-500">n/a if not applicable</span>
             <div className="mt-1">
               <input
                 id="major"
                 type="text"
+                placeholder="Sample Major"
                 {...register('major', { required: 'Major is required' })}
                 className="block w-full rounded-md p-1 text-gray-700 border-gray-300 shadow-sm focus:border-red-800 focus:ring-red-800"
               />

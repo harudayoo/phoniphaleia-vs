@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import axios, { AxiosError } from 'axios';
@@ -26,8 +26,32 @@ export default function AdminLogin() {
   const [error, setError] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [capsLockOn, setCapsLockOn] = useState<boolean>(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<AdminLoginFormData>();
+  
+  // Detect caps lock
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.getModifierState('CapsLock')) {
+        setCapsLockOn(true);
+      }
+    };
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (!e.getModifierState('CapsLock')) {
+        setCapsLockOn(false);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   const onSubmit = async (data: AdminLoginFormData) => {
     try {
@@ -110,11 +134,15 @@ export default function AdminLogin() {
                     {errors.id_number && (
                       <p className="mt-1 text-sm text-red-600">{errors.id_number.message}</p>
                     )}
-                  </div>
-                  <div className="relative">
+                  </div>                  <div className="relative mt-8">
                     <label htmlFor="password" className="sr-only">
                       Password
                     </label>
+                    {capsLockOn && (
+                      <div className="absolute -top-6 left-0 text-xs text-amber-600">
+                        Caps is on
+                      </div>
+                    )}
                     <input
                       id="password"
                       type={showPassword ? "text" : "password"}
@@ -138,6 +166,11 @@ export default function AdminLogin() {
                       <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
                     )}
                   </div>
+                  {capsLockOn && (
+                    <div className="mt-2 text-sm text-red-600 text-center">
+                      Caps Lock is on
+                    </div>
+                  )}
                   <div>
                     <button
                       type="submit"

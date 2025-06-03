@@ -188,7 +188,7 @@ export default function AdminRegister() {
                     type="text"
                     value={emailValue.replace(EMAIL_SUFFIX, '')}
                     onChange={handleEmailChange}
-                    placeholder="your email"
+                    placeholder="jdcruz12345"
                     className="block w-full rounded-l-md p-1 text-gray-700 border border-gray-300 border-r-0 focus:border-red-800 focus:ring-red-800"
                   />
                   <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-100 text-gray-500 text-sm select-none">

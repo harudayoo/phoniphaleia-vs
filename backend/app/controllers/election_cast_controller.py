@@ -44,9 +44,7 @@ class ElectionCastController:
             return jsonify(list(grouped.values()))
         except Exception as ex:
             print('Error in get_candidates_by_election:', ex)
-            return jsonify({'error': 'Failed to fetch candidates'}), 500
-
-    @staticmethod
+            return jsonify({'error': 'Failed to fetch candidates'}), 500    @staticmethod
     def submit_vote(election_id):
         """Submit a vote for an election. Enforce one per position, one per election per voter."""
         try:
@@ -54,6 +52,8 @@ class ElectionCastController:
             print('DEBUG submit_vote payload:', data)
             student_id = data.get('student_id')
             votes = data.get('votes')  # [{position_id, candidate_id, encrypted_vote, zkp_proof, verification_receipt}]
+            
+            print(f'DEBUG: Processing vote submission for election_id={election_id}, student_id={student_id}, votes count={len(votes) if votes else 0}')
             
             if not student_id or not isinstance(votes, list):
                 print('DEBUG submit_vote error: missing student_id or votes')
@@ -106,25 +106,30 @@ class ElectionCastController:
             # Update participation rate based on actual votes cast
             election = Election.query.get(election_id)
             if election and election.organization:
+                print(f'DEBUG: Election {election_id} organization: org_id={election.org_id}, college_id={election.organization.college_id or "None"}')
+                
                 if election.organization.college_id:
                     # Election is restricted to one college
                     eligible_voters = Voter.query.filter_by(college_id=election.organization.college_id).count()
+                    print(f'DEBUG: College-specific election. Eligible voters from college_id={election.organization.college_id}: {eligible_voters}')
                 else:
                     # Election is open to all colleges
                     eligible_voters = Voter.query.count()
+                    print(f'DEBUG: All-college election. Total eligible voters: {eligible_voters}')
                 
                 if eligible_voters > 0:
-                    # Get actual vote count for this election
-                    actual_votes_count = Vote.query.filter_by(election_id=election_id).count()
-                    election.participation_rate = (actual_votes_count / eligible_voters) * 100
-                
+                    # Count unique voters who have cast votes in this election
+                    unique_voters_count = db.session.query(db.func.count(db.distinct(Vote.student_id))).filter(Vote.election_id == election_id).scalar()
+                    election.participation_rate = (unique_voters_count / eligible_voters) * 100
+                    print(f'DEBUG: Participation rate calculation: {unique_voters_count} unique voters / {eligible_voters} eligible voters = {election.participation_rate:.2f}%')                
             db.session.commit()
             print('DEBUG submit_vote success')
             return jsonify({
                 'message': 'Vote submitted successfully',
                 'votes_count': len(votes),
                 'election_id': election_id,
-                'total_voters': election.voters_count if election else None
+                'total_voters': election.voters_count if election else None,
+                'participation_rate': round(election.participation_rate, 2) if election and election.participation_rate else None
             })
             
         except Exception as ex:
