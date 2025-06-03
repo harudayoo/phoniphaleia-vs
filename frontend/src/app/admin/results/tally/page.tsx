@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Loader4 from "@/components/Loader4";
 import AdminLayout from "@/layouts/AdminLayout";
@@ -27,10 +27,10 @@ function TallyElectionContent() {
   >("tallying");
   const [error, setError] = useState<string | null>(null);
   const [authorities, setAuthorities] = useState<Authority[]>([]);
-  const [keyShares, setKeyShares] = useState<string[]>([]);
-  const [privateKey, setPrivateKey] = useState<string | null>(null);
+  const [keyShares, setKeyShares] = useState<string[]>([]);  const [privateKey, setPrivateKey] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const tallyInitiated = useRef(false);
   
   // Tally votes (homomorphic tally)
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -43,13 +43,14 @@ function TallyElectionContent() {
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  useEffect(() => {
+  }, []);  useEffect(() => {
     if (!election_id) return;
-    setStep("tallying");
+    
+    // Prevent duplicate calls by checking if we're already tallying
+    if (tallyInitiated.current) return;
+    
+    tallyInitiated.current = true;
     setError(null);
-
     console.log(`Initiating tally for election ID: ${election_id}`);
 
     fetch(`${API_URL}/election_results/tally`, {
@@ -78,11 +79,12 @@ function TallyElectionContent() {
         // Process the tally response
         const tallyData = await res.json();
         console.log("Tally succeeded:", tallyData);
-        
-        // Verify the tally was successful
+          // Verify the tally was successful
         if (tallyData.verification_passed) {
+          const totalResults = (tallyData.results_created || 0) + (tallyData.results_updated || 0);
           console.log(`Homomorphic tally verified: ${tallyData.candidates_tallied} candidates, ${tallyData.total_votes_processed} votes`);
-          setNotification(`Successfully tallied ${tallyData.total_votes_processed} votes across ${tallyData.candidates_tallied} candidates`);
+          console.log(`Results: ${tallyData.results_created || 0} created, ${tallyData.results_updated || 0} updated`);
+          setNotification(`Successfully tallied ${tallyData.total_votes_processed} votes across ${tallyData.candidates_tallied} candidates (${totalResults} results processed)`);
         }
 
         console.log("Fetching authorities for key shares..."); 
@@ -107,13 +109,12 @@ function TallyElectionContent() {
         setAuthorities(data);
         setKeyShares(Array(data.length).fill(""));
         setStep("keyshares");
-      })
-      .catch((e) => {
+      })      .catch((e) => {
         console.error("Error in tally process:", e);
         setError(e.message);
         setStep("error");
       });
-  }, [election_id, API_URL]);
+  }, [election_id, API_URL]); // Keep dependencies but use ref to prevent duplicate calls
 
   // Handle key share input change
   const handleKeyShareChange = (idx: number, value: string) => {
